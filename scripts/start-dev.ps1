@@ -8,12 +8,13 @@ function Show-Help {
   Write-Host 'Recording Platform development startup script'
   Write-Host ''
   Write-Host 'Usage:'
-  Write-Host '  powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-dev.ps1'
+  Write-Host '  Double-click scripts\start-dev.cmd'
+  Write-Host '  pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-dev.ps1'
   Write-Host ''
   Write-Host 'Behavior:'
   Write-Host '  1. Check and stop processes listening on ports 8080 and 5173.'
-  Write-Host '  2. Start backend: backend\mvnw.cmd spring-boot:run.'
-  Write-Host '  3. Start frontend: npm run dev -- --host localhost --port 5173.'
+  Write-Host '  2. Open a visible pwsh window for backend: backend\mvnw.cmd spring-boot:run.'
+  Write-Host '  3. Open a visible pwsh window for frontend: npm run dev -- --host localhost --port 5173.'
   Write-Host '  4. Print the voice generation workbench URL.'
 }
 
@@ -25,7 +26,6 @@ if ($Help) {
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 $BackendDir = Join-Path $RepoRoot 'backend'
 $WebDir = Join-Path $RepoRoot 'apps\web'
-$LogDir = Join-Path $RepoRoot 'logs'
 $Ports = @(8080, 5173)
 
 function Assert-PathExists {
@@ -37,6 +37,20 @@ function Assert-PathExists {
   if (-not (Test-Path -LiteralPath $Path)) {
     throw "Missing $Description`: $Path"
   }
+}
+
+function Assert-CommandExists {
+  param([string]$Command)
+
+  if (-not (Get-Command $Command -ErrorAction SilentlyContinue)) {
+    throw "Missing command: $Command"
+  }
+}
+
+function ConvertTo-PowerShellLiteral {
+  param([string]$Value)
+
+  return "'" + $Value.Replace("'", "''") + "'"
 }
 
 function Stop-PortProcess {
@@ -84,41 +98,39 @@ function Wait-Port {
 Assert-PathExists -Path $BackendDir -Description 'backend directory'
 Assert-PathExists -Path $WebDir -Description 'web directory'
 Assert-PathExists -Path (Join-Path $BackendDir 'mvnw.cmd') -Description 'backend Maven Wrapper'
-
-if (-not (Test-Path -LiteralPath $LogDir)) {
-  New-Item -ItemType Directory -Path $LogDir | Out-Null
-}
+Assert-CommandExists -Command 'pwsh'
 
 Write-Host 'Checking development ports...'
 foreach ($port in $Ports) {
   Stop-PortProcess -Port $port
 }
 
-$backendOutLog = Join-Path $LogDir 'dev-backend.out.log'
-$backendErrLog = Join-Path $LogDir 'dev-backend.err.log'
-$frontendOutLog = Join-Path $LogDir 'dev-frontend.out.log'
-$frontendErrLog = Join-Path $LogDir 'dev-frontend.err.log'
-
 Write-Host 'Starting Spring Boot backend...'
+$backendCommand = @"
+`$Host.UI.RawUI.WindowTitle = 'Recording Backend'
+Set-Location -LiteralPath $(ConvertTo-PowerShellLiteral $BackendDir)
+& .\mvnw.cmd spring-boot:run
+Write-Host ''
+Read-Host 'Process ended. Press Enter to close this window'
+"@
 $backendProcess = Start-Process `
-  -FilePath (Join-Path $BackendDir 'mvnw.cmd') `
-  -ArgumentList 'spring-boot:run' `
-  -WorkingDirectory $BackendDir `
-  -WindowStyle Hidden `
-  -RedirectStandardOutput $backendOutLog `
-  -RedirectStandardError $backendErrLog `
+  -FilePath 'pwsh' `
+  -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', $backendCommand) `
   -PassThru
 Write-Host "Backend process PID: $($backendProcess.Id)"
 
 Write-Host 'Starting Vite frontend...'
 $frontendArgs = 'run dev -- --host localhost --port 5173'
+$frontendCommand = @"
+`$Host.UI.RawUI.WindowTitle = 'Recording Frontend'
+Set-Location -LiteralPath $(ConvertTo-PowerShellLiteral $WebDir)
+& npm.cmd $frontendArgs
+Write-Host ''
+Read-Host 'Process ended. Press Enter to close this window'
+"@
 $frontendProcess = Start-Process `
-  -FilePath 'npm.cmd' `
-  -ArgumentList $frontendArgs `
-  -WorkingDirectory $WebDir `
-  -WindowStyle Hidden `
-  -RedirectStandardOutput $frontendOutLog `
-  -RedirectStandardError $frontendErrLog `
+  -FilePath 'pwsh' `
+  -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', $frontendCommand) `
   -PassThru
 Write-Host "Frontend process PID: $($frontendProcess.Id)"
 
@@ -126,11 +138,7 @@ $backendReady = Wait-Port -Port 8080 -Name 'Backend' -TimeoutSeconds 120
 $frontendReady = Wait-Port -Port 5173 -Name 'Frontend' -TimeoutSeconds 60
 
 if (-not $backendReady -or -not $frontendReady) {
-  Write-Host 'Development services failed to start. Check logs:'
-  Write-Host "  Backend stdout: $backendOutLog"
-  Write-Host "  Backend stderr: $backendErrLog"
-  Write-Host "  Frontend stdout: $frontendOutLog"
-  Write-Host "  Frontend stderr: $frontendErrLog"
+  Write-Host 'Development services failed to start. Check the backend and frontend pwsh windows.'
   exit 1
 }
 
@@ -140,8 +148,4 @@ Write-Host '  Backend: http://localhost:8080'
 Write-Host '  Frontend: http://localhost:5173'
 Write-Host '  Voice generation workbench: http://localhost:5173/admin/voice-generation/workbench'
 Write-Host ''
-Write-Host 'Log files:'
-Write-Host "  Backend stdout: $backendOutLog"
-Write-Host "  Backend stderr: $backendErrLog"
-Write-Host "  Frontend stdout: $frontendOutLog"
-Write-Host "  Frontend stderr: $frontendErrLog"
+Write-Host 'Live output is shown in the Recording Backend and Recording Frontend pwsh windows.'

@@ -9,13 +9,19 @@
 推荐在仓库根目录运行：
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-dev.ps1
+.\scripts\start-dev.cmd
+```
+
+也可以直接运行 PowerShell 脚本：
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-dev.ps1
 ```
 
 查看帮助：
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-dev.ps1 -Help
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-dev.ps1 -Help
 ```
 
 脚本启动前会检查固定开发端口：
@@ -25,12 +31,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-dev.ps1 -Hel
 
 如果端口已被占用，脚本会直接结束监听该端口的进程，并打印端口、PID 和进程名，然后继续启动服务。请在运行前确认这两个端口上没有需要保留的其他程序。
 
-脚本实际启动命令：
+脚本会打开两个可见的 `pwsh` 窗口，分别展示后端和前端实时日志：
 
 ```powershell
 backend\mvnw.cmd spring-boot:run
 npm run dev -- --host localhost --port 5173
 ```
+
+两个窗口标题分别为 `Recording Backend` 和 `Recording Frontend`。如果命令退出，窗口会提示按 Enter 关闭，便于查看错误信息。
 
 启动成功后可访问：
 
@@ -40,4 +48,4 @@ http://localhost:5173/admin/voice-generation/workbench
 
 脚本只启动后端和前端，不启动 MongoDB，不创建 `.env`，也不会写入或打印任何 API Key。语音生成真实联调仍需要本机或外部 MongoDB 可用，并在根目录 `.env` 中填写真实 `MINIMAX_API_KEY`。
 
-启动日志写入根目录 `logs/`，该目录不应提交到 Git。
+脚本不再创建或写入根目录 `logs/`；实时输出直接显示在两个 `pwsh` 窗口中。

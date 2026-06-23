@@ -124,17 +124,17 @@ scripts/README.md
 Windows PowerShell 本地联调可使用：
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-dev.ps1
+.\scripts\start-dev.cmd
 ```
 
-该脚本会在启动前检查并结束占用 `8080` 和 `5173` 端口的监听进程，然后启动：
+该脚本会在启动前检查并结束占用 `8080` 和 `5173` 端口的监听进程，然后打开两个可见的 `pwsh` 窗口分别运行：
 
 ```text
 backend\mvnw.cmd spring-boot:run
 npm run dev -- --host localhost --port 5173
 ```
 
-脚本只负责启动后端和 Web 前端，不启动 MongoDB，不创建 `.env`，不写入或打印 API Key。语音生成真实联调仍需开发者自行准备 MongoDB 和根目录 `.env`。
+两个窗口标题分别为 `Recording Backend` 和 `Recording Frontend`，用于查看实时日志。脚本只负责启动后端和 Web 前端，不启动 MongoDB，不创建 `.env`，不写入或打印 API Key，不再创建或写入根目录 `logs/`。语音生成真实联调仍需开发者自行准备 MongoDB 和根目录 `.env`。
 
 ## 6.2 前端视觉规范
 

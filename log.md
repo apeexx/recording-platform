@@ -135,3 +135,22 @@
   - `npm run build`：通过。
   - `.\mvnw.cmd test`：通过；本机未启动 MongoDB 时仍会输出连接拒绝日志，但 Maven 最终结果为 `BUILD SUCCESS`。
   - `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-dev.ps1`：通过，脚本启动后 `8080` 和 `5173` 均有监听，访问 `http://localhost:5173/admin/voice-generation/workbench` 返回 200；验证后已停止脚本启动的后端和前端进程。
+
+## 2026-06-24 00:03 开发启动脚本改为实时日志窗口
+
+- 时间：2026-06-24 00:03
+- commit ID：待提交后补记
+- 修改内容：
+  - 调整 `scripts/start-dev.ps1`，不再隐藏启动进程，也不再重定向输出到根目录 `logs/`。
+  - 新增 `scripts/start-dev.cmd`，用于双击启动开发环境。
+  - 后端和前端分别在可见 `pwsh` 窗口中运行，窗口标题为 `Recording Backend` 和 `Recording Frontend`，用于查看实时日志。
+  - 更新 `scripts/tests/start-dev.test.js`，覆盖双 `pwsh` 窗口、`.cmd` 启动器和无日志重定向行为。
+  - 更新 `README.md`、`AGENTS.md` 和 `scripts/README.md`，同步新的启动方式和日志查看方式。
+- 验证结果：
+  - `node --test scripts/tests/start-dev.test.js`：通过。
+  - `pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-dev.ps1 -Help`：通过。
+  - `rg -n 'sk-|Authorization|MINIMAX_API_KEY\s*=|RedirectStandardOutput|RedirectStandardError|WindowStyle\s+Hidden|\$LogDir' scripts/start-dev.ps1 scripts/start-dev.cmd`：未发现真实密钥、敏感头、隐藏窗口、日志重定向或 `$LogDir`。
+  - `npm run build`：通过。
+  - `.\mvnw.cmd test`：通过；本机未启动 MongoDB 时仍会输出连接拒绝日志，但 Maven 最终结果为 `BUILD SUCCESS`。
+  - `.\scripts\start-dev.cmd`：通过，脚本启动后 `8080` 和 `5173` 均有监听，访问 `http://localhost:5173/admin/voice-generation/workbench` 返回 200，并能看到 `Recording Backend` / `Recording Frontend` 对应的 `pwsh` 进程；验证后已停止脚本启动的后端、前端和开发窗口。
+  - 已删除本地忽略目录 `logs/`，未提交任何日志文件。

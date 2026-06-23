@@ -89,10 +89,10 @@ VOICE_GENERATION_STORAGE_DIR=backend/storage/voice-generation
 Windows PowerShell 本地联调可使用一键启动脚本：
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-dev.ps1
+.\scripts\start-dev.cmd
 ```
 
-脚本会在启动前检查并结束占用 `8080` 和 `5173` 端口的进程，然后启动 Spring Boot 后端和 Vite 前端。脚本不启动 MongoDB，不创建 `.env`；语音生成真实联调仍需要开发者自行准备 MongoDB 和已填写的根目录 `.env`。
+脚本会在启动前检查并结束占用 `8080` 和 `5173` 端口的进程，然后打开两个可见的 `pwsh` 窗口分别运行 Spring Boot 后端和 Vite 前端，实时日志直接显示在窗口中。脚本不启动 MongoDB，不创建 `.env`，不再创建或写入根目录 `logs/`；语音生成真实联调仍需要开发者自行准备 MongoDB 和已填写的根目录 `.env`。
 
 ## 本地验证
 
