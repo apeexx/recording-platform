@@ -118,3 +118,20 @@
   - 本地浏览器访问 `http://localhost:5173/admin/voice-generation/workbench`：语音生成工作台加载成功，0 元试听/付费克隆/日常合成模式切换成功，配置页和记录页路由加载成功。
   - 本地调用 `POST /api/voice-generation/synthesize`：未配置 `MINIMAX_API_KEY` 时返回脱敏 400 摘要。
   - 真实 MiniMax 联通未执行：当前根目录未提供已填写的 `.env` 和本地 MongoDB 服务。
+
+## 2026-06-23 23:42 开发环境一键启动脚本
+
+- 时间：2026-06-23 23:42
+- commit ID：待提交后补记
+- 修改内容：
+  - 新增 `scripts/start-dev.ps1`，用于在 Windows PowerShell 中一键启动 Spring Boot 后端和 Vite 前端。
+  - 脚本启动前自动检查 `8080`、`5173` 端口，若端口被占用则结束对应监听进程并打印 PID 与进程名。
+  - 新增 `scripts/tests/start-dev.test.js`，覆盖端口清理、启动命令和敏感信息检查。
+  - 更新 `README.md` 和 `scripts/README.md`，记录一键启动方式、端口处理规则、日志位置和 MongoDB/.env 边界。
+- 验证结果：
+  - `node --test scripts/tests/start-dev.test.js`：通过。
+  - `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-dev.ps1 -Help`：通过。
+  - `rg -n "sk-|Authorization|MINIMAX_API_KEY\s*=" scripts`：未发现脚本内真实密钥或敏感头；仅测试断言中包含检查关键词。
+  - `npm run build`：通过。
+  - `.\mvnw.cmd test`：通过；本机未启动 MongoDB 时仍会输出连接拒绝日志，但 Maven 最终结果为 `BUILD SUCCESS`。
+  - `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-dev.ps1`：通过，脚本启动后 `8080` 和 `5173` 均有监听，访问 `http://localhost:5173/admin/voice-generation/workbench` 返回 200；验证后已停止脚本启动的后端和前端进程。

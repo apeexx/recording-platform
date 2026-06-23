@@ -86,6 +86,14 @@ VOICE_GENERATION_STORAGE_DIR=backend/storage/voice-generation
 
 前端开发服务器已将 `/api` 代理到 `http://127.0.0.1:8080`。真实联调时需要同时启动 MongoDB、后端和 Web 前端。
 
+Windows PowerShell 本地联调可使用一键启动脚本：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-dev.ps1
+```
+
+脚本会在启动前检查并结束占用 `8080` 和 `5173` 端口的进程，然后启动 Spring Boot 后端和 Vite 前端。脚本不启动 MongoDB，不创建 `.env`；语音生成真实联调仍需要开发者自行准备 MongoDB 和已填写的根目录 `.env`。
+
 ## 本地验证
 
 Web 端：
