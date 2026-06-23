@@ -77,3 +77,24 @@
   - `npm run build`：通过。
   - 本地浏览器访问 `http://127.0.0.1:5173/`：主题预览页加载成功，控制台无 error。
   - 390px 窄屏检查：三张示例卡片按单列展示，卡片宽度未超出视口。
+
+## 2026-06-23 20:46 管理员端导航壳和模块化路由
+
+- 时间：2026-06-23 20:46
+- commit ID：待提交后补记
+- 修改内容：
+  - 引入 `vue-router@4`，建立管理员端路由壳。
+  - 新增侧边栏菜单配置 `apps/web/src/config/adminSidebar.js`，菜单由配置统一驱动。
+  - 新增管理员端布局、侧边栏、顶部栏和各模块占位页面。
+  - 新增语音生成合作者预留模块占位页面，不实现业务逻辑。
+  - 删除不再使用的 Vite 默认组件和图片资源。
+  - 更新 `README.md`、`AGENTS.md` 和 `apps/web/README.md`，记录导航壳、协作边界和验证方式。
+- 验证结果：
+  - `node --check src/main.js`：通过。
+  - `node --check src/router/index.js`：通过。
+  - `node --check src/router/adminRoutes.js`：通过。
+  - `node --check src/config/adminSidebar.js`：通过。
+  - `node --test src/tests/adminSidebar.test.js`：通过。
+  - `npm run build`：通过。
+  - 本地浏览器访问 `http://127.0.0.1:5173/`：自动进入 `/admin/dashboard`，侧边栏菜单切换、页面标题、选中态和语音生成预留占位验证通过。
+  - 390px 窄屏检查：无横向溢出，侧边栏可滚动，内容卡片宽度未超出视口。
