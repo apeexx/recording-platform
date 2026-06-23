@@ -17,3 +17,9 @@
 - 新建根目录 `log.md` 作为 AI 修改日志。
 - 按参考风格重写 `AGENTS.md` 为录音任务平台长期执行规则。
 - 更新 `README.md`，同步新的目录结构、文档位置和本地验证说明。
+
+## 2026-06-23 小程序目录重命名
+
+- 将微信小程序占位目录从 `apps/recorder-miniprogram` 重命名为 `apps/xiaochengxu`。
+- 删除 `AGENTS.md` 中的“角色分工”章节，并同步后续章节编号。
+- 更新 `README.md` 和 `AGENTS.md` 中的小程序目录路径说明。
