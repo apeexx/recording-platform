@@ -1,25 +1,52 @@
 # AI 修改日志
 
-## 2026-06-23
+## 2026-06-23 17:49 初始化录音任务平台仓库结构
 
-- 初始化录音任务平台仓库结构。
-- 使用 Vite 官方脚手架创建 Vue Web 空项目。
-- 使用 Spring Initializr 创建 Spring Boot Maven 后端空项目。
-- 创建微信小程序占位说明。
-- 创建 MongoDB Docker Compose 配置。
-- 创建项目文档骨架。
-- 当前不实现任何业务接口、页面逻辑、审核流或安全配置。
+- 时间：2026-06-23 17:49
+- commit ID：cf9f8f2
+- 修改内容：
+  - 初始化录音任务平台仓库结构。
+  - 使用 Vite 官方脚手架创建 Vue Web 空项目。
+  - 使用 Spring Initializr 创建 Spring Boot Maven 后端空项目。
+  - 创建微信小程序占位说明。
+  - 创建 MongoDB Docker Compose 配置。
+  - 创建项目文档骨架。
+  - 当前不实现任何业务接口、页面逻辑、审核流或安全配置。
+- 验证结果：初始化提交记录，未在当前轮重新运行验证。
 
-## 2026-06-23 结构清理
+## 2026-06-23 18:44 结构清理
 
-- 删除仓库内 Docker Compose 配置，后续不再通过仓库提供本地 Docker 服务。
-- 删除 docs 目录文档骨架，接口和数据库说明入口迁移到 `AGENTS.md`。
-- 新建根目录 `log.md` 作为 AI 修改日志。
-- 按参考风格重写 `AGENTS.md` 为录音任务平台长期执行规则。
-- 更新 `README.md`，同步新的目录结构、文档位置和本地验证说明。
+- 时间：2026-06-23 18:44
+- commit ID：afc2649
+- 修改内容：
+  - 删除仓库内 Docker Compose 配置，后续不再通过仓库提供本地 Docker 服务。
+  - 删除 docs 目录文档骨架，接口和数据库说明入口迁移到 `AGENTS.md`。
+  - 新建根目录 `log.md` 作为 AI 修改日志。
+  - 按参考风格重写 `AGENTS.md` 为录音任务平台长期执行规则。
+  - 更新 `README.md`，同步新的目录结构、文档位置和本地验证说明。
+- 验证结果：历史提交记录，未在当前轮重新运行验证。
 
-## 2026-06-23 小程序目录重命名
+## 2026-06-23 19:24 小程序目录重命名
 
-- 将微信小程序占位目录从 `apps/recorder-miniprogram` 重命名为 `apps/xiaochengxu`。
-- 删除 `AGENTS.md` 中的“角色分工”章节，并同步后续章节编号。
-- 更新 `README.md` 和 `AGENTS.md` 中的小程序目录路径说明。
+- 时间：2026-06-23 19:24
+- commit ID：914594f
+- 修改内容：
+  - 将微信小程序占位目录从 `apps/recorder-miniprogram` 重命名为 `apps/xiaochengxu`。
+  - 删除 `AGENTS.md` 中的“角色分工”章节，并同步后续章节编号。
+  - 更新 `README.md` 和 `AGENTS.md` 中的小程序目录路径说明。
+- 验证结果：
+  - `rg -n "recorder-miniprogram|角色分工" AGENTS.md README.md`：无匹配。
+  - `npm run build`：通过。
+  - `.\mvnw.cmd test`：通过。
+
+## 2026-06-23 19:30 AI 修改日志规则完善
+
+- 时间：2026-06-23 19:30
+- commit ID：待提交后补记
+- 修改内容：
+  - 在 `AGENTS.md` 中新增“AI 修改日志”章节。
+  - 规定 AI 修改日志必须记录具体到分钟的时间、commit ID、修改内容和验证结果。
+  - 将已有 `log.md` 记录统一补充具体时间和历史 commit ID。
+- 验证结果：
+  - `npm run build`：通过。
+  - `.\mvnw.cmd test`：通过；测试期间本机未连接 MongoDB 时会输出连接拒绝日志，但 Maven 最终结果为 `BUILD SUCCESS`。
