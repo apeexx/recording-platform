@@ -1,0 +1,54 @@
+# System
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Node / Vite
+node_modules/
+apps/web/node_modules/
+dist/
+apps/web/dist/
+coverage/
+.cache/
+
+# Java / Spring Boot
+target/
+backend/target/
+*.class
+*.jar
+*.war
+*.ear
+
+# Maven
+.mvn/wrapper/maven-wrapper.jar
+
+# Local storage
+backend/storage/uploads/
+backend/storage/temp/
+
+# WeChat Mini Program
+miniprogram_npm/
+apps/recorder-miniprogram/miniprogram_npm/
+
+# Temporary files
+*.tmp
+*.bak
+backend-tmp/
+backend-tmp.zip
