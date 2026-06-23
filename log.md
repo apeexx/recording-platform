@@ -154,3 +154,22 @@
   - `.\mvnw.cmd test`：通过；本机未启动 MongoDB 时仍会输出连接拒绝日志，但 Maven 最终结果为 `BUILD SUCCESS`。
   - `.\scripts\start-dev.cmd`：通过，脚本启动后 `8080` 和 `5173` 均有监听，访问 `http://localhost:5173/admin/voice-generation/workbench` 返回 200，并能看到 `Recording Backend` / `Recording Frontend` 对应的 `pwsh` 进程；验证后已停止脚本启动的后端、前端和开发窗口。
   - 已删除本地忽略目录 `logs/`，未提交任何日志文件。
+
+## 2026-06-24 00:16 修复 MiniMax 2049 域名配置
+
+- 时间：2026-06-24 00:16
+- commit ID：待提交后补记
+- 修改内容：
+  - 排查 MiniMax `2049 invalid api key`，确认本地 `.env` 中 `MINIMAX_API_KEY` 已存在且非空，但当前 `MINIMAX_API_BASE_URL=https://api.minimax.io` 返回 2049。
+  - 使用同一 API Key 对 `https://api.minimaxi.com` 执行脱敏连通检查，MiniMax 返回 `0 success`，定位为账号区域域名不匹配。
+  - 将后端默认 MiniMax API Base URL 和 `.env.example` 调整为 `https://api.minimaxi.com`。
+  - 已将本地 `.env` 的 `MINIMAX_API_BASE_URL` 同步改为 `https://api.minimaxi.com`，未输出、提交或记录真实 API Key。
+  - 更新 `README.md` 和 `AGENTS.md`，补充 2049 与 MiniMax 国内/国际开放平台域名的排查说明。
+- 验证结果：
+  - `.\mvnw.cmd -Dtest=VoiceGenerationBackendConfigTests test`：先失败于默认值仍为 `https://api.minimax.io`，修复后通过。
+  - 使用同一 `.env` API Key 对 MiniMax 两个域名做脱敏连通检查：`https://api.minimax.io` 返回 `2049 invalid api key`，`https://api.minimaxi.com` 返回 `0 success`。
+  - `.\scripts\start-dev.cmd`：通过，重启后端和前端并重新读取本地 `.env`。
+  - `GET http://localhost:8080/api/voice-generation/voices?excludeSystem=true`：通过，MiniMax 返回 `base_resp.status_code=0`、`status_msg=success`。
+  - `GET http://localhost:5173/admin/voice-generation/workbench`：返回 200。
+  - `npm run build`：通过。
+  - `.\mvnw.cmd test`：通过；本机未启动 MongoDB 时仍会输出连接拒绝日志，但 Maven 最终结果为 `BUILD SUCCESS`。

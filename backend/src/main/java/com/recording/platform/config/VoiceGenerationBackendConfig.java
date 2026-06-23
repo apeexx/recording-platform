@@ -17,7 +17,7 @@ import org.springframework.util.StringUtils;
 
 @Configuration
 public class VoiceGenerationBackendConfig {
-	private static final String DEFAULT_MINIMAX_BASE_URL = "https://api.minimax.io";
+	private static final String DEFAULT_MINIMAX_BASE_URL = "https://api.minimaxi.com";
 	private static final String DEFAULT_STORAGE_DIR = "backend/storage/voice-generation";
 
 	@Bean
