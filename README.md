@@ -16,7 +16,7 @@ recording-platform/
 ├─ .gitignore
 ├─ apps/
 │  ├─ web/
-│  └─ xiaochengxu/
+│  └─ miniprogram/
 ├─ backend/
 └─ scripts/
 ```
@@ -24,14 +24,14 @@ recording-platform/
 ## 技术栈
 
 - Web 前端：Vue + Vite，目录为 `apps/web`
-- 微信小程序端：目录为 `apps/xiaochengxu`
+- 微信小程序端：目录为 `apps/miniprogram`
 - 后端：Java 17 + Spring Boot + Maven，目录为 `backend`
 - 数据库：MongoDB 为后续计划数据库，不再由仓库内 Docker Compose 提供本地服务
 
 ## 模块用途
 
 - `apps/web`：管理员 Web 端和审核 Web 端的前端工程，当前为 Vite Vue 空项目。
-- `apps/xiaochengxu`：微信小程序录音端，当前仅保留占位说明。
+- `apps/miniprogram`：微信小程序录音端，当前仅保留占位说明。
 - `backend`：Spring Boot 后端服务，当前只生成基础启动项目，不提供业务接口。
 - `scripts`：后续放置本地开发、数据处理或运维辅助脚本。
 - `AGENTS.md`：Codex 长期执行规则，同时记录接口和数据库说明入口。

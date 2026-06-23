@@ -99,7 +99,7 @@ log.md
 
 ```text
 apps/web/README.md
-apps/xiaochengxu/README.md
+apps/miniprogram/README.md
 backend/HELP.md
 scripts/README.md
 ```
@@ -109,7 +109,7 @@ scripts/README.md
 ## 6. 默认技术栈
 
 - Web 前端：Vite + Vue3 + JavaScript
-- 微信小程序端：目录为 `apps/xiaochengxu`，当前仅保留占位说明
+- 微信小程序端：目录为 `apps/miniprogram`，当前仅保留占位说明
 - 后端：Java 17 + Spring Boot + Maven
 - 数据库：MongoDB 作为后续计划数据库
 - 文档记录：根目录 `README.md`、`AGENTS.md`、`log.md`

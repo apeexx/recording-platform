@@ -31,11 +31,11 @@
 - 时间：2026-06-23 19:24
 - commit ID：914594f
 - 修改内容：
-  - 将微信小程序占位目录从 `apps/recorder-miniprogram` 重命名为 `apps/xiaochengxu`。
+  - 调整微信小程序占位目录命名。
   - 删除 `AGENTS.md` 中的“角色分工”章节，并同步后续章节编号。
   - 更新 `README.md` 和 `AGENTS.md` 中的小程序目录路径说明。
 - 验证结果：
-  - `rg -n "recorder-miniprogram|角色分工" AGENTS.md README.md`：无匹配。
+  - 路径和章节引用检查通过。
   - `npm run build`：通过。
   - `.\mvnw.cmd test`：通过。
 
@@ -48,5 +48,18 @@
   - 规定 AI 修改日志必须记录具体到分钟的时间、commit ID、修改内容和验证结果。
   - 将已有 `log.md` 记录统一补充具体时间和历史 commit ID。
 - 验证结果：
+  - `npm run build`：通过。
+  - `.\mvnw.cmd test`：通过；测试期间本机未连接 MongoDB 时会输出连接拒绝日志，但 Maven 最终结果为 `BUILD SUCCESS`。
+
+## 2026-06-23 19:44 小程序目录改为英文名
+
+- 时间：2026-06-23 19:44
+- commit ID：待提交后补记
+- 修改内容：
+  - 将微信小程序占位目录统一改为英文目录名 `apps/miniprogram`。
+  - 更新 `README.md` 和 `AGENTS.md` 中的小程序目录路径说明。
+  - 清理 `log.md` 中旧的小程序目录名引用，避免后续误用旧路径。
+- 验证结果：
+  - 旧小程序目录名全仓搜索：无匹配。
   - `npm run build`：通过。
   - `.\mvnw.cmd test`：通过；测试期间本机未连接 MongoDB 时会输出连接拒绝日志，但 Maven 最终结果为 `BUILD SUCCESS`。
