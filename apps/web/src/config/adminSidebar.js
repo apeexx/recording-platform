@@ -72,7 +72,7 @@ export const adminSidebar = [
     title: '语音生成',
     icon: 'voice',
     owner: 'collaborator',
-    status: 'placeholder',
+    status: 'active',
     children: [
       {
         key: 'voice-generation-workbench',

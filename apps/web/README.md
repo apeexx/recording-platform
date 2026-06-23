@@ -12,7 +12,7 @@
 - 每个管理员端菜单都有对应占位页面。
 - 工作台展示静态占位统计卡片和模块入口。
 
-当前不实现登录、JWT、权限守卫、接口请求、任务管理、审核流程、录音上传、数据库或语音生成业务。
+当前不实现登录、JWT、权限守卫、任务管理、审核流程或录音上传业务。语音生成模块已接入后端真实接口，用于 MiniMax 试听、克隆、合成、音色管理和生成记录。
 
 ## 目录约定
 
@@ -21,7 +21,8 @@
 - `src/layouts/AdminLayout.vue`：管理员端布局壳。
 - `src/components/admin/`：侧边栏和顶部栏组件。
 - `src/pages/admin/`：管理员端页面。
-- `src/pages/admin/voice-generation/`：合作者预留的语音生成模块占位页面。
+- `src/pages/admin/voice-generation/`：语音生成 Web 生产台页面。
+- `src/lib/voiceGenerationApi.js`：语音生成前端 API 封装；不传递 API Key。
 - `src/styles/theme.css`：主题变量。
 - `src/styles/admin-layout.css`：管理员端布局样式。
 
@@ -33,6 +34,8 @@
 npm install
 npm run build
 ```
+
+语音生成真实联调需要后端服务运行在 `http://127.0.0.1:8080`，Vite 已将 `/api` 代理到后端。
 
 修改 JavaScript 文件后，可按需运行：
 

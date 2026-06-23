@@ -46,11 +46,11 @@ describe('adminSidebar', () => {
     assert.equal(new Set(paths).size, paths.length)
   })
 
-  it('marks voice generation as collaborator placeholder scope', () => {
+  it('marks voice generation as active production scope', () => {
     const voiceGeneration = adminSidebar.find((item) => item.key === 'voice-generation')
 
     assert.equal(voiceGeneration.owner, 'collaborator')
-    assert.equal(voiceGeneration.status, 'placeholder')
+    assert.equal(voiceGeneration.status, 'active')
     assert.equal(voiceGeneration.children.length, 3)
   })
 })

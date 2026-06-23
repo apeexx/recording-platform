@@ -98,3 +98,23 @@
   - `npm run build`：通过。
   - 本地浏览器访问 `http://127.0.0.1:5173/`：自动进入 `/admin/dashboard`，侧边栏菜单切换、页面标题、选中态和语音生成预留占位验证通过。
   - 390px 窄屏检查：无横向溢出，侧边栏可滚动，内容卡片宽度未超出视口。
+
+## 2026-06-23 23:24 语音生成 Web 生产台
+
+- 时间：2026-06-23 23:24
+- commit ID：待提交后补记
+- 修改内容：
+  - 参考 `XiangTianzhen/tuanji` 项目中的 `app.py`，在管理员端实现语音生成 Web 生产台。
+  - 新增后端语音生成接口，支持 0 元试听、付费克隆、日常合成、音色查询、音色删除、默认配置保存、生成记录查询和音频下载。
+  - 新增 MiniMax 后端客户端、本地 `.env` 配置读取、MongoDB 记录/配置集合和本地音频文件保存。
+  - 新增前端语音生成 API 封装、工作台页、声音配置页、生成记录页和 Vite `/api` 代理。
+  - 新增 `.env.example`，只提供变量名和默认服务地址，不包含真实密钥。
+  - 更新 `README.md`、`AGENTS.md` 和 `apps/web/README.md` 的语音生成说明、接口说明、数据库说明和验证方式。
+- 验证结果：
+  - `node --test src/tests/adminSidebar.test.js src/tests/voiceGenerationApi.test.js`：通过。
+  - `node --check src/main.js`、`node --check src/router/index.js`、`node --check src/router/adminRoutes.js`、`node --check src/config/adminSidebar.js`、`node --check src/lib/voiceGenerationApi.js`：通过。
+  - `npm run build`：通过。
+  - `.\mvnw.cmd test`：通过；本机未启动 MongoDB 时仍会输出连接拒绝日志，但 Maven 最终结果为 `BUILD SUCCESS`。
+  - 本地浏览器访问 `http://localhost:5173/admin/voice-generation/workbench`：语音生成工作台加载成功，0 元试听/付费克隆/日常合成模式切换成功，配置页和记录页路由加载成功。
+  - 本地调用 `POST /api/voice-generation/synthesize`：未配置 `MINIMAX_API_KEY` 时返回脱敏 400 摘要。
+  - 真实 MiniMax 联通未执行：当前根目录未提供已填写的 `.env` 和本地 MongoDB 服务。

@@ -1,5 +1,6 @@
 @import "./styles/theme.css";
 @import "./styles/admin-layout.css";
+@import "./styles/voice-generation.css";
 
 * {
   box-sizing: border-box;
