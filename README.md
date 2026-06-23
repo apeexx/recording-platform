@@ -1,6 +1,6 @@
 # 录音任务平台
 
-录音任务平台用于管理录音任务的创建、领取、录制、上传和审核流程。当前仓库处于项目初始化阶段，只包含空项目脚手架和文档骨架，不实现业务功能。
+录音任务平台用于管理录音任务的创建、领取、录制、上传和审核流程。当前仓库处于项目初始化阶段，只包含空项目脚手架和根目录协作文档，不实现业务功能。
 
 ## 项目定位
 
@@ -12,17 +12,8 @@
 recording-platform/
 ├─ README.md
 ├─ AGENTS.md
+├─ log.md
 ├─ .gitignore
-├─ docker-compose.yml
-├─ docs/
-│  ├─ 00-project-overview.md
-│  ├─ 01-requirements.md
-│  ├─ 02-architecture.md
-│  ├─ 03-database-design.md
-│  ├─ 04-api-design.md
-│  ├─ 05-review-flow.md
-│  ├─ 06-development-plan.md
-│  └─ 10-ai-change-log.md
 ├─ apps/
 │  ├─ web/
 │  └─ recorder-miniprogram/
@@ -35,19 +26,22 @@ recording-platform/
 - Web 前端：Vue + Vite，目录为 `apps/web`
 - 微信小程序端：目录为 `apps/recorder-miniprogram`
 - 后端：Java 17 + Spring Boot + Maven，目录为 `backend`
-- 数据库：MongoDB，当前通过 `docker-compose.yml` 提供本地服务
+- 数据库：MongoDB 为后续计划数据库，不再由仓库内 Docker Compose 提供本地服务
 
 ## 模块用途
 
 - `apps/web`：管理员 Web 端和审核 Web 端的前端工程，当前为 Vite Vue 空项目。
 - `apps/recorder-miniprogram`：微信小程序录音端，当前仅保留占位说明。
 - `backend`：Spring Boot 后端服务，当前只生成基础启动项目，不提供业务接口。
-- `docs`：需求、架构、数据库、接口、审核流程、开发计划和 AI 修改日志。
 - `scripts`：后续放置本地开发、数据处理或运维辅助脚本。
+- `AGENTS.md`：Codex 长期执行规则，同时记录接口和数据库说明入口。
+- `log.md`：AI 辅助修改日志。
 
 ## 当前阶段
 
-当前仅完成项目根目录和空项目脚手架初始化，不实现任务管理、用户登录、录音上传、审核流、权限控制或数据模型。
+当前仅保留项目根目录和空项目脚手架，不实现任务管理、用户登录、录音上传、审核流、权限控制或数据模型。
+
+仓库内不再维护 Docker Compose 配置。后续如需本地 MongoDB，请在本机或外部环境自行提供，并在具体开发任务中说明连接方式。
 
 ## 本地验证
 
@@ -71,10 +65,4 @@ Windows PowerShell 可使用：
 ```powershell
 cd backend
 .\mvnw.cmd test
-```
-
-MongoDB Compose 配置检查：
-
-```bash
-docker compose config
 ```
