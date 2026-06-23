@@ -43,6 +43,21 @@ recording-platform/
 
 仓库内不再维护 Docker Compose 配置。后续如需本地 MongoDB，请在本机或外部环境自行提供，并在具体开发任务中说明连接方式。
 
+## Web 端主题基础
+
+Web 端已建立基础主题变量，变量文件位于 `apps/web/src/styles/theme.css`，并由 `apps/web/src/style.css` 作为全局样式入口引入。
+
+当前仅完成浅色优先的主题基础和 `.dark` 深色变量预留，不实现主题切换按钮、登录、任务、审核、上传、接口请求、路由或状态管理。
+
+后续管理员端和审核端页面应优先使用主题变量：
+
+- 主色：`--primary`
+- 背景：`--background`
+- 文字：`--foreground`
+- 卡片：`--card`
+- 边框：`--border`
+- 圆角：`--radius`
+
 ## 本地验证
 
 Web 端：

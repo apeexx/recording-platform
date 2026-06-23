@@ -118,6 +118,21 @@ scripts/README.md
 
 不要默认引入复杂微服务、Kubernetes、对象存储、消息队列或独立权限中心。若确需更换技术栈或新增依赖，必须先说明原因、替代方案、影响范围和验证方式。
 
+## 6.1 前端视觉规范
+
+Web 端主题变量位于 `apps/web/src/styles/theme.css`，全局样式入口为 `apps/web/src/style.css`。
+
+后续新增管理员端、审核端页面或通用组件时，必须优先使用主题变量，不要硬编码颜色：
+
+- 主色使用 `--primary`
+- 背景使用 `--background`
+- 文字使用 `--foreground`
+- 卡片使用 `--card`
+- 边框使用 `--border`
+- 圆角使用 `--radius`
+
+当前只预留 `.dark` 深色主题变量，不实现复杂主题切换逻辑。不得为本阶段引入 Tailwind、UI 组件库、CSS 预处理器、Vue Router 或 Pinia。
+
 ## 7. 接口说明
 
 当前阶段后端不提供业务 API。
