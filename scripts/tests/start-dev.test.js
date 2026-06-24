@@ -5,8 +5,6 @@ import { describe, it } from 'node:test'
 const script = readFileSync(new URL('../start-dev.ps1', import.meta.url), 'utf8')
 const cmdUrl = new URL('../start-dev.cmd', import.meta.url)
 const launcher = existsSync(cmdUrl) ? readFileSync(cmdUrl, 'utf8') : ''
-const postgresScriptUrl = new URL('../create-postgres-db.ps1', import.meta.url)
-const postgresScript = existsSync(postgresScriptUrl) ? readFileSync(postgresScriptUrl, 'utf8') : ''
 
 describe('start-dev.ps1', () => {
   it('checks and frees the fixed frontend and backend ports before startup', () => {
@@ -43,19 +41,5 @@ describe('start-dev.ps1', () => {
     assert.doesNotMatch(script, /sk-[A-Za-z0-9_-]+/)
     assert.doesNotMatch(script, /Authorization/i)
     assert.doesNotMatch(script, /MINIMAX_API_KEY\s*=/)
-  })
-})
-
-describe('create-postgres-db.ps1', () => {
-  it('creates a PostgreSQL database and role through psql without embedding a password', () => {
-    assert.ok(existsSync(postgresScriptUrl), 'scripts/create-postgres-db.ps1 should exist')
-    assert.match(postgresScript, /Get-Command\s+psql/)
-    assert.match(postgresScript, /recording_platform/)
-    assert.match(postgresScript, /CREATE DATABASE/)
-    assert.match(postgresScript, /CREATE ROLE/)
-    assert.match(postgresScript, /psql/)
-    assert.doesNotMatch(postgresScript, /SPRING_DATASOURCE_PASSWORD\s*=/)
-    assert.doesNotMatch(postgresScript, /sk-[A-Za-z0-9_-]+/)
-    assert.doesNotMatch(postgresScript, /Authorization/i)
   })
 })

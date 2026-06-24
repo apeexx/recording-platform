@@ -2,10 +2,10 @@ package com.recording.platform.voice;
 
 import com.recording.platform.voice.dto.VoiceGenerationConfigRequest;
 import com.recording.platform.voice.model.VoiceGenerationConfig;
-import com.recording.platform.voice.repository.VoiceGenerationConfigRepository;
 import jakarta.validation.Valid;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.concurrent.atomic.AtomicReference;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -16,29 +16,30 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/voice-generation/config")
 public class VoiceGenerationConfigController {
 	private static final String DEFAULT_CONFIG_ID = "default";
-	private final VoiceGenerationConfigRepository repository;
+	private final AtomicReference<VoiceGenerationConfig> defaultConfig = new AtomicReference<>();
 	private final Clock clock;
 
-	public VoiceGenerationConfigController(VoiceGenerationConfigRepository repository, Clock clock) {
-		this.repository = repository;
+	public VoiceGenerationConfigController(Clock clock) {
 		this.clock = clock;
 	}
 
 	@GetMapping("/default")
 	public VoiceGenerationConfig defaultConfig() {
-		return repository.findById(DEFAULT_CONFIG_ID).orElseGet(this::fallbackConfig);
+		VoiceGenerationConfig config = defaultConfig.get();
+		return config == null ? fallbackConfig() : config;
 	}
 
 	@PutMapping("/default")
 	public VoiceGenerationConfig saveDefaultConfig(@Valid @RequestBody VoiceGenerationConfigRequest request) {
-		VoiceGenerationConfig config = repository.findById(DEFAULT_CONFIG_ID).orElseGet(this::fallbackConfig);
+		VoiceGenerationConfig config = new VoiceGenerationConfig();
 		config.setId(DEFAULT_CONFIG_ID);
 		config.setVoiceId(request.voiceId());
 		config.setSpeed(request.speed());
 		config.setVolume(request.volume());
 		config.setPitch(request.pitch());
 		config.setUpdatedAt(Instant.now(clock));
-		return repository.save(config);
+		defaultConfig.set(config);
+		return config;
 	}
 
 	private VoiceGenerationConfig fallbackConfig() {

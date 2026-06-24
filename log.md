@@ -210,3 +210,20 @@
   - `pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\create-postgres-db.ps1 -Help`：通过。
   - `.\scripts\create-postgres-db.ps1`：本机未找到 `psql`，脚本按预期停止并提示先安装 PostgreSQL 或将 `psql` 加入 PATH。
   - 敏感信息扫描：未发现真实 MiniMax API Key、数据库密码或 Authorization Bearer 值。
+
+## 2026-06-24 09:02 语音生成测试阶段取消持久化依赖
+
+- 时间：2026-06-24 09:02
+- commit ID：待提交后补记
+- 修改内容：
+  - 按当前测试需求取消语音生成模块的数据库持久化依赖。
+  - 移除后端 JPA、Flyway、PostgreSQL 和 H2 相关依赖与启动配置，后端启动不再需要本地数据库。
+  - 将生成记录和默认声音配置改为后端进程内存保存，支持当前会话内生成记录查询、音频播放和下载，后端重启后记录清空。
+  - 删除临时 PostgreSQL 建库脚本和 Flyway 建表脚本。
+  - 更新 `.env.example`、`README.md`、`AGENTS.md` 和 `scripts/README.md`，说明当前阶段只测试生成和下载功能，不做持久化保存。
+- 验证结果：
+  - 已先修改测试期望，确认旧 datasource/Flyway/JPA 配置会导致验证失败。
+  - `.\mvnw.cmd test`：通过。
+  - `npm run build`：通过。
+  - `node --test scripts/tests/start-dev.test.js`：通过。
+  - 无数据库依赖残留扫描：仅测试断言中保留 `spring.datasource`、`spring.jpa`、`spring.flyway`、`spring.data.mongodb` 等禁止项检查文本。

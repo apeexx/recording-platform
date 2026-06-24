@@ -1,51 +1,21 @@
 package com.recording.platform.voice.model;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.Id;
-import jakarta.persistence.PrePersist;
-import jakarta.persistence.Table;
 import java.time.Instant;
-import java.util.UUID;
 
-@Entity
-@Table(name = "voice_generation_records")
 public class VoiceGenerationRecord {
-	@Id
-	@Column(length = 36)
 	private String id;
-	@Enumerated(EnumType.STRING)
-	@Column(nullable = false, length = 32)
 	private GenerationMode mode;
-	@Enumerated(EnumType.STRING)
-	@Column(nullable = false, length = 32)
 	private GenerationStatus status;
-	@Column(columnDefinition = "text")
 	private String text;
-	@Column(name = "voice_id", length = 128)
 	private String voiceId;
 	private double speed;
 	private double volume;
 	private int pitch;
-	@Column(name = "audio_path", columnDefinition = "text")
 	private String audioPath;
-	@Column(name = "audio_format", length = 16)
 	private String audioFormat;
-	@Column(name = "duration_millis")
 	private long durationMillis;
-	@Column(columnDefinition = "text")
 	private String message;
-	@Column(name = "created_at", nullable = false)
 	private Instant createdAt;
-
-	@PrePersist
-	void ensureId() {
-		if (id == null || id.isBlank()) {
-			id = UUID.randomUUID().toString();
-		}
-	}
 
 	public String getId() {
 		return id;

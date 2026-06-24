@@ -1,23 +1,13 @@
 package com.recording.platform.voice.model;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
 import java.time.Instant;
 
-@Entity
-@Table(name = "voice_generation_configs")
 public class VoiceGenerationConfig {
-	@Id
-	@Column(length = 64)
 	private String id;
-	@Column(name = "voice_id", nullable = false, length = 128)
 	private String voiceId;
 	private double speed;
 	private double volume;
 	private int pitch;
-	@Column(name = "updated_at")
 	private Instant updatedAt;
 
 	public String getId() {

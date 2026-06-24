@@ -15,7 +15,6 @@ import com.recording.platform.voice.model.GenerationStatus;
 import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.io.ByteArrayResource;
-import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -45,9 +44,9 @@ class VoiceGenerationControllerTests {
 	}
 
 	@Test
-	void databaseUnavailableReturnsBadRequestJson() throws Exception {
+	void voiceGenerationExceptionReturnsBadRequestJson() throws Exception {
 		VoiceGenerationService service = org.mockito.Mockito.mock(VoiceGenerationService.class);
-		doThrow(new DataAccessResourceFailureException("database unavailable"))
+		doThrow(new VoiceGenerationException("音色删除失败"))
 			.when(service)
 			.deleteVoice("voice-1");
 		MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new VoiceGenerationController(service))
@@ -58,7 +57,7 @@ class VoiceGenerationControllerTests {
 				"/api/voice-generation/voices/voice-1"
 			))
 			.andExpect(status().isBadRequest())
-			.andExpect(jsonPath("$.error").value("数据库未连接，无法保存或读取语音生成数据"));
+			.andExpect(jsonPath("$.error").value("音色删除失败"));
 	}
 
 	@Test

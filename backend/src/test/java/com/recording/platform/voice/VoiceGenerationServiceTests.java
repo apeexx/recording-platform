@@ -23,7 +23,6 @@ import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.mock.web.MockMultipartFile;
 
 class VoiceGenerationServiceTests {
@@ -69,28 +68,6 @@ class VoiceGenerationServiceTests {
 		assertThat(miniMaxClient.uploadPurposes).containsExactly("prompt_audio");
 		assertThat(miniMaxClient.promptFileIdUsed).isEqualTo("prompt-file-1");
 		assertThat(recordStore.saved.get(0).getMode()).isEqualTo(GenerationMode.PREVIEW);
-	}
-
-	@Test
-	void synthesizeFailsBeforeCallingMiniMaxWhenRecordStoreIsUnavailable() {
-		FakeMiniMaxVoiceClient miniMaxClient = new FakeMiniMaxVoiceClient();
-		VoiceGenerationService service = new VoiceGenerationService(
-			miniMaxClient,
-			new UnavailableRecordStore(),
-			new VoiceGenerationStorage(tempDir),
-			Clock.fixed(Instant.parse("2026-06-23T15:30:00Z"), ZoneOffset.UTC)
-		);
-
-		assertThatThrownBy(() -> service.synthesize(new SynthesisRequest(
-				"voice-sichuan-01",
-				"今天天气很好，适合录音。",
-				0.9,
-				1.0,
-				0
-			)))
-			.isInstanceOf(VoiceGenerationException.class)
-			.hasMessage("数据库未连接，无法保存语音生成记录");
-		assertThat(miniMaxClient.synthesizeCalls).isZero();
 	}
 
 	private VoiceGenerationService createService(
@@ -153,15 +130,4 @@ class VoiceGenerationServiceTests {
 		}
 	}
 
-	private static final class UnavailableRecordStore implements VoiceGenerationRecordStore {
-		@Override
-		public VoiceGenerationRecord save(VoiceGenerationRecord record) {
-			throw new DataAccessResourceFailureException("database unavailable");
-		}
-
-		@Override
-		public Optional<VoiceGenerationRecord> findById(String id) {
-			return Optional.empty();
-		}
-	}
 }

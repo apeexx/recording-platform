@@ -13,11 +13,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
-import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
 import org.springframework.web.multipart.MultipartFile;
 
 @Service
@@ -72,17 +68,13 @@ public class VoiceGenerationService {
 	public Map<String, Object> listRecords(int page, int size) {
 		int safePage = Math.max(page, 0);
 		int safeSize = Math.min(Math.max(size, 1), 100);
-		Page<VoiceGenerationRecord> records = recordStore.findRecent(PageRequest.of(
-			safePage,
-			safeSize,
-			Sort.by(Sort.Direction.DESC, "createdAt")
-		));
-		List<Map<String, Object>> items = records.getContent().stream().map(this::toRecordMap).toList();
+		List<VoiceGenerationRecord> records = recordStore.findRecent(safePage, safeSize);
+		List<Map<String, Object>> items = records.stream().map(this::toRecordMap).toList();
 		return Map.of(
 			"items", items,
-			"page", records.getNumber(),
-			"size", records.getSize(),
-			"total", records.getTotalElements()
+			"page", safePage,
+			"size", safeSize,
+			"total", recordStore.count()
 		);
 	}
 
@@ -160,10 +152,6 @@ public class VoiceGenerationService {
 	}
 
 	private VoiceGenerationRecord saveRecord(VoiceGenerationRecord record) {
-		try {
-			return recordStore.save(record);
-		} catch (DataAccessException exception) {
-			throw new VoiceGenerationException("数据库未连接，无法保存语音生成记录");
-		}
+		return recordStore.save(record);
 	}
 }
