@@ -131,3 +131,20 @@
   - `git status --short --branch`：`## main...origin/main`，仅 `AGENTS.md`、`README.md`、`log.md`、`scripts/README.md` 有修改。
   - `npm run build`：通过。
   - `.\mvnw.cmd test`：通过；测试期间本机未连接 MongoDB 时输出连接拒绝日志，Maven 最终结果为 `BUILD SUCCESS`。
+
+## 2026-06-24 10:55 管理员端侧边栏折叠动画优化
+
+- 时间：2026-06-24 10:55
+- commit ID：待提交后补记
+- 修改内容：
+  - 移除管理员端侧边栏二级菜单的 `v-show` 展开关闭方式，改为 DOM 常驻和 class 状态切换。
+  - 使用 CSS grid 的 `grid-template-rows` 过渡实现动态高度折叠，并同步二级菜单透明度、轻微位移和箭头旋转动画。
+  - 关闭状态为二级菜单容器添加 `aria-hidden` 和 `inert`，展开状态移除；关闭时若焦点位于二级菜单内部，则回退到对应一级菜单按钮。
+  - 更新 `README.md`、`AGENTS.md` 和 `apps/web/README.md` 中的侧边栏动画维护说明。
+- 验证结果：
+  - `git status --short --branch`：初始状态为 `## main...origin/main`，工作区干净。
+  - `node --test src/tests/adminSidebar.test.js`：通过，3 个测试全部通过。
+  - `npm run build`：通过。
+  - `git diff --check`：通过，仅输出 Windows 换行转换提示，无 whitespace 错误。
+  - 浏览器访问 `http://127.0.0.1:5173/`：页面自动进入管理员端；展开和收起状态高度、透明度、位移、箭头旋转、`aria-hidden`、`inert`、多组展开、路由父级自动展开、active 状态和焦点回退验证通过。
+  - 390px 窄屏检查：`documentWidth` 等于视口宽度，未出现横向溢出，关闭态二级菜单高度为 0。

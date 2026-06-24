@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import AdminSidebarItem from './AdminSidebarItem.vue'
 
 const props = defineProps({
@@ -21,10 +21,28 @@ const emit = defineEmits(['toggle'])
 
 const hasChildren = computed(() => Array.isArray(props.item.children) && props.item.children.length > 0)
 const childrenId = computed(() => `admin-sidebar-group-${props.item.key}`)
+const titleButton = ref(null)
+const childrenPanel = ref(null)
 
 function handleToggle() {
   emit('toggle', props.item.key)
 }
+
+watch(
+  () => props.isOpen,
+  async (isOpen, wasOpen) => {
+    if (isOpen || !wasOpen || !childrenPanel.value || typeof document === 'undefined') {
+      return
+    }
+
+    if (!childrenPanel.value.contains(document.activeElement)) {
+      return
+    }
+
+    await nextTick()
+    titleButton.value?.focus({ preventScroll: true })
+  }
+)
 </script>
 
 <template>
@@ -36,6 +54,7 @@ function handleToggle() {
 
     <template v-else>
       <button
+        ref="titleButton"
         type="button"
         class="admin-sidebar-group__title"
         :aria-expanded="isOpen"
@@ -47,16 +66,23 @@ function handleToggle() {
         <span class="admin-sidebar-group__arrow" aria-hidden="true">›</span>
       </button>
       <div
-        v-show="isOpen"
         :id="childrenId"
+        ref="childrenPanel"
         class="admin-sidebar-group__children"
+        :class="isOpen ? 'is-open' : 'is-collapsed'"
+        :aria-hidden="isOpen ? undefined : 'true'"
+        :inert="isOpen ? undefined : true"
       >
-        <AdminSidebarItem
-          v-for="child in item.children"
-          :key="child.key"
-          :item="child"
-          child
-        />
+        <div class="admin-sidebar-group__children-clip">
+          <div class="admin-sidebar-group__children-list">
+            <AdminSidebarItem
+              v-for="child in item.children"
+              :key="child.key"
+              :item="child"
+              child
+            />
+          </div>
+        </div>
       </div>
     </template>
   </div>

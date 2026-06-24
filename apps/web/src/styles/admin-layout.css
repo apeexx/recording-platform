@@ -97,8 +97,8 @@
   text-align: left;
   cursor: pointer;
   transition:
-    background 0.18s ease,
-    color 0.18s ease;
+    background 200ms ease,
+    color 200ms ease;
 }
 
 .admin-sidebar-group__title:hover {
@@ -118,7 +118,7 @@
 .admin-sidebar-group__arrow {
   margin-left: auto;
   color: currentColor;
-  transition: transform 0.18s ease;
+  transition: transform 200ms ease;
 }
 
 .admin-sidebar-group.is-open .admin-sidebar-group__arrow {
@@ -126,16 +126,41 @@
 }
 
 .admin-sidebar-group__children {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows 200ms ease,
+    opacity 200ms ease;
+}
+
+.admin-sidebar-group__children.is-open {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+.admin-sidebar-group__children-clip {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.admin-sidebar-group__children-list {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  margin: 4px 0 8px;
+  padding: 4px 0 8px;
+  transform: translateY(-4px);
+  transition: transform 200ms ease;
+}
+
+.admin-sidebar-group__children.is-open .admin-sidebar-group__children-list {
+  transform: translateY(0);
 }
 
 .admin-sidebar-item {
   transition:
-    background 0.18s ease,
-    color 0.18s ease;
+    background 200ms ease,
+    color 200ms ease;
 }
 
 .admin-sidebar-item:hover,
@@ -408,5 +433,15 @@
 
   .admin-user-name {
     font-size: 13px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-sidebar-group__title,
+  .admin-sidebar-group__arrow,
+  .admin-sidebar-group__children,
+  .admin-sidebar-group__children-list,
+  .admin-sidebar-item {
+    transition-duration: 1ms;
   }
 }
