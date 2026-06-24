@@ -242,3 +242,21 @@
   - `.\mvnw.cmd "-Dtest=DefaultMiniMaxVoiceClientTests" test`：通过。
   - `node --test src\tests\voiceGenerationWorkbench.test.js`：通过。
   - 未执行真实付费克隆调用，避免产生付费克隆成本；真实联调需使用符合 MiniMax 要求的母带音频和唯一音色 ID。
+
+## 2026-06-24 14:00 修复音色克隆上传 413
+
+- 时间：2026-06-24 14:00
+- commit ID：待提交后补记
+- 修改内容：
+  - 排查音色克隆上传返回 HTTP 413，定位为 Spring Boot multipart 默认上传限制在业务代码前拦截母带文件。
+  - 将后端 multipart 上传上限配置为单文件 20MB、完整请求 21MB，对齐 MiniMax 克隆母带大小限制并预留 multipart 边界开销。
+  - 为 `MaxUploadSizeExceededException` 增加 JSON 错误处理，超过限制时返回 HTTP 413 和可读脱敏错误摘要。
+  - 更新 `README.md`、`AGENTS.md` 和 `apps/web/README.md`，同步上传大小限制和 413 行为。
+- 验证结果：
+  - 已先新增失败测试，确认旧配置缺失上传上限，且上传过大时 HTTP 413 没有 JSON 错误摘要。
+  - `.\mvnw.cmd "-Dtest=VoiceGenerationBackendConfigTests" test`：通过。
+  - `.\mvnw.cmd "-Dtest=VoiceGenerationControllerTests" test`：通过。
+  - `.\mvnw.cmd test`：通过。
+  - `npm run build`：通过。
+  - `node --test src\tests\adminSidebar.test.js src\tests\voiceGenerationApi.test.js src\tests\voiceGenerationWorkbench.test.js`：通过。
+  - 敏感信息扫描：未发现真实 API Key、Authorization、Cookie 或长 Bearer token。

@@ -18,6 +18,9 @@ import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 class VoiceGenerationControllerTests {
 
@@ -74,5 +77,24 @@ class VoiceGenerationControllerTests {
 			.andExpect(status().isOk())
 			.andExpect(content().contentType("audio/mpeg"))
 			.andExpect(content().bytes("audio".getBytes(StandardCharsets.UTF_8)));
+	}
+
+	@Test
+	void maxUploadSizeExceededReturnsReadableJson() throws Exception {
+		MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new UploadFailureController())
+			.setControllerAdvice(new VoiceGenerationErrorHandler())
+			.build();
+
+		mockMvc.perform(get("/simulate-upload-too-large"))
+			.andExpect(status().is(413))
+			.andExpect(jsonPath("$.error").value("上传音频文件过大，请使用不超过 20MB 的 mp3、m4a 或 wav 母带音频"));
+	}
+
+	@RestController
+	private static class UploadFailureController {
+		@GetMapping("/simulate-upload-too-large")
+		void simulateUploadTooLarge() {
+			throw new MaxUploadSizeExceededException(20 * 1024 * 1024);
+		}
 	}
 }

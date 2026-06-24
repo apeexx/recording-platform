@@ -33,4 +33,12 @@ class VoiceGenerationBackendConfigTests {
 		assertThat(properties).doesNotContain("spring.flyway");
 		assertThat(properties).doesNotContain("spring.data.mongodb");
 	}
+
+	@Test
+	void applicationPropertiesAllowsMiniMaxCloneAudioUploadSize() throws Exception {
+		String properties = Files.readString(Path.of("src/main/resources/application.properties"));
+
+		assertThat(properties).contains("spring.servlet.multipart.max-file-size=20MB");
+		assertThat(properties).contains("spring.servlet.multipart.max-request-size=21MB");
+	}
 }
