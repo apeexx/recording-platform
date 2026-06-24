@@ -1,6 +1,7 @@
 package com.recording.platform.voice;
 
 import java.util.Map;
+import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -17,5 +18,11 @@ public class VoiceGenerationErrorHandler {
 	@ExceptionHandler(MethodArgumentNotValidException.class)
 	ResponseEntity<Map<String, Object>> handleValidationException() {
 		return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", "请求参数不完整或不合法"));
+	}
+
+	@ExceptionHandler(DataAccessException.class)
+	ResponseEntity<Map<String, Object>> handleDataAccessException() {
+		return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+			.body(Map.of("error", "MongoDB 未连接，无法保存或读取语音生成数据"));
 	}
 }

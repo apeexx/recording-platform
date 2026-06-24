@@ -1,6 +1,7 @@
 package com.recording.platform.voice;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.recording.platform.voice.dto.SynthesisRequest;
 import com.recording.platform.voice.dto.VoiceGenerationResponse;
@@ -22,6 +23,7 @@ import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.mock.web.MockMultipartFile;
 
 class VoiceGenerationServiceTests {
@@ -69,6 +71,28 @@ class VoiceGenerationServiceTests {
 		assertThat(recordStore.saved.get(0).getMode()).isEqualTo(GenerationMode.PREVIEW);
 	}
 
+	@Test
+	void synthesizeFailsBeforeCallingMiniMaxWhenRecordStoreIsUnavailable() {
+		FakeMiniMaxVoiceClient miniMaxClient = new FakeMiniMaxVoiceClient();
+		VoiceGenerationService service = new VoiceGenerationService(
+			miniMaxClient,
+			new UnavailableRecordStore(),
+			new VoiceGenerationStorage(tempDir),
+			Clock.fixed(Instant.parse("2026-06-23T15:30:00Z"), ZoneOffset.UTC)
+		);
+
+		assertThatThrownBy(() -> service.synthesize(new SynthesisRequest(
+				"voice-sichuan-01",
+				"今天天气很好，适合录音。",
+				0.9,
+				1.0,
+				0
+			)))
+			.isInstanceOf(VoiceGenerationException.class)
+			.hasMessage("MongoDB 未连接，无法保存语音生成记录");
+		assertThat(miniMaxClient.synthesizeCalls).isZero();
+	}
+
 	private VoiceGenerationService createService(
 		FakeMiniMaxVoiceClient miniMaxClient,
 		InMemoryRecordStore recordStore
@@ -81,6 +105,7 @@ class VoiceGenerationServiceTests {
 	private static final class FakeMiniMaxVoiceClient implements MiniMaxVoiceClient {
 		private final List<String> uploadPurposes = new ArrayList<>();
 		private String promptFileIdUsed;
+		private int synthesizeCalls;
 
 		@Override
 		public String uploadAudio(org.springframework.web.multipart.MultipartFile audio, String purpose) {
@@ -94,6 +119,7 @@ class VoiceGenerationServiceTests {
 
 		@Override
 		public MiniMaxSynthesisResult synthesize(SynthesisRequest request, String promptFileId) {
+			synthesizeCalls++;
 			promptFileIdUsed = promptFileId;
 			return new MiniMaxSynthesisResult(new byte[] {1, 2, 3, 4}, "mp3", 4);
 		}
@@ -124,6 +150,18 @@ class VoiceGenerationServiceTests {
 		@Override
 		public Optional<VoiceGenerationRecord> findById(String id) {
 			return saved.stream().filter((record) -> record.getId().equals(id)).findFirst();
+		}
+	}
+
+	private static final class UnavailableRecordStore implements VoiceGenerationRecordStore {
+		@Override
+		public VoiceGenerationRecord save(VoiceGenerationRecord record) {
+			throw new DataAccessResourceFailureException("MongoDB unavailable");
+		}
+
+		@Override
+		public Optional<VoiceGenerationRecord> findById(String id) {
+			return Optional.empty();
 		}
 	}
 }

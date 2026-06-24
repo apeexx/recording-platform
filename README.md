@@ -86,6 +86,8 @@ VOICE_GENERATION_STORAGE_DIR=backend/storage/voice-generation
 
 生成记录保存到 MongoDB 集合 `voice_generation_records`，默认声音配置保存到 `voice_generation_configs`。生成音频文件保存到 `VOICE_GENERATION_STORAGE_DIR` 指定的本地目录，音频二进制不写入 MongoDB。
 
+如果合成时返回 `MongoDB 未连接，无法保存语音生成记录`，说明后端无法连接 `spring.data.mongodb.uri` 指定的 MongoDB。请先启动本机或外部 MongoDB，再重新执行合成。后端会在调用 MiniMax 合成前先确认生成记录可写入，避免数据库不可用时继续产生远程合成调用。
+
 前端开发服务器已将 `/api` 代理到 `http://127.0.0.1:8080`。真实联调时需要同时启动 MongoDB、后端和 Web 前端。
 
 Windows PowerShell 本地联调可使用一键启动脚本：

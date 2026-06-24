@@ -13,6 +13,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -99,15 +100,16 @@ public class VoiceGenerationService {
 		String promptFileId,
 		GenerationMode mode
 	) {
+		VoiceGenerationRecord completed = buildRecord(request, mode, GenerationStatus.PENDING);
+		completed = saveRecord(completed);
 		MiniMaxSynthesisResult result = miniMaxVoiceClient.synthesize(request, promptFileId);
-		VoiceGenerationRecord completed = buildRecord(request, mode, GenerationStatus.COMPLETED);
+		completed.setStatus(GenerationStatus.COMPLETED);
 		completed.setMessage("生成成功");
-		completed = recordStore.save(completed);
 		Path audioPath = storage.save(completed.getId(), result.format(), result.audioBytes());
 		completed.setAudioPath(audioPath.toString());
 		completed.setAudioFormat(result.format());
 		completed.setDurationMillis(result.durationMillis());
-		completed = recordStore.save(completed);
+		completed = saveRecord(completed);
 		return toResponse(completed);
 	}
 
@@ -155,5 +157,13 @@ public class VoiceGenerationService {
 
 	private String nullToEmpty(String value) {
 		return value == null ? "" : value;
+	}
+
+	private VoiceGenerationRecord saveRecord(VoiceGenerationRecord record) {
+		try {
+			return recordStore.save(record);
+		} catch (DataAccessException exception) {
+			throw new VoiceGenerationException("MongoDB 未连接，无法保存语音生成记录");
+		}
 	}
 }

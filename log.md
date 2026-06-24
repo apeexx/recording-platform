@@ -173,3 +173,21 @@
   - `GET http://localhost:5173/admin/voice-generation/workbench`：返回 200。
   - `npm run build`：通过。
   - `.\mvnw.cmd test`：通过；本机未启动 MongoDB 时仍会输出连接拒绝日志，但 Maven 最终结果为 `BUILD SUCCESS`。
+
+## 2026-06-24 08:28 修复语音合成 MongoDB 异常 500
+
+- 时间：2026-06-24 08:28
+- commit ID：待提交后补记
+- 修改内容：
+  - 排查后端 `Internal Server Error`，定位为语音合成完成后写入 `voice_generation_records` 时 MongoDB `localhost:27017` 不可用，`DataAccessResourceFailureException` 未被处理。
+  - 调整语音合成流程：先保存 `PENDING` 生成记录，确认 MongoDB 可写后再调用 MiniMax 合成，避免数据库不可用时产生不必要的远程合成调用。
+  - 为数据库读写异常新增脱敏 JSON 错误处理，返回 `MongoDB 未连接，无法保存或读取语音生成数据`，不再穿透为 Internal Server Error。
+  - 更新 `README.md` 和 `AGENTS.md`，补充 MongoDB 未连接时的排查说明和安全边界。
+- 验证结果：
+  - `.\mvnw.cmd "-Dtest=VoiceGenerationServiceTests,VoiceGenerationControllerTests" test`：先失败，确认数据库异常会穿透为 Servlet 500，且服务层不会转换为业务错误；修复后通过。
+  - `.\mvnw.cmd test`：通过；本机未启动 MongoDB 时仍会输出连接拒绝日志，但 Maven 最终结果为 `BUILD SUCCESS`。
+  - `npm run build`：通过。
+  - `.\scripts\start-dev.cmd`：通过，重启后端和前端到新代码。
+  - `POST http://localhost:8080/api/voice-generation/synthesize`：MongoDB 未连接时返回 HTTP 400，响应体为脱敏错误摘要 `MongoDB 未连接，无法保存语音生成记录`，不再返回 Internal Server Error。
+  - `GET http://localhost:8080/api/voice-generation/voices?excludeSystem=true`：通过，MiniMax 返回 `base_resp.status_code=0`、`status_msg=success`。
+  - `GET http://localhost:5173/admin/voice-generation/workbench`：返回 200。
