@@ -89,7 +89,7 @@ class VoiceGenerationServiceTests {
 				0
 			)))
 			.isInstanceOf(VoiceGenerationException.class)
-			.hasMessage("MongoDB 未连接，无法保存语音生成记录");
+			.hasMessage("数据库未连接，无法保存语音生成记录");
 		assertThat(miniMaxClient.synthesizeCalls).isZero();
 	}
 
@@ -156,7 +156,7 @@ class VoiceGenerationServiceTests {
 	private static final class UnavailableRecordStore implements VoiceGenerationRecordStore {
 		@Override
 		public VoiceGenerationRecord save(VoiceGenerationRecord record) {
-			throw new DataAccessResourceFailureException("MongoDB unavailable");
+			throw new DataAccessResourceFailureException("database unavailable");
 		}
 
 		@Override

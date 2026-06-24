@@ -46,6 +46,16 @@ npm run dev -- --host localhost --port 5173
 http://localhost:5173/admin/voice-generation/workbench
 ```
 
-脚本只启动后端和前端，不启动 MongoDB，不创建 `.env`，也不会写入或打印任何 API Key。语音生成真实联调仍需要本机或外部 MongoDB 可用，并在根目录 `.env` 中填写真实 `MINIMAX_API_KEY`。
+脚本只启动后端和前端，不启动 PostgreSQL，不创建 `.env`，也不会写入或打印任何 API Key。语音生成真实联调仍需要本机或外部 PostgreSQL 可用，并在根目录 `.env` 中填写真实 `MINIMAX_API_KEY` 和数据库连接信息。
 
 脚本不再创建或写入根目录 `logs/`；实时输出直接显示在两个 `pwsh` 窗口中。
+
+## create-postgres-db.ps1
+
+`create-postgres-db.ps1` 用于在本机 PostgreSQL 中创建开发数据库和角色：
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\create-postgres-db.ps1
+```
+
+脚本依赖 `psql` 已安装并加入 PATH。若找不到 `psql`，脚本会停止并提示先安装 PostgreSQL，不会伪造创建成功。脚本不会保存或打印数据库密码；如果本机 PostgreSQL 要求密码，请按提示在 `.env` 中自行填写 `SPRING_DATASOURCE_PASSWORD`。

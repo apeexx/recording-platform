@@ -23,6 +23,6 @@ public class VoiceGenerationErrorHandler {
 	@ExceptionHandler(DataAccessException.class)
 	ResponseEntity<Map<String, Object>> handleDataAccessException() {
 		return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-			.body(Map.of("error", "MongoDB 未连接，无法保存或读取语音生成数据"));
+			.body(Map.of("error", "数据库未连接，无法保存或读取语音生成数据"));
 	}
 }

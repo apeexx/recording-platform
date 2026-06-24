@@ -163,7 +163,7 @@ public class VoiceGenerationService {
 		try {
 			return recordStore.save(record);
 		} catch (DataAccessException exception) {
-			throw new VoiceGenerationException("MongoDB 未连接，无法保存语音生成记录");
+			throw new VoiceGenerationException("数据库未连接，无法保存语音生成记录");
 		}
 	}
 }

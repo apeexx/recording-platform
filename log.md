@@ -191,3 +191,22 @@
   - `POST http://localhost:8080/api/voice-generation/synthesize`：MongoDB 未连接时返回 HTTP 400，响应体为脱敏错误摘要 `MongoDB 未连接，无法保存语音生成记录`，不再返回 Internal Server Error。
   - `GET http://localhost:8080/api/voice-generation/voices?excludeSystem=true`：通过，MiniMax 返回 `base_resp.status_code=0`、`status_msg=success`。
   - `GET http://localhost:5173/admin/voice-generation/workbench`：返回 200。
+
+## 2026-06-24 08:53 迁移语音生成持久化到 PostgreSQL
+
+- 时间：2026-06-24 08:53
+- commit ID：待提交后补记
+- 修改内容：
+  - 将项目默认数据库方向确定为 PostgreSQL，后续任务、领取、录音、审核和日志均以关系型模型设计。
+  - 后端移除 MongoDB 持久化依赖，改用 Spring Data JPA、PostgreSQL JDBC 和 Flyway。
+  - 将语音生成记录和默认声音配置迁移为 PostgreSQL 表 `voice_generation_records`、`voice_generation_configs`，音频文件仍保存在本地目录。
+  - 新增 Flyway 建表脚本和 `scripts/create-postgres-db.ps1` 本地建库脚本。
+  - 更新 `.env.example`、`README.md`、`AGENTS.md` 和 `scripts/README.md`，同步 PostgreSQL 环境变量、建库方式和联调边界。
+- 验证结果：
+  - 已先新增失败测试，确认旧 MongoDB 配置、缺失 Flyway SQL、缺失建库脚本和旧数据库错误文案会导致验证失败。
+  - `.\mvnw.cmd test`：通过。
+  - `npm run build`：通过。
+  - `node --test scripts/tests/start-dev.test.js`：通过。
+  - `pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\create-postgres-db.ps1 -Help`：通过。
+  - `.\scripts\create-postgres-db.ps1`：本机未找到 `psql`，脚本按预期停止并提示先安装 PostgreSQL 或将 `psql` 加入 PATH。
+  - 敏感信息扫描：未发现真实 MiniMax API Key、数据库密码或 Authorization Bearer 值。

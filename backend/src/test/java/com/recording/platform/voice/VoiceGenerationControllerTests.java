@@ -47,7 +47,7 @@ class VoiceGenerationControllerTests {
 	@Test
 	void databaseUnavailableReturnsBadRequestJson() throws Exception {
 		VoiceGenerationService service = org.mockito.Mockito.mock(VoiceGenerationService.class);
-		doThrow(new DataAccessResourceFailureException("MongoDB unavailable"))
+		doThrow(new DataAccessResourceFailureException("database unavailable"))
 			.when(service)
 			.deleteVoice("voice-1");
 		MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new VoiceGenerationController(service))
@@ -58,7 +58,7 @@ class VoiceGenerationControllerTests {
 				"/api/voice-generation/voices/voice-1"
 			))
 			.andExpect(status().isBadRequest())
-			.andExpect(jsonPath("$.error").value("MongoDB 未连接，无法保存或读取语音生成数据"));
+			.andExpect(jsonPath("$.error").value("数据库未连接，无法保存或读取语音生成数据"));
 	}
 
 	@Test

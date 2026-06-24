@@ -7,10 +7,10 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Repository;
 
 @Repository
-public class MongoVoiceGenerationRecordStore implements VoiceGenerationRecordStore {
-	private final VoiceGenerationRecordMongoRepository repository;
+public class JpaVoiceGenerationRecordStore implements VoiceGenerationRecordStore {
+	private final VoiceGenerationRecordRepository repository;
 
-	public MongoVoiceGenerationRecordStore(VoiceGenerationRecordMongoRepository repository) {
+	public JpaVoiceGenerationRecordStore(VoiceGenerationRecordRepository repository) {
 		this.repository = repository;
 	}
 
