@@ -227,3 +227,18 @@
   - `npm run build`：通过。
   - `node --test scripts/tests/start-dev.test.js`：通过。
   - 无数据库依赖残留扫描：仅测试断言中保留 `spring.datasource`、`spring.jpa`、`spring.flyway`、`spring.data.mongodb` 等禁止项检查文本。
+
+## 2026-06-24 09:39 修复 MiniMax 音色克隆请求和页面参数
+
+- 时间：2026-06-24 09:39
+- commit ID：待提交后补记
+- 修改内容：
+  - 排查付费音色克隆失败，定位为后端提交 MiniMax 克隆请求时将上传返回的 `file_id` 作为字符串传递，已调整为数值类型。
+  - 调整 MiniMax 错误摘要，克隆失败时返回 `status_msg` 或状态码摘要，避免前端只显示笼统失败文案。
+  - 调整语音生成工作台，付费克隆模式只保留母带音频和新音色 ID，不再展示或提交语速、音量、语调配置。
+  - 补充前后端测试，覆盖克隆请求 `file_id` 类型、MiniMax 失败摘要和克隆模式参数栏隐藏。
+  - 更新 `README.md`、`AGENTS.md` 和 `apps/web/README.md`，同步克隆模式输入边界和 MiniMax 音频限制。
+- 验证结果：
+  - `.\mvnw.cmd "-Dtest=DefaultMiniMaxVoiceClientTests" test`：通过。
+  - `node --test src\tests\voiceGenerationWorkbench.test.js`：通过。
+  - 未执行真实付费克隆调用，避免产生付费克隆成本；真实联调需使用符合 MiniMax 要求的母带音频和唯一音色 ID。

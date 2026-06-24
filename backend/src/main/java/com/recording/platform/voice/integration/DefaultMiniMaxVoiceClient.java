@@ -23,11 +23,18 @@ public class DefaultMiniMaxVoiceClient implements MiniMaxVoiceClient {
 	private final RestClient restClient;
 
 	public DefaultMiniMaxVoiceClient(MiniMaxSettings settings) {
+		this(
+			settings,
+			RestClient.builder()
+				.baseUrl(settings.baseUrl())
+				.defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + nullToEmpty(settings.apiKey()))
+				.build()
+		);
+	}
+
+	DefaultMiniMaxVoiceClient(MiniMaxSettings settings, RestClient restClient) {
 		this.settings = settings;
-		this.restClient = RestClient.builder()
-			.baseUrl(settings.baseUrl())
-			.defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + nullToEmpty(settings.apiKey()))
-			.build();
+		this.restClient = restClient;
 	}
 
 	public void ensureApiKeyConfigured() {
@@ -54,7 +61,7 @@ public class DefaultMiniMaxVoiceClient implements MiniMaxVoiceClient {
 			if (file instanceof Map<?, ?> fileMap && fileMap.get("file_id") != null) {
 				return fileMap.get("file_id").toString();
 			}
-			throw new VoiceGenerationException("MiniMax 文件上传失败");
+			throw new VoiceGenerationException(summarizeMiniMaxFailure(response, "MiniMax 文件上传失败"));
 		} catch (IOException exception) {
 			throw new VoiceGenerationException("读取上传音频失败");
 		}
@@ -63,7 +70,7 @@ public class DefaultMiniMaxVoiceClient implements MiniMaxVoiceClient {
 	@Override
 	public void cloneVoice(String fileId, String voiceId) {
 		ensureApiKeyConfigured();
-		Map<String, Object> payload = Map.of("file_id", fileId, "voice_id", voiceId);
+		Map<String, Object> payload = Map.of("file_id", parseFileId(fileId), "voice_id", voiceId);
 		Map<String, Object> response = restClient.post()
 			.uri("/v1/voice_clone")
 			.contentType(MediaType.APPLICATION_JSON)
@@ -149,10 +156,40 @@ public class DefaultMiniMaxVoiceClient implements MiniMaxVoiceClient {
 			throw new VoiceGenerationException(message);
 		}
 		Object baseResp = response.get("base_resp");
-		if (baseResp instanceof Map<?, ?> map && Integer.valueOf(0).equals(map.get("status_code"))) {
+		if (baseResp instanceof Map<?, ?> map && isSuccessCode(map.get("status_code"))) {
 			return;
 		}
-		throw new VoiceGenerationException(message);
+		throw new VoiceGenerationException(summarizeMiniMaxFailure(response, message));
+	}
+
+	private Long parseFileId(String fileId) {
+		try {
+			return Long.parseLong(fileId);
+		} catch (NumberFormatException exception) {
+			throw new VoiceGenerationException("MiniMax 文件 ID 不合法");
+		}
+	}
+
+	private boolean isSuccessCode(Object statusCode) {
+		return statusCode instanceof Number number && number.intValue() == 0;
+	}
+
+	private String summarizeMiniMaxFailure(Map<String, Object> response, String fallbackMessage) {
+		if (response == null) {
+			return fallbackMessage;
+		}
+		Object baseResp = response.get("base_resp");
+		if (baseResp instanceof Map<?, ?> map) {
+			Object statusMsg = map.get("status_msg");
+			if (statusMsg != null && StringUtils.hasText(statusMsg.toString())) {
+				return fallbackMessage + "：" + statusMsg;
+			}
+			Object statusCode = map.get("status_code");
+			if (statusCode != null) {
+				return fallbackMessage + "：status_code=" + statusCode;
+			}
+		}
+		return fallbackMessage;
 	}
 
 	private static String nullToEmpty(String value) {

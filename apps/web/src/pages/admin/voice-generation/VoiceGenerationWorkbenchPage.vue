@@ -34,6 +34,15 @@ const form = reactive({
 })
 
 const resultAudioUrl = computed(() => (resultRecordId.value ? audioUrl(resultRecordId.value) : ''))
+const submitButtonText = computed(() => {
+  if (loading.value) {
+    return activeMode.value === 'clone' ? '克隆中...' : '生成中...'
+  }
+  if (activeMode.value === 'clone') {
+    return '执行付费克隆'
+  }
+  return activeMode.value === 'preview' ? '0元试听生成' : '开始合成'
+})
 
 function onPreviewFileChange(event) {
   previewAudio.value = event.target.files?.[0] || null
@@ -171,6 +180,20 @@ onMounted(refreshDashboard)
               <input v-model="form.cloneVoiceId" type="text" placeholder="sichuan_native_01" />
             </label>
 
+            <p v-if="activeMode === 'clone'" class="voice-muted voice-helper">
+              仅上传母带并设置新音色 ID。MiniMax 要求母带为 mp3 / m4a / wav，时长 10 秒到 5 分钟，文件不超过 20MB。
+            </p>
+
+            <button
+              v-if="activeMode === 'clone'"
+              class="voice-button"
+              type="button"
+              :disabled="loading"
+              @click="submitGeneration"
+            >
+              {{ submitButtonText }}
+            </button>
+
             <label v-if="activeMode !== 'clone'" class="voice-field">
               需要合成的文本
               <textarea v-model="form.text" maxlength="5000" />
@@ -178,7 +201,7 @@ onMounted(refreshDashboard)
             </label>
           </div>
 
-          <aside>
+          <aside v-if="activeMode !== 'clone'">
             <div class="voice-range-row">
               <strong>语速</strong>
               <input v-model="form.speed" type="range" min="0.5" max="2" step="0.1" />
@@ -195,7 +218,7 @@ onMounted(refreshDashboard)
               <span>{{ form.pitch }}</span>
             </div>
             <button class="voice-button" type="button" :disabled="loading" @click="submitGeneration">
-              {{ loading ? '生成中...' : '开始生成' }}
+              {{ submitButtonText }}
             </button>
           </aside>
         </div>

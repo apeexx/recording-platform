@@ -125,6 +125,13 @@
   padding: 0 10px;
 }
 
+.voice-helper {
+  max-width: 640px;
+  margin: 0 0 14px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
 .voice-field textarea {
   min-height: 168px;
   padding: 12px;
