@@ -1,6 +1,56 @@
 <script setup>
-import { adminSidebar } from '../../config/adminSidebar.js'
+import { ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
+import {
+  adminSidebar,
+  findAdminSidebarGroupKeyByPath
+} from '../../config/adminSidebar.js'
 import AdminSidebarGroup from './AdminSidebarGroup.vue'
+
+const route = useRoute()
+const openGroupKeys = ref(new Set())
+
+function hasChildren(item) {
+  return Array.isArray(item.children) && item.children.length > 0
+}
+
+function isGroupActive(item) {
+  if (!hasChildren(item)) {
+    return route.path === item.path
+  }
+
+  return item.children.some((child) => route.path === child.path)
+}
+
+function isGroupOpen(item) {
+  return openGroupKeys.value.has(item.key)
+}
+
+function addRouteGroupKey(path) {
+  const groupKey = findAdminSidebarGroupKeyByPath(path)
+
+  if (!groupKey || openGroupKeys.value.has(groupKey)) {
+    return
+  }
+
+  const next = new Set(openGroupKeys.value)
+  next.add(groupKey)
+  openGroupKeys.value = next
+}
+
+function toggleGroup(key) {
+  const next = new Set(openGroupKeys.value)
+
+  if (next.has(key)) {
+    next.delete(key)
+  } else {
+    next.add(key)
+  }
+
+  openGroupKeys.value = next
+}
+
+watch(() => route.path, addRouteGroupKey, { immediate: true })
 </script>
 
 <template>
@@ -14,7 +64,14 @@ import AdminSidebarGroup from './AdminSidebarGroup.vue'
     </div>
 
     <nav class="admin-sidebar__nav" aria-label="管理员菜单">
-      <AdminSidebarGroup v-for="item in adminSidebar" :key="item.key" :item="item" />
+      <AdminSidebarGroup
+        v-for="item in adminSidebar"
+        :key="item.key"
+        :item="item"
+        :is-open="isGroupOpen(item)"
+        :is-active="isGroupActive(item)"
+        @toggle="toggleGroup"
+      />
     </nav>
   </aside>
 </template>

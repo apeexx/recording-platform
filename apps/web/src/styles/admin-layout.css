@@ -89,11 +89,40 @@
 }
 
 .admin-sidebar-group__title {
+  width: 100%;
+  border: 0;
+  background: transparent;
   color: var(--muted-foreground);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 0.18s ease,
+    color 0.18s ease;
+}
+
+.admin-sidebar-group__title:hover {
+  background: var(--sidebar-accent);
+  color: var(--sidebar-accent-foreground);
 }
 
 .admin-sidebar-group.is-active .admin-sidebar-group__title {
   color: var(--sidebar-accent-foreground);
+}
+
+.admin-sidebar-group__text {
+  min-width: 0;
+  flex: 1;
+}
+
+.admin-sidebar-group__arrow {
+  margin-left: auto;
+  color: currentColor;
+  transition: transform 0.18s ease;
+}
+
+.admin-sidebar-group.is-open .admin-sidebar-group__arrow {
+  transform: rotate(90deg);
 }
 
 .admin-sidebar-group__children {

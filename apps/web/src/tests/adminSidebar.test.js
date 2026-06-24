@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 
-import { adminSidebar } from '../config/adminSidebar.js'
+import * as adminSidebarConfig from '../config/adminSidebar.js'
+
+const { adminSidebar } = adminSidebarConfig
 
 describe('adminSidebar', () => {
   it('contains every planned admin module path exactly once', () => {
@@ -52,5 +54,12 @@ describe('adminSidebar', () => {
     assert.equal(voiceGeneration.owner, 'collaborator')
     assert.equal(voiceGeneration.status, 'placeholder')
     assert.equal(voiceGeneration.children.length, 3)
+  })
+
+  it('finds the parent group key for child route paths', () => {
+    assert.equal(typeof adminSidebarConfig.findAdminSidebarGroupKeyByPath, 'function')
+    assert.equal(adminSidebarConfig.findAdminSidebarGroupKeyByPath('/admin/tasks/batches'), 'tasks')
+    assert.equal(adminSidebarConfig.findAdminSidebarGroupKeyByPath('/admin/review/first'), 'review')
+    assert.equal(adminSidebarConfig.findAdminSidebarGroupKeyByPath('/admin/dashboard'), null)
   })
 })

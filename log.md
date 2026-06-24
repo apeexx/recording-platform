@@ -98,3 +98,21 @@
   - `npm run build`：通过。
   - 本地浏览器访问 `http://127.0.0.1:5173/`：自动进入 `/admin/dashboard`，侧边栏菜单切换、页面标题、选中态和语音生成预留占位验证通过。
   - 390px 窄屏检查：无横向溢出，侧边栏可滚动，内容卡片宽度未超出视口。
+
+## 2026-06-24 09:43 管理员端侧边栏多分类展开收缩
+
+- 时间：2026-06-24 09:43
+- commit ID：待提交后补记
+- 修改内容：
+  - 优化管理员端侧边栏交互，大分类支持点击展开和再次点击收缩。
+  - 展开状态统一由 `AdminSidebar.vue` 管理，支持多个分类同时展开。
+  - 当前路由所属父级分类会自动追加到展开状态，且不清空用户手动展开的其他分类。
+  - 更新侧边栏交互说明和协作规则，不新增业务功能。
+- 验证结果：
+  - `node --check src/main.js`：通过。
+  - `node --check src/router/index.js`：通过。
+  - `node --check src/router/adminRoutes.js`：通过。
+  - `node --check src/config/adminSidebar.js`：通过。
+  - `node --test src/tests/adminSidebar.test.js`：通过。
+  - `npm run build`：通过。
+  - 本地浏览器访问 `http://127.0.0.1:5173/`：侧边栏多组展开、重复点击收缩、子菜单跳转、当前路由父级自动展开验证通过；浏览器截图接口超时，未生成截图证据。

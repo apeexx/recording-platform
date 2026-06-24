@@ -99,3 +99,17 @@ export const adminSidebar = [
     ]
   }
 ]
+
+export function findAdminSidebarGroupKeyByPath(path) {
+  for (const item of adminSidebar) {
+    if (!Array.isArray(item.children)) {
+      continue
+    }
+
+    if (item.children.some((child) => child.path === path)) {
+      return item.key
+    }
+  }
+
+  return null
+}
