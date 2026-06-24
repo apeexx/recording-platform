@@ -116,3 +116,18 @@
   - `node --test src/tests/adminSidebar.test.js`：通过。
   - `npm run build`：通过。
   - 本地浏览器访问 `http://127.0.0.1:5173/`：侧边栏多组展开、重复点击收缩、子菜单跳转、当前路由父级自动展开验证通过；浏览器截图接口超时，未生成截图证据。
+
+## 2026-06-24 10:06 完善项目启动说明书
+
+- 时间：2026-06-24 10:06
+- commit ID：待提交后补记
+- 修改内容：
+  - 完善 `scripts/README.md` 为录音任务平台当前版本项目启动说明书。
+  - 补充 Web 前端、后端、小程序端、依赖安装、启动方式、验证命令、常见问题、Git 流程和敏感信息规则。
+  - 更新 `README.md`，补充详细启动方式入口。
+  - 更新 `AGENTS.md`，补充启动方式、依赖安装、环境要求和验证命令变化时同步维护 `scripts/README.md` 的规则。
+- 验证结果：
+  - `git diff --check`：通过，无 whitespace 错误。
+  - `git status --short --branch`：`## main...origin/main`，仅 `AGENTS.md`、`README.md`、`log.md`、`scripts/README.md` 有修改。
+  - `npm run build`：通过。
+  - `.\mvnw.cmd test`：通过；测试期间本机未连接 MongoDB 时输出连接拒绝日志，Maven 最终结果为 `BUILD SUCCESS`。
