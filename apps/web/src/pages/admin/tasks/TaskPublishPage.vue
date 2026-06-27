@@ -1,7 +1,7 @@
 <script setup>
-import AdminPlaceholderPage from '../AdminPlaceholderPage.vue'
+import AdminPrototypePage from '../../../components/admin/AdminPrototypePage.vue'
 </script>
 
 <template>
-  <AdminPlaceholderPage title="任务发布" description="发布录音任务的页面占位。" />
+  <AdminPrototypePage page-key="task-publish" />
 </template>

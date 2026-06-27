@@ -1,7 +1,7 @@
 <script setup>
-import AdminPlaceholderPage from '../AdminPlaceholderPage.vue'
+import AdminPrototypePage from '../../../components/admin/AdminPrototypePage.vue'
 </script>
 
 <template>
-  <AdminPlaceholderPage title="文本批次" description="管理文本批次的页面占位。" />
+  <AdminPrototypePage page-key="text-batches" />
 </template>

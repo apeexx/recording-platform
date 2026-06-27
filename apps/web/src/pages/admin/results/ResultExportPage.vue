@@ -1,7 +1,7 @@
 <script setup>
-import AdminPlaceholderPage from '../AdminPlaceholderPage.vue'
+import AdminPrototypePage from '../../../components/admin/AdminPrototypePage.vue'
 </script>
 
 <template>
-  <AdminPlaceholderPage title="结果导出" description="导出录音结果的页面占位。" />
+  <AdminPrototypePage page-key="result-export" />
 </template>

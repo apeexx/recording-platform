@@ -1,7 +1,7 @@
 <script setup>
-import AdminPlaceholderPage from '../AdminPlaceholderPage.vue'
+import AdminPrototypePage from '../../../components/admin/AdminPrototypePage.vue'
 </script>
 
 <template>
-  <AdminPlaceholderPage title="音频文件" description="查看录音文件元数据入口的页面占位。" />
+  <AdminPrototypePage page-key="audio-files" />
 </template>

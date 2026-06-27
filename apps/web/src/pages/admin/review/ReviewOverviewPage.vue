@@ -1,7 +1,7 @@
 <script setup>
-import AdminPlaceholderPage from '../AdminPlaceholderPage.vue'
+import AdminPrototypePage from '../../../components/admin/AdminPrototypePage.vue'
 </script>
 
 <template>
-  <AdminPlaceholderPage title="审核总览" description="查看录音审核整体状态的页面占位。" />
+  <AdminPrototypePage page-key="review-overview" />
 </template>

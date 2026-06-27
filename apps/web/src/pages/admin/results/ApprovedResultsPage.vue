@@ -1,7 +1,7 @@
 <script setup>
-import AdminPlaceholderPage from '../AdminPlaceholderPage.vue'
+import AdminPrototypePage from '../../../components/admin/AdminPrototypePage.vue'
 </script>
 
 <template>
-  <AdminPlaceholderPage title="通过结果" description="查看审核通过录音结果的页面占位。" />
+  <AdminPrototypePage page-key="approved-results" />
 </template>

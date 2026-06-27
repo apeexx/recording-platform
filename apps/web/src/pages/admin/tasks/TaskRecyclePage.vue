@@ -1,7 +1,7 @@
 <script setup>
-import AdminPlaceholderPage from '../AdminPlaceholderPage.vue'
+import AdminPrototypePage from '../../../components/admin/AdminPrototypePage.vue'
 </script>
 
 <template>
-  <AdminPlaceholderPage title="任务回收" description="处理录音任务回收的页面占位。" />
+  <AdminPrototypePage page-key="task-recycle" />
 </template>

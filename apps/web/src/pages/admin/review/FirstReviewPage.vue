@@ -1,7 +1,7 @@
 <script setup>
-import AdminPlaceholderPage from '../AdminPlaceholderPage.vue'
+import AdminPrototypePage from '../../../components/admin/AdminPrototypePage.vue'
 </script>
 
 <template>
-  <AdminPlaceholderPage title="一审管理" description="处理录音一审工作的页面占位。" />
+  <AdminPrototypePage page-key="first-review" />
 </template>

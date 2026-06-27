@@ -1,7 +1,7 @@
 <script setup>
-import AdminPlaceholderPage from '../AdminPlaceholderPage.vue'
+import AdminPrototypePage from '../../../components/admin/AdminPrototypePage.vue'
 </script>
 
 <template>
-  <AdminPlaceholderPage title="切分规则" description="维护文本切分规则的页面占位。" />
+  <AdminPrototypePage page-key="split-rules" />
 </template>

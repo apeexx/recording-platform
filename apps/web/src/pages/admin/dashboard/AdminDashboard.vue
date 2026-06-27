@@ -1,52 +1,86 @@
+<script setup>
+import { adminDashboardData } from '../../../data/adminStaticData.js'
+</script>
+
 <template>
   <div class="admin-page">
     <section class="admin-dashboard-hero">
       <div>
-        <span class="status-pill">前端导航壳</span>
+        <span class="status-pill">静态前端原型</span>
         <h2>工作台</h2>
-        <p>录音任务平台管理端。当前仅展示后台布局、菜单和模块入口，不接入业务接口。</p>
+        <p>
+          录音任务平台管理端工作台。当前展示脱敏示例数据、本地交互和模块入口，不接入业务接口。
+        </p>
       </div>
     </section>
 
-    <section class="admin-stat-grid" aria-label="工作台统计占位">
-      <article class="admin-stat-card">
-        <span>待发布任务</span>
-        <strong>待接入</strong>
-      </article>
-      <article class="admin-stat-card">
-        <span>待审核录音</span>
-        <strong>待接入</strong>
-      </article>
-      <article class="admin-stat-card">
-        <span>已通过结果</span>
-        <strong>待接入</strong>
-      </article>
-      <article class="admin-stat-card">
-        <span>被驳回任务</span>
-        <strong>待接入</strong>
+    <section class="admin-stat-grid" aria-label="工作台统计">
+      <article
+        v-for="metric in adminDashboardData.metrics"
+        :key="metric.label"
+        class="admin-stat-card admin-metric-card"
+      >
+        <span>{{ metric.label }}</span>
+        <strong>{{ metric.value }}</strong>
+        <small>{{ metric.helper }}</small>
       </article>
     </section>
 
     <section class="admin-dashboard-grid">
       <article class="admin-page-card">
-        <h3>任务流程概览</h3>
-        <ol class="admin-flow-list">
-          <li>管理员创建录音任务</li>
-          <li>录音人员领取并上传</li>
-          <li>进入机器审核、一审或二审</li>
-          <li>通过后进入结果管理</li>
-        </ol>
+        <div class="admin-card-heading">
+          <h3>近期待办</h3>
+        </div>
+        <div class="admin-dashboard-todo">
+          <button
+            v-for="item in adminDashboardData.todo"
+            :key="item.title"
+            type="button"
+            class="admin-dashboard-todo__item"
+          >
+            <span>{{ item.title }}</span>
+            <strong>{{ item.status }}</strong>
+          </button>
+        </div>
       </article>
 
       <article class="admin-page-card">
-        <h3>近期模块入口</h3>
-        <div class="admin-entry-list">
-          <router-link to="/admin/tasks/batches">任务批次</router-link>
-          <router-link to="/admin/review/overview">审核总览</router-link>
-          <router-link to="/admin/results/approved">通过结果</router-link>
-          <router-link to="/admin/voice-generation/workbench">语音生成</router-link>
+        <div class="admin-card-heading">
+          <h3>模块入口</h3>
+        </div>
+        <div class="admin-entry-list admin-entry-list--rich">
+          <router-link
+            v-for="entry in adminDashboardData.entries"
+            :key="entry.path"
+            :to="entry.path"
+          >
+            <strong>{{ entry.title }}</strong>
+            <span>{{ entry.summary }}</span>
+          </router-link>
         </div>
       </article>
+    </section>
+
+    <section class="admin-page-card">
+      <div class="admin-card-heading">
+        <h3>流程进度</h3>
+        <span class="admin-section-label">静态趋势</span>
+      </div>
+      <div class="admin-progress-grid">
+        <div
+          v-for="item in adminDashboardData.progress"
+          :key="item.label"
+          class="admin-progress-item"
+        >
+          <div>
+            <span>{{ item.label }}</span>
+            <strong>{{ item.value }}</strong>
+          </div>
+          <div class="admin-progress-bar" aria-hidden="true">
+            <span :style="{ width: item.value }"></span>
+          </div>
+        </div>
+      </div>
     </section>
   </div>
 </template>

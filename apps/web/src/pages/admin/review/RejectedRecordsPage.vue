@@ -1,7 +1,7 @@
 <script setup>
-import AdminPlaceholderPage from '../AdminPlaceholderPage.vue'
+import AdminPrototypePage from '../../../components/admin/AdminPrototypePage.vue'
 </script>
 
 <template>
-  <AdminPlaceholderPage title="驳回记录" description="查看审核驳回记录的页面占位。" />
+  <AdminPrototypePage page-key="rejected-records" />
 </template>

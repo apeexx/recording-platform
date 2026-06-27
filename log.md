@@ -1,5 +1,27 @@
 # AI 修改日志
 
+## 2026-06-27 14:27 管理员端静态原型页面完善
+
+- 时间：2026-06-27 14:27
+- commit ID：待提交后补记
+- 修改内容：
+  - 新增管理员端静态原型页面数据和通用渲染组件，使用脱敏示例数据展示筛选、标签页、表格详情、状态切换和模拟操作提示。
+  - 将除“语音生成”预留模块外的管理员端页面从占位页替换为静态前端原型。
+  - 优化工作台静态概览，增加待办、模块入口和流程进度，并排除语音生成业务入口。
+  - 扩展管理员端样式，补充表格、筛选、标签、详情面板、进度条和窄屏响应式展示。
+  - 更新 `README.md`、`AGENTS.md` 和 `apps/web/README.md`，说明当前仍为静态前端原型，不接入接口、数据库或真实业务能力。
+- 验证结果：
+  - `node --check src/main.js`：通过。
+  - `node --check src/router/index.js`：通过。
+  - `node --check src/router/adminRoutes.js`：通过。
+  - `node --check src/config/adminSidebar.js`：通过。
+  - `node --check src/data/adminStaticData.js`：通过。
+  - `node --test src/tests/adminSidebar.test.js`：通过，3 个测试全部通过。
+  - `node --test src/tests/adminPrototypePages.test.js`：通过，4 个测试全部通过。
+  - `npm run build`：通过。
+  - `git diff --check`：通过，仅输出 Windows 换行转换提示，无 whitespace 错误。
+  - 浏览器验证：Vite dev server 访问 `http://127.0.0.1:5173/admin/tasks/batches` 成功；in-app Browser 连接超时，改用 Playwright CLI + Microsoft Edge 通道完成桌面和 390px 移动端截图验证。
+
 ## 2026-06-23 17:49 初始化录音任务平台仓库结构
 
 - 时间：2026-06-23 17:49

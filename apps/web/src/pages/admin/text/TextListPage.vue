@@ -1,7 +1,7 @@
 <script setup>
-import AdminPlaceholderPage from '../AdminPlaceholderPage.vue'
+import AdminPrototypePage from '../../../components/admin/AdminPrototypePage.vue'
 </script>
 
 <template>
-  <AdminPlaceholderPage title="文本列表" description="查看和维护录音文本列表的页面占位。" />
+  <AdminPrototypePage page-key="text-list" />
 </template>

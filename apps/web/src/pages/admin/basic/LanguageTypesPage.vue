@@ -1,7 +1,7 @@
 <script setup>
-import AdminPlaceholderPage from '../AdminPlaceholderPage.vue'
+import AdminPrototypePage from '../../../components/admin/AdminPrototypePage.vue'
 </script>
 
 <template>
-  <AdminPlaceholderPage title="语言类型" description="维护录音任务可用语言类型的页面占位。" />
+  <AdminPrototypePage page-key="language-types" />
 </template>

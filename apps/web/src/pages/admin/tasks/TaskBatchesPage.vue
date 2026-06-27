@@ -1,7 +1,7 @@
 <script setup>
-import AdminPlaceholderPage from '../AdminPlaceholderPage.vue'
+import AdminPrototypePage from '../../../components/admin/AdminPrototypePage.vue'
 </script>
 
 <template>
-  <AdminPlaceholderPage title="任务批次" description="管理录音任务批次的页面占位。" />
+  <AdminPrototypePage page-key="task-batches" />
 </template>

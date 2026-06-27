@@ -1,7 +1,7 @@
 <script setup>
-import AdminPlaceholderPage from '../AdminPlaceholderPage.vue'
+import AdminPrototypePage from '../../../components/admin/AdminPrototypePage.vue'
 </script>
 
 <template>
-  <AdminPlaceholderPage title="文本导入" description="导入录音文本素材的页面占位。" />
+  <AdminPrototypePage page-key="text-import" />
 </template>

@@ -1,7 +1,7 @@
 <script setup>
-import AdminPlaceholderPage from '../AdminPlaceholderPage.vue'
+import AdminPrototypePage from '../../../components/admin/AdminPrototypePage.vue'
 </script>
 
 <template>
-  <AdminPlaceholderPage title="项目统计" description="查看项目维度统计的页面占位。" />
+  <AdminPrototypePage page-key="project-statistics" />
 </template>

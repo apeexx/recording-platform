@@ -1,7 +1,7 @@
 <script setup>
-import AdminPlaceholderPage from '../AdminPlaceholderPage.vue'
+import AdminPrototypePage from '../../../components/admin/AdminPrototypePage.vue'
 </script>
 
 <template>
-  <AdminPlaceholderPage title="系统公告" description="发布和管理系统公告的页面占位。" />
+  <AdminPrototypePage page-key="announcements" />
 </template>
