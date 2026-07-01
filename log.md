@@ -293,3 +293,16 @@
   - `git check-ignore -v backend/storage/voice-generation/test.mp3`：通过，命中 `.gitignore` 中的 `backend/storage/voice-generation/` 规则。
   - `git status --short --branch`：通过，`backend/storage/` 不再显示为未跟踪目录。
   - `git diff --check`：通过。
+
+## 2026-07-01 22:47 每日项目维护日志
+
+- 时间：2026-07-01 22:47
+- commit ID：待提交后补记
+- 修改内容：
+  - 执行每日项目维护前置检查，确认当前仓库工作树干净后追加 `docs/daily-maintenance-log.md`。
+  - 记录本次维护不修改任何业务代码、接口、页面、API、数据库、配置或环境变量文件。
+  - 本次自动化同时扫描 `D:\aimanju`、`D:\dunan`、`D:\kaokao`、`D:\Kaizhou-Golden-Chef`，阻塞项未写入对应仓库。
+- 验证结果：
+  - `git status --short --branch`：修改前当前仓库干净。
+  - `git diff --check -- docs/daily-maintenance-log.md`：通过，仅提示 CRLF 换行转换警告。
+  - 字节级对比：`docs/daily-maintenance-log.md` 的 HEAD 原始内容前缀保持一致，仅追加本次记录。
