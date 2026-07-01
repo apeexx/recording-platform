@@ -1,0 +1,100 @@
+package com.recording.platform.voice;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.doThrow;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import com.recording.platform.voice.dto.VoiceGenerationResponse;
+import com.recording.platform.voice.model.GenerationMode;
+import com.recording.platform.voice.model.GenerationStatus;
+import java.nio.charset.StandardCharsets;
+import org.junit.jupiter.api.Test;
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+
+class VoiceGenerationControllerTests {
+
+	@Test
+	void synthesizeReturnsGenerationResponse() throws Exception {
+		VoiceGenerationService service = org.mockito.Mockito.mock(VoiceGenerationService.class);
+		when(service.synthesize(any())).thenReturn(new VoiceGenerationResponse(
+			"record-1",
+			GenerationMode.SYNTHESIZE,
+			GenerationStatus.COMPLETED,
+			"生成成功",
+			"/api/voice-generation/audio/record-1"
+		));
+		MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new VoiceGenerationController(service)).build();
+
+		mockMvc.perform(post("/api/voice-generation/synthesize")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+					{"voiceId":"voice-1","text":"测试文本","speed":1.0,"volume":1.0,"pitch":0}
+					"""))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.recordId").value("record-1"))
+			.andExpect(jsonPath("$.audioUrl").value("/api/voice-generation/audio/record-1"));
+	}
+
+	@Test
+	void voiceGenerationExceptionReturnsBadRequestJson() throws Exception {
+		VoiceGenerationService service = org.mockito.Mockito.mock(VoiceGenerationService.class);
+		doThrow(new VoiceGenerationException("音色删除失败"))
+			.when(service)
+			.deleteVoice("voice-1");
+		MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new VoiceGenerationController(service))
+			.setControllerAdvice(new VoiceGenerationErrorHandler())
+			.build();
+
+		mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete(
+				"/api/voice-generation/voices/voice-1"
+			))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.error").value("音色删除失败"));
+	}
+
+	@Test
+	void audioEndpointStreamsGeneratedAudio() throws Exception {
+		VoiceGenerationService service = org.mockito.Mockito.mock(VoiceGenerationService.class);
+		when(service.loadAudio("record-1")).thenReturn(new VoiceGenerationAudio(
+			new ByteArrayResource("audio".getBytes(StandardCharsets.UTF_8)),
+			"record-1.mp3",
+			"audio/mpeg"
+		));
+		MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new VoiceGenerationController(service)).build();
+
+		mockMvc.perform(get("/api/voice-generation/audio/record-1"))
+			.andExpect(status().isOk())
+			.andExpect(content().contentType("audio/mpeg"))
+			.andExpect(content().bytes("audio".getBytes(StandardCharsets.UTF_8)));
+	}
+
+	@Test
+	void maxUploadSizeExceededReturnsReadableJson() throws Exception {
+		MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new UploadFailureController())
+			.setControllerAdvice(new VoiceGenerationErrorHandler())
+			.build();
+
+		mockMvc.perform(get("/simulate-upload-too-large"))
+			.andExpect(status().is(413))
+			.andExpect(jsonPath("$.error").value("上传音频文件过大，请使用不超过 20MB 的 mp3、m4a 或 wav 母带音频"));
+	}
+
+	@RestController
+	private static class UploadFailureController {
+		@GetMapping("/simulate-upload-too-large")
+		void simulateUploadTooLarge() {
+			throw new MaxUploadSizeExceededException(20 * 1024 * 1024);
+		}
+	}
+}

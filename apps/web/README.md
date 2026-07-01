@@ -15,7 +15,9 @@
 - 静态原型支持筛选、标签页、表格行详情、本地状态切换、模拟操作提示和窄屏响应式展示。
 - 工作台展示静态待办、模块入口和流程进度，不跳转到语音生成业务页面。
 
-当前不实现登录、JWT、权限守卫、接口请求、任务管理、审核流程、录音上传、数据库或语音生成业务。
+当前不实现登录、JWT、权限守卫、任务管理、审核流程或录音上传业务。语音生成模块已接入后端真实接口，用于 MiniMax 试听、克隆、合成、音色管理和生成记录。
+
+语音生成工作台中，付费克隆模式只上传母带音频并填写新音色 ID，不展示语速、音量、语调配置；这些调音参数只用于 0 元试听和日常合成。克隆母带需符合 MiniMax 限制：mp3、m4a 或 wav，10 秒到 5 分钟，不超过 20MB；超过后端上传限制时会返回 HTTP 413 和可读错误摘要。
 
 ## 目录约定
 
@@ -26,7 +28,8 @@
 - `src/components/admin/AdminPrototypePage.vue`：非语音生成页面共用的静态原型渲染组件。
 - `src/data/adminStaticData.js`：管理员端静态原型使用的脱敏示例数据和页面配置。
 - `src/pages/admin/`：管理员端页面。
-- `src/pages/admin/voice-generation/`：合作者预留的语音生成模块占位页面。
+- `src/pages/admin/voice-generation/`：语音生成 Web 生产台页面。
+- `src/lib/voiceGenerationApi.js`：语音生成前端 API 封装；不传递 API Key。
 - `src/styles/theme.css`：主题变量。
 - `src/styles/admin-layout.css`：管理员端布局样式。
 
@@ -40,6 +43,8 @@
 npm install
 npm run build
 ```
+
+语音生成真实联调需要后端服务运行在 `http://127.0.0.1:8080`，Vite 已将 `/api` 代理到后端。
 
 修改 JavaScript 文件后，可按需运行：
 

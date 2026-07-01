@@ -50,12 +50,15 @@ describe('admin prototype pages', () => {
     }
   })
 
-  it('keeps the voice-generation module out of this rollout', () => {
+  it('keeps voice-generation as the real integration workbench', () => {
     const voiceWorkbench = readPage(
       'src/pages/admin/voice-generation/VoiceGenerationWorkbenchPage.vue'
     )
 
-    assert.match(voiceWorkbench, /AdminPlaceholderPage/)
+    assert.match(voiceWorkbench, /voiceGenerationApi/)
+    assert.match(voiceWorkbench, /submitGeneration/)
+    assert.match(voiceWorkbench, /fetchVoices/)
+    assert.doesNotMatch(voiceWorkbench, /AdminPlaceholderPage/)
     assert.doesNotMatch(voiceWorkbench, /AdminPrototypePage/)
   })
 
