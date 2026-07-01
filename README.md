@@ -86,7 +86,7 @@ VOICE_GENERATION_STORAGE_DIR=backend/storage/voice-generation
 
 如果已经填写 `MINIMAX_API_KEY` 但 MiniMax 返回 `2049 invalid api key`，优先检查 `MINIMAX_API_BASE_URL` 是否和账号所在开放平台一致。国内开放平台账号使用 `https://api.minimaxi.com`，国际开放平台账号可改为 `https://api.minimax.io`。
 
-当前测试阶段不做数据库持久化。生成记录和默认声音配置只保存在后端进程内存中，后端重启后会清空；生成音频文件仍保存到 `VOICE_GENERATION_STORAGE_DIR` 指定的本地目录，用于当前会话内播放和下载。
+当前测试阶段不做数据库持久化。生成记录和默认声音配置只保存在后端进程内存中，后端重启后会清空；生成音频文件仍保存到 `VOICE_GENERATION_STORAGE_DIR` 指定的本地目录，用于当前会话内播放和下载。默认生成目录 `backend/storage/voice-generation/` 是本地运行产物，已加入 Git 忽略，不应提交到仓库。
 
 付费克隆模式只上传母带音频并填写新音色 ID，不配置或提交语速、音量、语调；这些参数仅用于 0 元试听和日常合成。MiniMax 音色克隆要求母带音频为 mp3、m4a 或 wav，时长 10 秒到 5 分钟，文件不超过 20MB；新音色 ID 需要以英文字母开头，只包含字母、数字、下划线或连字符，长度为 8 到 256 个字符，且不能以下划线或连字符结尾。后端 multipart 上传上限已按克隆母带限制配置为单文件 20MB、完整请求 21MB；超过限制时返回 HTTP 413 和脱敏错误摘要。
 

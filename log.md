@@ -281,3 +281,15 @@
   - `pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-dev.ps1 -Help`：未通过，当前机器未安装或未配置 `pwsh`；改用 `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-dev.ps1 -Help` 验证通过。
   - `.\mvnw.cmd test`：通过，14 个测试全部通过，Maven 最终结果为 `BUILD SUCCESS`；测试期间输出 Spring Security 开发密码和 Mockito 动态 agent 警告。
   - 敏感信息扫描：未发现真实 API Key、Token、Cookie、Authorization 头或长 Bearer token；命中项仅为空 `.env.example`、文档中的安全规则、测试假值和源码构造请求头位置。
+
+## 2026-07-01 16:07 忽略语音生成音频产物
+
+- 时间：2026-07-01 16:07
+- commit ID：待提交后补记
+- 修改内容：
+  - 将 `backend/storage/voice-generation/` 加入 `.gitignore`，避免提交语音生成产生的本地音频文件。
+  - 更新 `README.md` 和 `AGENTS.md`，说明该目录属于本地运行产物，不应提交到仓库。
+- 验证结果：
+  - `git check-ignore -v backend/storage/voice-generation/test.mp3`：通过，命中 `.gitignore` 中的 `backend/storage/voice-generation/` 规则。
+  - `git status --short --branch`：通过，`backend/storage/` 不再显示为未跟踪目录。
+  - `git diff --check`：通过。

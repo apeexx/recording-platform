@@ -42,6 +42,7 @@ backend/target/
 # Local storage
 backend/storage/uploads/
 backend/storage/temp/
+backend/storage/voice-generation/
 
 # WeChat Mini Program
 miniprogram_npm/
