@@ -9,4 +9,5 @@ import org.springframework.data.mongodb.repository.MongoRepository;
 interface SpringDataTaskRepository extends MongoRepository<TaskRecord, String> {
 	Optional<TaskRecord> findByTaskCode(String taskCode);
 	List<TaskRecord> findAllByIdIn(Collection<String> ids);
+	boolean existsByPlatformId(String platformId);
 }

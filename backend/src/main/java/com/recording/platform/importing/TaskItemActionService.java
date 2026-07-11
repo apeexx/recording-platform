@@ -1,8 +1,9 @@
 package com.recording.platform.importing;
 
 import com.recording.platform.api.ApiException;
-import com.recording.platform.media.MediaAssetStore;
+import com.recording.platform.media.MediaCleanupService;
 import com.recording.platform.media.RecordingMediaStorage;
+import com.recording.platform.media.RecordingRetirement;
 import com.recording.platform.security.PlatformPrincipal;
 import com.recording.platform.task.model.SubmittedRecording;
 import com.recording.platform.task.model.TaskItem;
@@ -18,18 +19,18 @@ public class TaskItemActionService {
 	private final TaskItemStore items;
 	private final TaskPoolService pool;
 	private final RecordingMediaStorage storage;
-	private final MediaAssetStore assets;
+	private final MediaCleanupService cleanup;
 
 	public TaskItemActionService(
 		TaskItemStore items,
 		TaskPoolService pool,
 		RecordingMediaStorage storage,
-		MediaAssetStore assets
+		MediaCleanupService cleanup
 	) {
 		this.items = items;
 		this.pool = pool;
 		this.storage = storage;
-		this.assets = assets;
+		this.cleanup = cleanup;
 	}
 
 	public TaskItemActionResult release(
@@ -38,13 +39,26 @@ public class TaskItemActionService {
 		long expectedRevision,
 		PlatformPrincipal actor
 	) {
+		cleanup.retry(itemId, operationId);
 		TaskItem item = requireItem(itemId);
 		TaskItemResult current = item.getCurrentResult();
 		SubmittedRecording audio = current == null ? null : current.audio();
-		TaskItemActionResult result = pool.release(itemId, operationId, expectedRevision, actor);
+		RecordingRetirement retirement = audio == null ? null : storage.stageRetirement(audio.relativePath());
+		TaskItemActionResult result;
+		try {
+			result = pool.release(itemId, operationId, expectedRevision, actor);
+		} catch (RuntimeException exception) {
+			rollback(retirement, exception);
+			throw exception;
+		}
 		if (audio != null) {
-			storage.delete(audio.relativePath());
-			assets.deleteById(audio.mediaId());
+			String backupRelativePath = retirement.deferCleanup();
+			cleanup.scheduleAndTry(
+				itemId,
+				operationId,
+				backupRelativePath == null ? java.util.List.of() : java.util.List.of(backupRelativePath),
+				audio.mediaId() == null ? java.util.List.of() : java.util.List.of(audio.mediaId())
+			);
 		}
 		return result;
 	}
@@ -62,5 +76,14 @@ public class TaskItemActionService {
 	private TaskItem requireItem(String itemId) {
 		return items.findById(itemId)
 			.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "TASK_ITEM_NOT_FOUND", "任务条目不存在"));
+	}
+
+	private void rollback(RecordingRetirement retirement, RuntimeException original) {
+		if (retirement == null) return;
+		try {
+			retirement.rollback();
+		} catch (RuntimeException rollbackFailure) {
+			original.addSuppressed(rollbackFailure);
+		}
 	}
 }

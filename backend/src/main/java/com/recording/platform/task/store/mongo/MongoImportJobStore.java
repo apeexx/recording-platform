@@ -60,15 +60,44 @@ public class MongoImportJobStore implements ImportJobStore {
 	}
 
 	@Override
-	public boolean heartbeat(String jobId, String workerId, Instant now, Instant leaseExpiresAt) {
-		Query query = Query.query(Criteria.where("_id").is(jobId)
-			.and("status").is(ImportJobStatus.PROCESSING)
-			.and("leaseOwner").is(workerId));
+	public Optional<ImportJob> heartbeat(String jobId, String workerId, Instant now, Instant leaseExpiresAt) {
+		Query query = fencedQuery(jobId, workerId);
 		Update update = new Update()
 			.set("heartbeatAt", now)
 			.set("leaseExpiresAt", leaseExpiresAt)
 			.set("updatedAt", now);
-		return mongoTemplate.updateFirst(query, update, ImportJob.class).getModifiedCount() == 1;
+		return Optional.ofNullable(findAndModify(query, update));
+	}
+
+	@Override
+	public Optional<ImportJob> saveProgress(ImportJob job, String workerId) {
+		Update update = new Update()
+			.set("totalRows", job.getTotalRows())
+			.set("successRows", job.getSuccessRows())
+			.set("failureRows", job.getFailureRows())
+			.set("rowErrors", job.getRowErrors())
+			.set("retryRowNumbers", job.getRetryRowNumbers())
+			.set("updatedAt", job.getUpdatedAt());
+		return Optional.ofNullable(findAndModify(fencedQuery(job.getId(), workerId), update));
+	}
+
+	@Override
+	public Optional<ImportJob> finish(ImportJob job, String workerId) {
+		Update update = new Update()
+			.set("status", job.getStatus())
+			.set("totalRows", job.getTotalRows())
+			.set("successRows", job.getSuccessRows())
+			.set("failureRows", job.getFailureRows())
+			.set("rowErrors", job.getRowErrors())
+			.set("retryRowNumbers", job.getRetryRowNumbers())
+			.set("runMode", job.getRunMode())
+			.set("sourceRelativePath", job.getSourceRelativePath())
+			.set("completedAt", job.getCompletedAt())
+			.set("updatedAt", job.getUpdatedAt())
+			.unset("leaseOwner")
+			.unset("leaseExpiresAt")
+			.unset("heartbeatAt");
+		return Optional.ofNullable(findAndModify(fencedQuery(job.getId(), workerId), update));
 	}
 
 	@Override
@@ -88,6 +117,21 @@ public class MongoImportJobStore implements ImportJobStore {
 			Criteria.where("leaseExpiresAt").lte(now),
 			Criteria.where("leaseExpiresAt").exists(false),
 			Criteria.where("leaseExpiresAt").is(null)
+		);
+	}
+
+	private Query fencedQuery(String jobId, String workerId) {
+		return Query.query(Criteria.where("_id").is(jobId)
+			.and("status").is(ImportJobStatus.PROCESSING)
+			.and("leaseOwner").is(workerId));
+	}
+
+	private ImportJob findAndModify(Query query, Update update) {
+		return mongoTemplate.findAndModify(
+			query,
+			update,
+			FindAndModifyOptions.options().returnNew(true),
+			ImportJob.class
 		);
 	}
 }

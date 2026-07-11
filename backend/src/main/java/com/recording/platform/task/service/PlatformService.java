@@ -4,6 +4,7 @@ import com.recording.platform.api.ApiException;
 import com.recording.platform.api.PageResponse;
 import com.recording.platform.task.model.PlatformRecord;
 import com.recording.platform.task.store.PlatformStore;
+import com.recording.platform.task.store.TaskStore;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Locale;
@@ -14,10 +15,12 @@ import org.springframework.stereotype.Service;
 @Service
 public class PlatformService {
 	private final PlatformStore platforms;
+	private final TaskStore tasks;
 	private final Clock clock;
 
-	public PlatformService(PlatformStore platforms, Clock clock) {
+	public PlatformService(PlatformStore platforms, TaskStore tasks, Clock clock) {
 		this.platforms = platforms;
+		this.tasks = tasks;
 		this.clock = clock;
 	}
 
@@ -62,6 +65,9 @@ public class PlatformService {
 
 	public void delete(String id) {
 		get(id);
+		if (tasks.existsByPlatformId(id)) {
+			throw new ApiException(HttpStatus.CONFLICT, "PLATFORM_IN_USE", "平台已被任务引用，不能删除");
+		}
 		platforms.deleteById(id);
 	}
 

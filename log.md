@@ -363,3 +363,21 @@
   - 按 TDD 分批观察任务/版本、授权/领取、媒体/SSRF、导入、持久化幂等、失败补偿和租约恢复的预期红灯并完成最小实现。
   - Task 2 定向 `clean test`：60/60 通过，0 failures、0 errors、0 skipped，`BUILD SUCCESS`。
   - 后端全量 `clean test`：138/138 通过，0 failures、0 errors、0 skipped，`BUILD SUCCESS`；本机未启动 MongoDB，Spring 上下文仅输出后台连接拒绝提示，不影响退出码和测试结果。
+
+## 2026-07-12 00:42 加固导入恢复与媒体补偿
+
+- 时间：2026-07-12 00:42
+- commit ID：待提交后补记
+- 修改内容：
+  - 区分导入初始/过期恢复的 `FULL` 模式与用户显式失败行重试的 `FAILED_ROWS` 模式；过期 worker 全源幂等重放，避免把已知失败行误当作恢复白名单而永久漏行。
+  - 将导入 heartbeat、分批进度和最终状态统一改为 `leaseOwner` fencing CAS，并使用 Mongo 返回的新状态；旧 owner 失去租约后不能覆盖完成态。
+  - 修复任务发布及草稿版本覆盖的跨文档补偿，使用保存后最新 `@Version` 恢复；补偿本身失败时记录并返回受控一致性错误。
+  - 平台删除前检查任务引用，仍被使用时返回 `409 PLATFORM_IN_USE`。
+  - 新增 `media_cleanup_jobs` 持久化提交/释放后的旧录音备份和旧媒体元数据清理；即时失败保持 PENDING，同 operationId 重放和应用启动恢复均会重试。
+  - 释放或纯文本提交前把稳定 current 隔离到 `temp/backups/` 唯一路径；单条添加在视频下载失败或条目保存失败时同时清理已下载文件和 `media_assets`，清理失败不再静默吞掉。
+- 验证结果：
+  - 按审查项逐条新增失败测试并实际观察 RED，随后完成最小修复。
+  - Task 2 clean 定向：74/74 通过，0 failures、0 errors、0 skipped，`BUILD SUCCESS`。
+  - 后端全量 `clean test`：152/152 通过，0 failures、0 errors、0 skipped，`BUILD SUCCESS`；本机 MongoDB 未启动，仅输出后台连接拒绝提示。
+  - `git diff --check`：exit 0，仅有工作区 LF/CRLF 转换提示，无空白错误。
+  -  tracked-file 敏感扫描：未发现真实 API Key、长 Bearer、带凭证 MongoDB URI 或已填写的敏感环境变量。

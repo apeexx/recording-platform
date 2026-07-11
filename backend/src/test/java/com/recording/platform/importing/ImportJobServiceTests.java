@@ -14,6 +14,7 @@ import com.recording.platform.identity.model.SessionType;
 import com.recording.platform.identity.model.UserRole;
 import com.recording.platform.security.PlatformPrincipal;
 import com.recording.platform.task.model.ImportJob;
+import com.recording.platform.task.model.ImportRunMode;
 import com.recording.platform.task.model.ImportJobStatus;
 import com.recording.platform.task.model.TaskItem;
 import com.recording.platform.task.store.ImportJobStore;
@@ -23,9 +24,12 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Optional;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.core.task.TaskExecutor;
@@ -170,6 +174,92 @@ class ImportJobServiceTests {
 	}
 
 	@Test
+	void expiredInitialRunReplaysTheWholeSourceAfterMidBatchCrashWithoutMissingOrDuplicatingItems() throws Exception {
+		InMemoryImportJobStore jobs = new InMemoryImportJobStore();
+		TaskItemCreationService itemCreation = org.mockito.Mockito.mock(TaskItemCreationService.class);
+		Set<String> creationOperations = new HashSet<>(Set.of("operation-job-mid-batch:row:2"));
+		AtomicInteger newlyCreatedItems = new AtomicInteger();
+		org.mockito.Mockito.when(itemCreation.add(eq("task-1"), any(), any(), any()))
+			.thenAnswer((invocation) -> {
+				String operationId = invocation.getArgument(2);
+				if (creationOperations.add(operationId)) newlyCreatedItems.incrementAndGet();
+				return new TaskItem();
+			});
+		ImportSourceStorage sources = new ImportSourceStorage(tempDir);
+		ImportJob stale = recoverableJob("job-mid-batch", Instant.parse("2026-07-11T11:59:00Z"));
+		stale.setTotalRows(3);
+		stale.setSuccessRows(1);
+		stale.setFailureRows(1);
+		stale.setRetryRowNumbers(List.of(3L));
+		jobs.save(stale);
+		Path source = sources.resolve(stale.getSourceRelativePath());
+		Files.createDirectories(source.getParent());
+		Files.writeString(
+			source,
+			"externalItemId,referenceText,referenceAudioUrl,referenceVideoUrl\n"
+				+ "row-1,第一条,,\n"
+				+ "row-2,第二条,,\n"
+				+ "row-3,第三条,,\n"
+		);
+		ImportJobService service = new ImportJobService(
+			jobs,
+			new ImportFileParser(),
+			itemCreation,
+			sources,
+			Runnable::run,
+			Clock.fixed(Instant.parse("2026-07-11T12:00:00Z"), ZoneOffset.UTC)
+		);
+
+		service.recoverStaleJobs();
+
+		ImportJob recovered = jobs.findById("job-mid-batch").orElseThrow();
+		assertThat(recovered.getStatus()).isEqualTo(ImportJobStatus.COMPLETED);
+		assertThat(recovered.getTotalRows()).isEqualTo(3);
+		assertThat(recovered.getSuccessRows()).isEqualTo(3);
+		assertThat(recovered.getFailureRows()).isZero();
+		assertThat(creationOperations).containsExactlyInAnyOrder(
+			"operation-job-mid-batch:row:2",
+			"operation-job-mid-batch:row:3",
+			"operation-job-mid-batch:row:4"
+		);
+		assertThat(newlyCreatedItems).hasValue(2);
+	}
+
+	@Test
+	void workerThatLosesItsLeaseCannotPublishTheFinalImportState() {
+		InMemoryImportJobStore jobs = new InMemoryImportJobStore();
+		TaskItemCreationService itemCreation = org.mockito.Mockito.mock(TaskItemCreationService.class);
+		org.mockito.Mockito.when(itemCreation.add(eq("task-1"), any(), any(), any()))
+			.thenAnswer((invocation) -> {
+				jobs.stealCurrentLease("replacement-worker");
+				return new TaskItem();
+			});
+		ImportJobService service = new ImportJobService(
+			jobs,
+			new ImportFileParser(),
+			itemCreation,
+			new ImportSourceStorage(tempDir),
+			Runnable::run,
+			Clock.fixed(Instant.parse("2026-07-11T12:00:00Z"), ZoneOffset.UTC)
+		);
+		MockMultipartFile file = new MockMultipartFile(
+			"file", "items.csv", "text/csv",
+			("externalItemId,referenceText,referenceAudioUrl,referenceVideoUrl\n"
+				+ "row-1,第一条,,\n").getBytes()
+		);
+		PlatformPrincipal admin = new PlatformPrincipal(
+			"session-1", "admin-1", "admin", "管理员", UserRole.ADMIN, SessionType.WEB, false
+		);
+
+		ImportJob returned = service.create("task-1", "import-lost-lease", file, admin);
+		ImportJob stored = jobs.findById(returned.getId()).orElseThrow();
+
+		assertThat(stored.getStatus()).isEqualTo(ImportJobStatus.PROCESSING);
+		assertThat(stored.getLeaseOwner()).isEqualTo("replacement-worker");
+		assertThat(stored.getCompletedAt()).isNull();
+	}
+
+	@Test
 	void largeFailureSetsCapStoredErrorsAndPersistProgressInBatches() {
 		InMemoryImportJobStore jobs = new InMemoryImportJobStore();
 		TaskItemCreationService itemCreation = org.mockito.Mockito.mock(TaskItemCreationService.class);
@@ -225,13 +315,16 @@ class ImportJobServiceTests {
 		private int saveCount;
 		@Override public ImportJob save(ImportJob job) {
 			saveCount++;
-			data.put(job.getId(), job);
-			return job;
+			ImportJob stored = copy(job);
+			data.put(stored.getId(), stored);
+			return copy(stored);
 		}
-		@Override public Optional<ImportJob> findById(String id) { return Optional.ofNullable(data.get(id)); }
+		@Override public Optional<ImportJob> findById(String id) {
+			return Optional.ofNullable(data.get(id)).map(InMemoryImportJobStore::copy);
+		}
 		@Override public Optional<ImportJob> findByTaskIdAndOperationId(String taskId, String operationId) {
 			return data.values().stream().filter((job) -> taskId.equals(job.getTaskId())
-				&& operationId.equals(job.getOperationId())).findFirst();
+				&& operationId.equals(job.getOperationId())).findFirst().map(InMemoryImportJobStore::copy);
 		}
 		@Override public synchronized Optional<ImportJob> acquireLease(
 			String jobId,
@@ -252,9 +345,9 @@ class ImportJobServiceTests {
 			job.setStartedAt(now);
 			job.setUpdatedAt(now);
 			job.setAttempt(job.getAttempt() + 1);
-			return Optional.of(job);
+			return Optional.of(copy(job));
 		}
-		@Override public synchronized boolean heartbeat(
+		@Override public synchronized Optional<ImportJob> heartbeat(
 			String jobId,
 			String workerId,
 			Instant now,
@@ -262,16 +355,80 @@ class ImportJobServiceTests {
 		) {
 			ImportJob job = data.get(jobId);
 			if (job == null || job.getStatus() != ImportJobStatus.PROCESSING
-				|| !workerId.equals(job.getLeaseOwner())) return false;
+				|| !workerId.equals(job.getLeaseOwner())) return Optional.empty();
 			job.setHeartbeatAt(now);
 			job.setLeaseExpiresAt(leaseExpiresAt);
 			job.setUpdatedAt(now);
-			return true;
+			return Optional.of(copy(job));
+		}
+		@Override public synchronized Optional<ImportJob> saveProgress(ImportJob job, String workerId) {
+			ImportJob current = data.get(job.getId());
+			if (!ownsLease(current, workerId)) return Optional.empty();
+			saveCount++;
+			ImportJob stored = copy(job);
+			data.put(stored.getId(), stored);
+			return Optional.of(copy(stored));
+		}
+		@Override public synchronized Optional<ImportJob> finish(ImportJob job, String workerId) {
+			ImportJob current = data.get(job.getId());
+			if (!ownsLease(current, workerId)) return Optional.empty();
+			saveCount++;
+			ImportJob stored = copy(job);
+			stored.setLeaseOwner(null);
+			stored.setLeaseExpiresAt(null);
+			stored.setHeartbeatAt(null);
+			data.put(stored.getId(), stored);
+			return Optional.of(copy(stored));
 		}
 		@Override public synchronized List<ImportJob> findRecoverable(Instant now) {
 			return data.values().stream().filter((job) -> job.getStatus() == ImportJobStatus.PENDING
 				|| job.getStatus() == ImportJobStatus.PROCESSING
-				&& (job.getLeaseExpiresAt() == null || !job.getLeaseExpiresAt().isAfter(now))).toList();
+				&& (job.getLeaseExpiresAt() == null || !job.getLeaseExpiresAt().isAfter(now)))
+				.map(InMemoryImportJobStore::copy).toList();
+		}
+
+		private synchronized void stealCurrentLease(String workerId) {
+			ImportJob processing = data.values().stream()
+				.filter((job) -> job.getStatus() == ImportJobStatus.PROCESSING)
+				.findFirst()
+				.orElseThrow();
+			processing.setLeaseOwner(workerId);
+			processing.setLeaseExpiresAt(Instant.parse("2026-07-11T12:20:00Z"));
+		}
+
+		private boolean ownsLease(ImportJob job, String workerId) {
+			return job != null && job.getStatus() == ImportJobStatus.PROCESSING
+				&& workerId.equals(job.getLeaseOwner());
+		}
+
+		private static ImportJob copy(ImportJob source) {
+			ImportJob copy = new ImportJob();
+			copy.setId(source.getId());
+			copy.setVersion(source.getVersion());
+			copy.setTaskId(source.getTaskId());
+			copy.setOperationId(source.getOperationId());
+			copy.setActorUserId(source.getActorUserId());
+			copy.setActorUsername(source.getActorUsername());
+			copy.setOriginalFilename(source.getOriginalFilename());
+			copy.setFileSha256(source.getFileSha256());
+			copy.setFileSizeBytes(source.getFileSizeBytes());
+			copy.setSourceRelativePath(source.getSourceRelativePath());
+			copy.setStatus(source.getStatus());
+			copy.setTotalRows(source.getTotalRows());
+			copy.setSuccessRows(source.getSuccessRows());
+			copy.setFailureRows(source.getFailureRows());
+			copy.setRowErrors(new java.util.ArrayList<>(source.getRowErrors()));
+			copy.setRetryRowNumbers(new java.util.ArrayList<>(source.getRetryRowNumbers()));
+			copy.setRunMode(source.getRunMode() == null ? ImportRunMode.FULL : source.getRunMode());
+			copy.setLeaseOwner(source.getLeaseOwner());
+			copy.setLeaseExpiresAt(source.getLeaseExpiresAt());
+			copy.setHeartbeatAt(source.getHeartbeatAt());
+			copy.setAttempt(source.getAttempt());
+			copy.setCreatedAt(source.getCreatedAt());
+			copy.setStartedAt(source.getStartedAt());
+			copy.setCompletedAt(source.getCompletedAt());
+			copy.setUpdatedAt(source.getUpdatedAt());
+			return copy;
 		}
 	}
 }

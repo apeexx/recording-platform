@@ -93,11 +93,19 @@ public class SafeRemoteMediaDownloader {
 
 	public void delete(MediaAsset asset) {
 		if (asset == null) return;
+		RuntimeException failure = null;
 		try {
 			storage.delete(asset.getRelativePath());
-		} finally {
-			if (asset.getId() != null) assets.deleteById(asset.getId());
+		} catch (RuntimeException exception) {
+			failure = exception;
 		}
+		try {
+			if (asset.getId() != null) assets.deleteById(asset.getId());
+		} catch (RuntimeException exception) {
+			if (failure == null) failure = exception;
+			else failure.addSuppressed(exception);
+		}
+		if (failure != null) throw failure;
 	}
 
 	private MediaAsset persist(

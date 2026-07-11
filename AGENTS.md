@@ -200,11 +200,11 @@ WEB_SESSION_COOKIE_SECURE（默认 false，生产 HTTPS 应设 true）
 
 Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idempotency-Key`。通用幂等记录按 `(actorUserId, action, operationKey)` 唯一，先持久化 IN_PROGRESS 声明，成功后保存 COMPLETED 响应快照；重复请求返回首次结果，跨实例仍在处理的重复请求返回 `409 OPERATION_IN_PROGRESS`，不得重复执行底层 mutation。
 
-当前录音固定保存到 `RECORDING_STORAGE_DIR/recordings/{taskCode}/{itemCode}/current.wav|mp3`。上传必须先写 `temp/`，校验扩展名、魔数、100MB、格式、单声道、任务采样率和时长，再原子替换；同一条目的替换流程按本地条目锁串行化，失败恢复旧文件。Mongo 只保存相对路径和元数据。采集员只能读取本人条目和录音；ACTIVE grant 只额外开放任务信息与参考媒体；ADMIN/REVIEWER 按审核权限读取。
+当前录音固定保存到 `RECORDING_STORAGE_DIR/recordings/{taskCode}/{itemCode}/current.wav|mp3`。上传必须先写 `temp/`，校验扩展名、魔数、100MB、格式、单声道、任务采样率和时长，再原子替换；同一条目的替换流程按本地条目锁串行化，失败恢复旧文件。提交或释放成功后的旧 current 必须先隔离到 `temp/backups/` 唯一路径，并以 `media_cleanup_jobs` 持久化旧路径和 media ID；即时清理失败由同 operationId 重放和应用启动恢复重试，不得回滚已成功的 Mongo 状态，也不得把备份暴露为媒体路径。Mongo 只保存相对路径和元数据。采集员只能读取本人条目和录音；ACTIVE grant 只额外开放任务信息与参考媒体；ADMIN/REVIEWER 按审核权限读取。
 
 远程参考媒体生产默认只允许 HTTPS。策略必须阻止 localhost、环回、私网、链路本地、多播和危险重定向，并把校验后的公共 IP 绑定到实际 Socket；HTTPS 仍使用原 hostname 做 SNI、证书主机校验和 Host 请求头。`REMOTE_MEDIA_ALLOW_HTTP=true` 仅供显式开发联调，仍不允许私网目标。音频上限 100MB，视频上限 500MB；成功后不得保存完整签名 URL，只能保存 hostname、状态和脱敏错误摘要。
 
-导入只支持 `.csv`、`.xlsx`，固定列为 `externalItemId`、`referenceText`、`referenceAudioUrl`、`referenceVideoUrl`；返回 HTTP 202 和 importJobId，Mongo 持久化状态/计数/失败行号/有限脱敏行错误，支持幂等、部分成功与失败行重试。单文件最多 50000 个数据行，每 100 行持久化一次进度，脱敏行错误摘要最多保存 1000 条。worker 必须使用 10 分钟 Mongo 租约并持续心跳，应用启动后重新排队 PENDING 或租约过期的 PROCESSING 作业；多实例通过原子租约领取避免重复执行。部分成功后必须把源文件改写成只含失败行的重试 CSV，成功行使用脱敏占位，不保留其签名 URL。
+导入只支持 `.csv`、`.xlsx`，固定列为 `externalItemId`、`referenceText`、`referenceAudioUrl`、`referenceVideoUrl`；返回 HTTP 202 和 importJobId，Mongo 持久化状态/计数/失败行号/有限脱敏行错误，支持幂等、部分成功与失败行重试。单文件最多 50000 个数据行，每 100 行持久化一次进度，脱敏行错误摘要最多保存 1000 条。初始导入和过期 PROCESSING 恢复固定使用 `FULL` 模式幂等重放完整源文件，只有用户显式失败行重试使用 `FAILED_ROWS`；worker 必须使用 10 分钟 Mongo 租约并持续心跳，所有 heartbeat/progress/finish 写入都以 `leaseOwner` 做 fencing CAS 并使用返回的新状态，旧 owner 不得覆盖完成或失败状态。应用启动后重新排队 PENDING 或租约过期的 PROCESSING 作业；多实例通过原子租约领取避免重复执行。部分成功后必须把源文件改写成只含失败行的重试 CSV，成功行使用脱敏占位，不保留其签名 URL。
 
 ## 7. 接口说明
 
@@ -289,7 +289,7 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 请求路径：/api/platforms、/api/platforms/{id}
 请求参数：写请求 JSON code、name、description、active，并携带 Idempotency-Key；列表 page、size
 响应结构：平台对象或 {items,page,size,total}；创建返回 201，删除返回 204
-错误码：404 PLATFORM_NOT_FOUND；409 PLATFORM_CODE_EXISTS；422 平台字段不合法
+错误码：404 PLATFORM_NOT_FOUND；409 PLATFORM_CODE_EXISTS/PLATFORM_IN_USE；422 平台字段不合法
 权限要求：仅 ADMIN
 数据一致性要求：code 唯一；已被任务引用的平台不得直接破坏任务数据；写操作按操作者、操作类型和 Idempotency-Key 持久化幂等
 前端调用位置：后续管理员平台配置页
@@ -302,7 +302,7 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 响应结构：任务/权限视图或 {items,page,size,total}；创建返回 201
 错误码：404 TASK_NOT_FOUND/TASK_VERSION_NOT_FOUND；409 INVALID_TASK_STATE/TASK_CODE_EXISTS；422 REFERENCE_REQUIRED、AI_NOT_SUPPORTED、INVALID_TASK_CODE 等
 权限要求：写操作仅 ADMIN；ADMIN 查询全部，COLLECTOR 只查询已授权任务及权限状态
-数据一致性要求：发布后版本不可变；结构修改创建下一版本；旧条目继续绑定旧版本；任务/版本跨文档失败时补偿新文档或恢复原版本；写操作持久化幂等；aiEnabled 首期必须 false
+数据一致性要求：发布后版本不可变；结构修改创建下一版本；旧条目继续绑定旧版本；任务/版本跨文档失败时使用保存后最新 @Version 做 CAS 补偿，补偿本身失败记录日志并返回受控一致性错误；写操作持久化幂等；aiEnabled 首期必须 false
 前端调用位置：后续管理员任务页、小程序任务列表
 ```
 
@@ -335,7 +335,7 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 响应结构：{itemId,status,revision,assignmentId,result}
 错误码：409 STALE_STATE；413 UPLOAD_TOO_LARGE；422 录音格式/采样率/声道/时长/驳回原因错误
 权限要求：submit/release 仅当前 COLLECTOR（ADMIN 也可 release）；reject 仅 ADMIN/REVIEWER
-数据一致性要求：operationId 绑定操作者并返回首次结果；稳定 current 文件原子替换；驳回保留原采集员；释放清当前结果但保留提交/操作历史
+数据一致性要求：operationId 绑定操作者并返回首次结果；稳定 current 文件原子替换；驳回保留原采集员；释放清当前结果但保留提交/操作历史；提交/释放成功后的旧文件和 metadata 清理持久化并可由 operation 重放/启动恢复重试
 前端调用位置：后续小程序录音页、审核页
 ```
 
@@ -571,13 +571,25 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 ```
 
 ```text
+集合名称：media_cleanup_jobs
+字段名称：itemId、operationId、relativePaths、mediaAssetIds、status、attempt、lastErrorSummary、createdAt、updatedAt、completedAt
+字段类型：字符串、字符串数组、PENDING/COMPLETED、整数、UTC Instant
+默认值：PENDING、attempt=0、路径和 media ID 数组为空
+唯一约束：(itemId,operationId)
+索引：(itemId,operationId) 唯一；(status,createdAt) 恢复索引
+数据兼容策略：只保存相对 backup 路径和旧 media ID；每次尝试前先持久化 attempt；文件与 metadata 删除均按幂等方式重试，错误摘要不得包含绝对路径或敏感 URL
+迁移步骤：本阶段首次建立，无旧清理任务迁移；应用启动扫描 PENDING
+回滚方式：回滚前先完成或人工核对 PENDING，Mongo 与 `temp/backups/` 必须一起处理
+```
+
+```text
 集合名称：import_jobs
-字段名称：taskId、operationId、actorUserId/Username、originalFilename、fileSha256、fileSizeBytes、sourceRelativePath、status、totalRows、successRows、failureRows、rowErrors、retryRowNumbers、leaseOwner、leaseExpiresAt、heartbeatAt、attempt、时间
+字段名称：taskId、operationId、actorUserId/Username、originalFilename、fileSha256、fileSizeBytes、sourceRelativePath、status、runMode、totalRows、successRows、failureRows、rowErrors、retryRowNumbers、leaseOwner、leaseExpiresAt、heartbeatAt、attempt、时间
 字段类型：字符串、枚举、数值、数组、UTC Instant
-默认值：PENDING、计数为 0、错误和失败行号为空、attempt=0
+默认值：PENDING、runMode=FULL、计数为 0、错误和失败行号为空、attempt=0
 唯一约束：(taskId,operationId)
 索引：(taskId,operationId) 唯一；(status,createdAt)；(status,leaseExpiresAt) 恢复索引
-数据兼容策略：错误信息脱敏且最多 1000 条，完整失败行号单独保存；部分成功源文件改写为失败行 retry.csv；完成后删除临时源文件；旧 PENDING 或无租约 PROCESSING 可由恢复 worker 接管
+数据兼容策略：错误信息脱敏且最多 1000 条，完整失败行号单独保存；FULL 恢复重放完整源并依赖逐行 operationId 防重复，FAILED_ROWS 只用于用户显式重试；所有 worker 状态写按 leaseOwner fencing；部分成功源文件改写为失败行 retry.csv；完成后删除临时源文件；旧 PENDING 或无租约 PROCESSING 可由恢复 worker 接管
 迁移步骤：本阶段首次建立，无旧导入迁移
 回滚方式：保留 Mongo 摘要；临时源缺失时不得声称可重试
 ```

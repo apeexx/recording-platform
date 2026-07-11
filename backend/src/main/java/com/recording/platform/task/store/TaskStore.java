@@ -14,5 +14,6 @@ public interface TaskStore {
 	Optional<TaskRecord> findByTaskCode(String taskCode);
 	Page<TaskRecord> findAll(Pageable pageable);
 	default List<TaskRecord> findAllByIdIn(Collection<String> ids) { return List.of(); }
+	default boolean existsByPlatformId(String platformId) { return false; }
 	long nextItemSequence(String taskId);
 }

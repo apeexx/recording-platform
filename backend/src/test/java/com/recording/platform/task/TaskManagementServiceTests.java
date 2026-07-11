@@ -30,6 +30,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.Page;
@@ -163,6 +164,107 @@ class TaskManagementServiceTests {
 		verify(versionStore).deleteById("version-2");
 	}
 
+	@Test
+	void publishRestoresTheSavedVersionSnapshotWhenTheTaskStateWriteFails() {
+		PlatformStore platformStore = org.mockito.Mockito.mock(PlatformStore.class);
+		TaskStore taskStore = org.mockito.Mockito.mock(TaskStore.class);
+		TaskVersionStore versionStore = org.mockito.Mockito.mock(TaskVersionStore.class);
+		TaskRecord task = new TaskRecord();
+		task.setId("task-1");
+		task.setLifecycle(TaskLifecycle.DRAFT);
+		task.setCurrentVersionId("version-1");
+		TaskVersion current = version("version-1", false, 4L);
+		when(taskStore.findById("task-1")).thenReturn(Optional.of(task));
+		when(versionStore.findById("version-1")).thenReturn(Optional.of(current));
+		List<TaskVersion> savedSnapshots = new ArrayList<>();
+		when(versionStore.save(any(TaskVersion.class))).thenAnswer((invocation) -> {
+			TaskVersion candidate = invocation.getArgument(0);
+			savedSnapshots.add(copyVersion(candidate));
+			TaskVersion saved = copyVersion(candidate);
+			saved.setVersion(candidate.getVersion() + 1);
+			return saved;
+		});
+		IllegalStateException pointerFailure = new IllegalStateException("simulated task publish failure");
+		when(taskStore.save(task)).thenThrow(pointerFailure);
+		TaskManagementService failingService = new TaskManagementService(platformStore, taskStore, versionStore, CLOCK);
+
+		assertThatThrownBy(() -> failingService.publish("task-1")).isSameAs(pointerFailure);
+
+		assertThat(savedSnapshots).hasSize(2);
+		assertThat(savedSnapshots.get(0).isPublished()).isTrue();
+		assertThat(savedSnapshots.get(0).getVersion()).isEqualTo(4L);
+		assertThat(savedSnapshots.get(1).isPublished()).isFalse();
+		assertThat(savedSnapshots.get(1).getPublishedAt()).isNull();
+		assertThat(savedSnapshots.get(1).getVersion()).isEqualTo(5L);
+	}
+
+	@Test
+	void draftRestoreUsesTheVersionReturnedByTheFailedPointerUpdatesPriorSave() {
+		PlatformStore platformStore = org.mockito.Mockito.mock(PlatformStore.class);
+		TaskStore taskStore = org.mockito.Mockito.mock(TaskStore.class);
+		TaskVersionStore versionStore = org.mockito.Mockito.mock(TaskVersionStore.class);
+		TaskRecord task = new TaskRecord();
+		task.setId("task-1");
+		task.setName("第一版");
+		task.setLifecycle(TaskLifecycle.DRAFT);
+		task.setCurrentVersionId("version-1");
+		task.setCurrentVersionNumber(1);
+		TaskVersion current = version("version-1", false, 7L);
+		when(taskStore.findById("task-1")).thenReturn(Optional.of(task));
+		when(versionStore.findById("version-1")).thenReturn(Optional.of(current));
+		List<Long> attemptedVersions = new ArrayList<>();
+		AtomicInteger saves = new AtomicInteger();
+		when(versionStore.save(any(TaskVersion.class))).thenAnswer((invocation) -> {
+			TaskVersion candidate = invocation.getArgument(0);
+			attemptedVersions.add(candidate.getVersion());
+			if (saves.getAndIncrement() == 1 && candidate.getVersion() != 8L) {
+				throw new org.springframework.dao.OptimisticLockingFailureException("stale version");
+			}
+			TaskVersion saved = copyVersion(candidate);
+			saved.setVersion(candidate.getVersion() + 1);
+			return saved;
+		});
+		IllegalStateException pointerFailure = new IllegalStateException("simulated draft pointer failure");
+		when(taskStore.save(task)).thenThrow(pointerFailure);
+		TaskManagementService failingService = new TaskManagementService(platformStore, taskStore, versionStore, CLOCK);
+
+		assertThatThrownBy(() -> failingService.updateStructure(
+			"task-1", "修订草稿", null, spec(Set.of(ReferenceType.AUDIO), false)
+		)).isSameAs(pointerFailure).satisfies((exception) -> assertThat(exception.getSuppressed()).isEmpty());
+
+		assertThat(attemptedVersions).containsExactly(7L, 8L);
+	}
+
+	@Test
+	void compensationFailureReturnsAControlledConsistencyError() {
+		PlatformStore platformStore = org.mockito.Mockito.mock(PlatformStore.class);
+		TaskStore taskStore = org.mockito.Mockito.mock(TaskStore.class);
+		TaskVersionStore versionStore = org.mockito.Mockito.mock(TaskVersionStore.class);
+		TaskRecord task = new TaskRecord();
+		task.setId("task-1");
+		task.setLifecycle(TaskLifecycle.DRAFT);
+		task.setCurrentVersionId("version-1");
+		TaskVersion current = version("version-1", false, 4L);
+		when(taskStore.findById("task-1")).thenReturn(Optional.of(task));
+		when(versionStore.findById("version-1")).thenReturn(Optional.of(current));
+		when(versionStore.save(any(TaskVersion.class)))
+			.thenAnswer((invocation) -> {
+				TaskVersion saved = copyVersion(invocation.getArgument(0));
+				saved.setVersion(5L);
+				return saved;
+			})
+			.thenThrow(new IllegalStateException("simulated compensation failure"));
+		when(taskStore.save(task)).thenThrow(new IllegalStateException("simulated task publish failure"));
+		TaskManagementService failingService = new TaskManagementService(platformStore, taskStore, versionStore, CLOCK);
+
+		assertThatThrownBy(() -> failingService.publish("task-1"))
+			.isInstanceOfSatisfying(ApiException.class, (exception) -> {
+				assertThat(exception.getStatus().value()).isEqualTo(500);
+				assertThat(exception.getCode()).isEqualTo("TASK_CONSISTENCY_RECOVERY_FAILED");
+				assertThat(exception.getSuppressed()).hasSize(2);
+			});
+	}
+
 	private CreateTaskCommand command(TaskVersionSpec spec) {
 		return new CreateTaskCommand("TASK-001", platforms.findByCode("WECHAT").orElseThrow().getId(), "朗读任务", "说明", spec);
 	}
@@ -183,6 +285,48 @@ class TaskManagementServiceTests {
 			null,
 			null
 		);
+	}
+
+	private static TaskVersion version(String id, boolean published, long optimisticVersion) {
+		TaskVersion version = new TaskVersion();
+		version.setId(id);
+		version.setVersion(optimisticVersion);
+		version.setTaskId("task-1");
+		version.setVersionNumber(1);
+		version.setReferenceTypes(Set.of(ReferenceType.TEXT));
+		version.setRecordingFormat(RecordingFormat.WAV);
+		version.setSampleRates(Set.of(16000));
+		version.setChannels(1);
+		version.setMinDurationMillis(1000);
+		version.setMaxDurationMillis(600000);
+		version.setPublished(published);
+		version.setCreatedAt(Instant.parse("2026-07-11T11:00:00Z"));
+		return version;
+	}
+
+	private static TaskVersion copyVersion(TaskVersion source) {
+		TaskVersion copy = new TaskVersion();
+		copy.setId(source.getId());
+		copy.setVersion(source.getVersion());
+		copy.setTaskId(source.getTaskId());
+		copy.setVersionNumber(source.getVersionNumber());
+		copy.setReferenceTypes(Set.copyOf(source.getReferenceTypes()));
+		copy.setFixedRecording(source.isFixedRecording());
+		copy.setTextInputEnabled(source.isTextInputEnabled());
+		copy.setHumanReviewEnabled(source.isHumanReviewEnabled());
+		copy.setRecordingFormat(source.getRecordingFormat());
+		copy.setSampleRates(Set.copyOf(source.getSampleRates()));
+		copy.setChannels(source.getChannels());
+		copy.setMinDurationMillis(source.getMinDurationMillis());
+		copy.setMaxDurationMillis(source.getMaxDurationMillis());
+		copy.setRejectionReasons(List.copyOf(source.getRejectionReasons()));
+		copy.setAiEnabled(source.isAiEnabled());
+		copy.setAiProvider(source.getAiProvider());
+		copy.setAiModel(source.getAiModel());
+		copy.setPublished(source.isPublished());
+		copy.setCreatedAt(source.getCreatedAt());
+		copy.setPublishedAt(source.getPublishedAt());
+		return copy;
 	}
 
 	private static final class InMemoryPlatformStore implements PlatformStore {

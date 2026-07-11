@@ -9,6 +9,7 @@ public final class RecordingReplacement {
 	private final Path currentPath;
 	private final Path previousPath;
 	private final Path backupPath;
+	private final String backupRelativePath;
 	private boolean closed;
 
 	RecordingReplacement(
@@ -21,6 +22,7 @@ public final class RecordingReplacement {
 		this.currentPath = currentPath;
 		this.previousPath = previousPath;
 		this.backupPath = backupPath;
+		this.backupRelativePath = storage.relative(backupPath);
 	}
 
 	public synchronized void complete() {
@@ -40,5 +42,10 @@ public final class RecordingReplacement {
 			}
 		}
 		closed = true;
+	}
+
+	public synchronized String deferCleanup() {
+		closed = true;
+		return backupRelativePath;
 	}
 }

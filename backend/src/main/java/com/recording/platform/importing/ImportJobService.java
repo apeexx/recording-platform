@@ -5,6 +5,7 @@ import com.recording.platform.identity.model.SessionType;
 import com.recording.platform.identity.model.UserRole;
 import com.recording.platform.security.PlatformPrincipal;
 import com.recording.platform.task.model.ImportJob;
+import com.recording.platform.task.model.ImportRunMode;
 import com.recording.platform.task.model.ImportJobStatus;
 import com.recording.platform.task.model.ImportRowError;
 import com.recording.platform.task.store.ImportJobStore;
@@ -70,6 +71,7 @@ public class ImportJobService {
 		job.setActorUsername(actor.username() == null ? actor.name() : actor.username());
 		job.setOriginalFilename(safeFilename(file.getOriginalFilename()));
 		job.setStatus(ImportJobStatus.PENDING);
+		job.setRunMode(ImportRunMode.FULL);
 		job.setCreatedAt(Instant.now(clock));
 		job.setUpdatedAt(job.getCreatedAt());
 		StoredImportSource source = sources.save(job.getId(), file);
@@ -101,6 +103,7 @@ public class ImportJobService {
 		List<Long> rowsToRetry = failedRows.contains(0L) ? new ArrayList<>() : new ArrayList<>(failedRows);
 		rowsToRetry.sort(Long::compareTo);
 		job.setRetryRowNumbers(rowsToRetry);
+		job.setRunMode(ImportRunMode.FAILED_ROWS);
 		job.setStatus(ImportJobStatus.PENDING);
 		job.setLeaseOwner(null);
 		job.setLeaseExpiresAt(null);
@@ -139,12 +142,13 @@ public class ImportJobService {
 			jobId, workerId, leaseStartedAt, leaseStartedAt.plus(LEASE_DURATION)
 		).orElse(null);
 		if (job == null) return;
-		Set<Long> retryRows = job.getRetryRowNumbers() == null || job.getRetryRowNumbers().isEmpty()
-			? null : new HashSet<>(job.getRetryRowNumbers());
+		Set<Long> retryRows = job.getRunMode() == ImportRunMode.FAILED_ROWS
+			&& job.getRetryRowNumbers() != null && !job.getRetryRowNumbers().isEmpty()
+			? new HashSet<>(job.getRetryRowNumbers()) : null;
 		try {
 			java.nio.file.Path sourcePath = sources.resolve(job.getSourceRelativePath());
 			List<ImportRow> rows = parser.parse(sourcePath, sourcePath.getFileName().toString());
-			if (retryRows == null) job.setTotalRows(rows.size());
+			long totalRows = retryRows == null ? rows.size() : job.getTotalRows();
 			long success = retryRows == null ? 0 : job.getSuccessRows();
 			long failure = 0;
 			int attempted = 0;
@@ -156,7 +160,7 @@ public class ImportJobService {
 			);
 			for (ImportRow row : rows) {
 				if (retryRows != null && !retryRows.contains(row.rowNumber())) continue;
-				renewLease(job, workerId);
+				job = renewLease(job, workerId);
 				try {
 					itemCreation.add(
 						job.getTaskId(),
@@ -178,9 +182,10 @@ public class ImportJobService {
 				}
 				attempted++;
 				if (attempted % PROGRESS_BATCH_SIZE == 0) {
-					job = persistProgress(job, success, failure, errors, failedRowNumbers);
+					job = persistProgress(job, workerId, totalRows, success, failure, errors, failedRowNumbers);
 				}
 			}
+			job.setTotalRows(totalRows);
 			job.setSuccessRows(success);
 			job.setRowErrors(new ArrayList<>(errors));
 			job.setFailureRows(failure);
@@ -200,37 +205,37 @@ public class ImportJobService {
 		}
 		job.setCompletedAt(Instant.now(clock));
 		job.setUpdatedAt(job.getCompletedAt());
-		job.setLeaseOwner(null);
-		job.setLeaseExpiresAt(null);
-		job.setHeartbeatAt(null);
 		if (job.getStatus() == ImportJobStatus.COMPLETED) job.setRetryRowNumbers(new ArrayList<>());
-		jobs.save(job);
-		if (job.getStatus() == ImportJobStatus.COMPLETED) sources.delete(job.getSourceRelativePath());
+		ImportJob finished = jobs.finish(job, workerId).orElse(null);
+		if (finished != null && finished.getStatus() == ImportJobStatus.COMPLETED) {
+			sources.delete(finished.getSourceRelativePath());
+		}
 	}
 
-	private void renewLease(ImportJob job, String workerId) {
+	private ImportJob renewLease(ImportJob job, String workerId) {
 		Instant now = Instant.now(clock);
 		Instant expiresAt = now.plus(LEASE_DURATION);
-		if (!jobs.heartbeat(job.getId(), workerId, now, expiresAt)) {
-			throw new IllegalStateException("import lease lost");
-		}
-		job.setHeartbeatAt(now);
-		job.setLeaseExpiresAt(expiresAt);
+		return jobs.heartbeat(job.getId(), workerId, now, expiresAt)
+			.orElseThrow(() -> new IllegalStateException("import lease lost"));
 	}
 
 	private ImportJob persistProgress(
 		ImportJob job,
+		String workerId,
+		long totalRows,
 		long success,
 		long failure,
 		List<ImportRowError> errors,
 		Set<Long> failedRowNumbers
 	) {
+		job.setTotalRows(totalRows);
 		job.setSuccessRows(success);
 		job.setFailureRows(failure);
 		job.setRowErrors(new ArrayList<>(errors));
 		job.setRetryRowNumbers(sorted(failedRowNumbers));
 		job.setUpdatedAt(Instant.now(clock));
-		return jobs.save(job);
+		return jobs.saveProgress(job, workerId)
+			.orElseThrow(() -> new IllegalStateException("import lease lost"));
 	}
 
 	private void addBoundedError(List<ImportRowError> errors, long rowNumber, String code, String message) {

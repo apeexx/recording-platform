@@ -13,14 +13,18 @@ import com.recording.platform.task.store.TaskVersionStore;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.LinkedHashSet;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Service
 public class TaskManagementService {
+	private static final Logger LOGGER = LoggerFactory.getLogger(TaskManagementService.class);
 	private static final Set<Integer> SUPPORTED_SAMPLE_RATES = Set.of(8000, 16000, 24000, 32000, 44100, 48000);
 	private final PlatformStore platforms;
 	private final TaskStore tasks;
@@ -70,14 +74,24 @@ public class TaskManagementService {
 			task.setCurrentVersionNumber(1);
 			return tasks.save(task);
 		} catch (RuntimeException exception) {
+			List<RuntimeException> compensationFailures = new ArrayList<>();
 			if (savedVersion != null && savedVersion.getId() != null) {
 				String savedVersionId = savedVersion.getId();
-				compensate(() -> versions.deleteById(savedVersionId), exception);
+				collectCompensationFailure(
+					compensationFailures,
+					() -> versions.deleteById(savedVersionId),
+					"delete task version after create failure"
+				);
 			}
 			if (task.getId() != null) {
 				String savedTaskId = task.getId();
-				compensate(() -> tasks.deleteById(savedTaskId), exception);
+				collectCompensationFailure(
+					compensationFailures,
+					() -> tasks.deleteById(savedTaskId),
+					"delete task after create failure"
+				);
 			}
+			failIfCompensationFailed(exception, compensationFailures);
 			throw exception;
 		}
 	}
@@ -88,12 +102,29 @@ public class TaskManagementService {
 			throw invalidState("只有草稿任务可以发布");
 		}
 		TaskVersion version = requireVersion(task.getCurrentVersionId());
-		version.setPublished(true);
-		version.setPublishedAt(Instant.now(clock));
-		versions.save(version);
-		task.setLifecycle(TaskLifecycle.RUNNING);
-		task.setUpdatedAt(Instant.now(clock));
-		return tasks.save(task);
+		TaskVersion previous = copyVersion(version);
+		TaskVersion savedVersion = null;
+		try {
+			version.setPublished(true);
+			version.setPublishedAt(Instant.now(clock));
+			savedVersion = versions.save(version);
+			task.setLifecycle(TaskLifecycle.RUNNING);
+			task.setUpdatedAt(Instant.now(clock));
+			return tasks.save(task);
+		} catch (RuntimeException exception) {
+			if (savedVersion != null) {
+				TaskVersion restore = copyVersion(previous);
+				restore.setVersion(savedVersion.getVersion());
+				List<RuntimeException> compensationFailures = new ArrayList<>();
+				collectCompensationFailure(
+					compensationFailures,
+					() -> versions.save(restore),
+					"restore published task version"
+				);
+				failIfCompensationFailed(exception, compensationFailures);
+			}
+			throw exception;
+		}
 	}
 
 	public TaskRecord updateStructure(
@@ -128,14 +159,28 @@ public class TaskManagementService {
 			task.setUpdatedAt(now);
 			return tasks.save(task);
 		} catch (RuntimeException exception) {
+			List<RuntimeException> compensationFailures = new ArrayList<>();
 			if (savedTarget != null) {
 				if (current.isPublished()) {
 					String orphanId = savedTarget.getId();
-					if (orphanId != null) compensate(() -> versions.deleteById(orphanId), exception);
+					if (orphanId != null) {
+						collectCompensationFailure(
+							compensationFailures,
+							() -> versions.deleteById(orphanId),
+							"delete orphan task version"
+						);
+					}
 				} else {
-					compensate(() -> versions.save(current), exception);
+					TaskVersion restore = copyVersion(current);
+					restore.setVersion(savedTarget.getVersion());
+					collectCompensationFailure(
+						compensationFailures,
+						() -> versions.save(restore),
+						"restore draft task version"
+					);
 				}
 			}
+			failIfCompensationFailed(exception, compensationFailures);
 			throw exception;
 		}
 	}
@@ -257,11 +302,53 @@ public class TaskManagementService {
 		return value == null || value.isBlank() ? null : value.trim();
 	}
 
-	private void compensate(Runnable cleanup, RuntimeException original) {
+	private void collectCompensationFailure(
+		List<RuntimeException> failures,
+		Runnable cleanup,
+		String action
+	) {
 		try {
 			cleanup.run();
 		} catch (RuntimeException cleanupFailure) {
-			original.addSuppressed(cleanupFailure);
+			LOGGER.error("Task consistency compensation failed: {}", action, cleanupFailure);
+			failures.add(cleanupFailure);
 		}
+	}
+
+	private void failIfCompensationFailed(RuntimeException original, List<RuntimeException> failures) {
+		if (failures.isEmpty()) return;
+		ApiException controlled = new ApiException(
+			HttpStatus.INTERNAL_SERVER_ERROR,
+			"TASK_CONSISTENCY_RECOVERY_FAILED",
+			"任务数据一致性恢复失败，请联系管理员"
+		);
+		controlled.addSuppressed(original);
+		failures.forEach(controlled::addSuppressed);
+		throw controlled;
+	}
+
+	private TaskVersion copyVersion(TaskVersion source) {
+		TaskVersion copy = new TaskVersion();
+		copy.setId(source.getId());
+		copy.setVersion(source.getVersion());
+		copy.setTaskId(source.getTaskId());
+		copy.setVersionNumber(source.getVersionNumber());
+		copy.setReferenceTypes(new LinkedHashSet<>(source.getReferenceTypes()));
+		copy.setFixedRecording(source.isFixedRecording());
+		copy.setTextInputEnabled(source.isTextInputEnabled());
+		copy.setHumanReviewEnabled(source.isHumanReviewEnabled());
+		copy.setRecordingFormat(source.getRecordingFormat());
+		copy.setSampleRates(new LinkedHashSet<>(source.getSampleRates()));
+		copy.setChannels(source.getChannels());
+		copy.setMinDurationMillis(source.getMinDurationMillis());
+		copy.setMaxDurationMillis(source.getMaxDurationMillis());
+		copy.setRejectionReasons(new ArrayList<>(source.getRejectionReasons()));
+		copy.setAiEnabled(source.isAiEnabled());
+		copy.setAiProvider(source.getAiProvider());
+		copy.setAiModel(source.getAiModel());
+		copy.setPublished(source.isPublished());
+		copy.setCreatedAt(source.getCreatedAt());
+		copy.setPublishedAt(source.getPublishedAt());
+		return copy;
 	}
 }

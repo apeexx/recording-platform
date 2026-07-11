@@ -140,6 +140,46 @@ class RecordingMediaStorageTests {
 	}
 
 	@Test
+	void committedReplacementCanDeferBackupCleanupToADurableJob() throws Exception {
+		RecordingMediaStorage storage = new RecordingMediaStorage(tempDir);
+		TaskVersion version = wavVersion();
+		PreparedRecording previous = storage.prepare(
+			new MockMultipartFile("audio", "previous.wav", "audio/wav", wav(16000, 1, 2000, (byte) 1)),
+			version, "TASK-001", "I000001"
+		);
+		storage.activate(previous, null).complete();
+		PreparedRecording next = storage.prepare(
+			new MockMultipartFile("audio", "next.wav", "audio/wav", wav(16000, 1, 2000, (byte) 2)),
+			version, "TASK-001", "I000001"
+		);
+
+		RecordingReplacement replacement = storage.activate(next, previous.recording().relativePath());
+		String backupRelativePath = replacement.deferCleanup();
+
+		assertThat(backupRelativePath).startsWith("temp/backups/");
+		assertThat(storage.resolve(backupRelativePath)).exists();
+		assertThat(storage.resolve(next.recording().relativePath())).exists();
+	}
+
+	@Test
+	void retirementMovesCurrentRecordingToAnInaccessibleBackupUntilCleanup() throws Exception {
+		RecordingMediaStorage storage = new RecordingMediaStorage(tempDir);
+		TaskVersion version = wavVersion();
+		PreparedRecording current = storage.prepare(
+			new MockMultipartFile("audio", "current.wav", "audio/wav", wav(16000, 1, 2000, (byte) 1)),
+			version, "TASK-001", "I000001"
+		);
+		storage.activate(current, null).complete();
+
+		RecordingRetirement retirement = storage.stageRetirement(current.recording().relativePath());
+		String backupRelativePath = retirement.deferCleanup();
+
+		assertThat(storage.resolve(current.recording().relativePath())).doesNotExist();
+		assertThat(backupRelativePath).startsWith("temp/backups/");
+		assertThat(storage.resolve(backupRelativePath)).exists();
+	}
+
+	@Test
 	void deleteFailureReturnsAStorageErrorInsteadOfPretendingSuccess() throws Exception {
 		RecordingMediaStorage storage = new RecordingMediaStorage(tempDir);
 		String relative = "recordings/TASK-001/I000001/current.wav";

@@ -105,6 +105,21 @@ public class RecordingMediaStorage {
 		}
 	}
 
+	public RecordingRetirement stageRetirement(String relativePath) {
+		Path original = resolve(relativePath);
+		Path backup = null;
+		try {
+			if (Files.exists(original)) {
+				backup = resolve("temp/backups/" + UUID.randomUUID() + extensionWithDot(original));
+				Files.createDirectories(backup.getParent());
+				atomicMove(original, backup);
+			}
+			return new RecordingRetirement(this, original, backup);
+		} catch (IOException exception) {
+			throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "MEDIA_STORAGE_FAILED", "录音文件暂时无法隔离清理");
+		}
+	}
+
 	public Path resolve(String relativePath) {
 		if (relativePath == null || relativePath.isBlank()) {
 			throw traversal();
@@ -141,6 +156,13 @@ public class RecordingMediaStorage {
 	void deleteQuietly(Path path) {
 		if (path == null) return;
 		try { Files.deleteIfExists(path); } catch (IOException ignored) { }
+	}
+
+	String relative(Path path) {
+		if (path == null) return null;
+		Path normalized = path.toAbsolutePath().normalize();
+		if (!normalized.startsWith(root)) throw traversal();
+		return root.relativize(normalized).toString().replace('\\', '/');
 	}
 
 	private void validateAgainstVersion(AudioMetadata metadata, TaskVersion version) {

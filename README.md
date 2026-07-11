@@ -144,12 +144,12 @@ POST /api/admin/users/{userId}/disable
 
 ## 任务池、录音媒体与导入
 
-- 平台和任务：`/api/platforms` 提供 ADMIN CRUD；`/api/tasks` 提供创建、结构编辑、发布、暂停、恢复、结束和分页查询。任务编码限制为字母、数字、下划线或连字符。已发布任务修改结构时创建下一不可变版本，旧条目继续绑定旧版本；跨 `tasks`/`task_versions` 写入失败时执行删除新文档或恢复旧版本补偿；首期固定 `aiEnabled=false`。
+- 平台和任务：`/api/platforms` 提供 ADMIN CRUD，仍被任务引用的平台返回 `409 PLATFORM_IN_USE`，禁止删除后形成悬空引用；`/api/tasks` 提供创建、结构编辑、发布、暂停、恢复、结束和分页查询。任务编码限制为字母、数字、下划线或连字符。已发布任务修改结构时创建下一不可变版本，旧条目继续绑定旧版本；跨 `tasks`/`task_versions` 写入失败时使用保存后最新版本号执行补偿，补偿本身失败返回受控一致性错误；首期固定 `aiEnabled=false`。
 - 授权：`/api/tasks/{taskId}/grants` 与 `/access-requests` 管理直接授权、申请、原子批准/驳回和撤销。撤销只阻止新领取，不影响已领取条目的提交或释放；批准申请重放不会复活后来已撤销的授权。
 - 数据池：ADMIN 使用 `POST /api/tasks/{taskId}/items` 单条添加并传 `Idempotency-Key`，或通过 `/api/import-jobs` 异步导入。COLLECTOR 使用 `POST /api/tasks/{taskId}/items/start` 原子领取或继续全系统唯一的当前条目。
-- 提交与返修：`POST /api/task-items/{itemId}/submit` 接收 multipart 的 `operationId`、`assignmentId`、`expectedRevision`、可选文字和录音；重复 operationId 返回首次结果，过期修订返回 `409 STALE_STATE`。驳回保留原采集员，释放清除当前结果但保留提交和操作历史。
-- 录音文件：`RECORDING_STORAGE_DIR` 下只使用相对路径；当前录音固定为 `recordings/{taskCode}/{itemCode}/current.wav|mp3`。上传先进入 `temp/`，完成扩展名、魔数、100MB、单声道、采样率和时长校验后原子替换，失败恢复旧文件。`GET /api/media/{mediaId}` 鉴权读取并支持单 Range。
-- 导入固定列为 `externalItemId`、`referenceText`、`referenceAudioUrl`、`referenceVideoUrl`，支持 `.csv` 和 `.xlsx`、部分成功、失败行重试及幂等。单文件最多 50000 个数据行；每 100 行持久化一次进度，行错误摘要最多保存 1000 条，完整失败行号单独保留用于重试。worker 使用 10 分钟 Mongo 租约和心跳，应用启动时自动重新排队 PENDING 或租约过期的 PROCESSING 作业。部分成功后源文件立即改写为只含失败行的重试 CSV，成功行签名 URL 不再落盘。
+- 提交与返修：`POST /api/task-items/{itemId}/submit` 接收 multipart 的 `operationId`、`assignmentId`、`expectedRevision`、可选文字和录音；重复 operationId 返回首次结果，过期修订返回 `409 STALE_STATE`。驳回保留原采集员，释放清除当前结果但保留提交和操作历史。提交或释放成功后，旧文件备份和旧媒体元数据由持久化清理任务处理；即时清理失败不改变首次业务结果，同 operationId 重放和应用启动恢复都会继续重试。
+- 录音文件：`RECORDING_STORAGE_DIR` 下只使用相对路径；当前录音固定为 `recordings/{taskCode}/{itemCode}/current.wav|mp3`。上传先进入 `temp/`，完成扩展名、魔数、100MB、单声道、采样率和时长校验后原子替换，失败恢复旧文件。待删除的 current 会先移动到 `temp/backups/` 唯一路径，避免后续重录复用稳定路径时误删新文件；`GET /api/media/{mediaId}` 鉴权读取并支持单 Range。
+- 导入固定列为 `externalItemId`、`referenceText`、`referenceAudioUrl`、`referenceVideoUrl`，支持 `.csv` 和 `.xlsx`、部分成功、失败行重试及幂等。单文件最多 50000 个数据行；每 100 行持久化一次进度，行错误摘要最多保存 1000 条，完整失败行号单独保留用于重试。初始导入与过期 PROCESSING 恢复使用 `FULL` 模式幂等重放完整源文件，只有用户显式重试使用 `FAILED_ROWS`；worker 的心跳、进度和完成状态均以 `leaseOwner` 条件原子更新，旧 worker 失去租约后不能覆盖最终状态。部分成功后源文件立即改写为只含失败行的重试 CSV，成功行签名 URL 不再落盘。
 - 远程参考媒体生产默认只允许 HTTPS；每次重定向重新执行协议、主机和地址策略，禁止本机、环回、私网、链路本地与多播地址，并将校验后的地址绑定到实际连接。开发环境只有显式设置 `REMOTE_MEDIA_ALLOW_HTTP=true` 才允许 HTTP，仍不允许私网目标。音频上限 100MB、视频上限 500MB。
 
 任务相关分页响应统一为 `{ items, page, size, total }`。常用端点：
@@ -180,7 +180,8 @@ MongoDB 当前集合：
 - `task_grants`、`task_access_requests`：任务授权与待决申请。
 - `task_items`：池条目、领取归属、当前结果、提交历史和操作历史。
 - `media_assets`：参考媒体与当前录音元数据，只保存相对路径。
-- `import_jobs`：异步导入文件摘要、分批进度、失败行号、有限脱敏行错误和 worker 租约。
+- `media_cleanup_jobs`：提交/释放后的旧文件备份与旧媒体元数据清理任务，记录 operationId、状态和重试次数。
+- `import_jobs`：异步导入文件摘要、FULL/FAILED_ROWS 运行模式、分批进度、失败行号、有限脱敏行错误和带 owner fencing 的 worker 租约。
 - `idempotency_records`：Task 2 通用写操作的 IN_PROGRESS/COMPLETED 状态与首次响应快照。
 
 测试默认使用 mock/fake store，不依赖开发机 MongoDB；需要真实 Mongo 集成测试时单独提供 `MONGODB_TEST_URI`，不得复用生产库。

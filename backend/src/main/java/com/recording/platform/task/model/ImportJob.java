@@ -38,6 +38,7 @@ public class ImportJob {
 	private long failureRows;
 	private List<ImportRowError> rowErrors = new ArrayList<>();
 	private List<Long> retryRowNumbers = new ArrayList<>();
+	private ImportRunMode runMode = ImportRunMode.FULL;
 	private String leaseOwner;
 	private Instant leaseExpiresAt;
 	private Instant heartbeatAt;

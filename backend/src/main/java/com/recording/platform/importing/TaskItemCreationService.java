@@ -25,10 +25,13 @@ import java.util.Optional;
 import java.util.UUID;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 @Service
 public class TaskItemCreationService {
+	private static final Logger LOGGER = LoggerFactory.getLogger(TaskItemCreationService.class);
 	private final TaskStore tasks;
 	private final TaskVersionStore versions;
 	private final TaskItemStore items;
@@ -125,11 +128,11 @@ public class TaskItemCreationService {
 			));
 			return items.save(item);
 		} catch (DuplicateKeyException exception) {
-			cleanup(downloaded);
+			cleanup(downloaded, exception);
 			return items.findByTaskIdAndCreationOperationId(taskId, normalizedOperationId)
 				.orElseThrow(() -> new ApiException(HttpStatus.CONFLICT, "ITEM_CONFLICT", "任务条目已存在"));
 		} catch (RuntimeException exception) {
-			cleanup(downloaded);
+			cleanup(downloaded, exception);
 			throw exception;
 		}
 	}
@@ -150,9 +153,29 @@ public class TaskItemCreationService {
 		}
 	}
 
-	private void cleanup(List<MediaAsset> downloaded) {
+	private void cleanup(List<MediaAsset> downloaded, RuntimeException original) {
+		List<RuntimeException> failures = new ArrayList<>();
 		for (MediaAsset asset : downloaded) {
-			try { downloader.delete(asset); } catch (RuntimeException ignored) { }
+			try {
+				downloader.delete(asset);
+			} catch (RuntimeException cleanupFailure) {
+				failures.add(cleanupFailure);
+			}
+		}
+		if (!failures.isEmpty()) {
+			LOGGER.error(
+				"Reference media cleanup failed after task item creation failure; targets={}",
+				downloaded.size(),
+				failures.get(0)
+			);
+			ApiException controlled = new ApiException(
+				HttpStatus.INTERNAL_SERVER_ERROR,
+				"REFERENCE_MEDIA_CLEANUP_FAILED",
+				"任务条目创建失败，参考媒体清理需要人工检查"
+			);
+			controlled.addSuppressed(original);
+			failures.forEach(controlled::addSuppressed);
+			throw controlled;
 		}
 	}
 

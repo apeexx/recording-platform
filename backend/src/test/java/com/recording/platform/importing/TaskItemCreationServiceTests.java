@@ -3,6 +3,9 @@ package com.recording.platform.importing;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.recording.platform.api.ApiException;
@@ -11,6 +14,8 @@ import com.recording.platform.identity.model.UserRole;
 import com.recording.platform.media.MediaAsset;
 import com.recording.platform.media.MediaAssetStore;
 import com.recording.platform.media.MediaKind;
+import com.recording.platform.media.RecordingMediaStorage;
+import com.recording.platform.media.RemoteUrlPolicy;
 import com.recording.platform.security.PlatformPrincipal;
 import com.recording.platform.task.model.ReferenceType;
 import com.recording.platform.task.model.TaskItem;
@@ -23,6 +28,7 @@ import com.recording.platform.task.store.TaskStore;
 import com.recording.platform.task.store.TaskVersionStore;
 import java.net.URI;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Optional;
@@ -33,16 +39,19 @@ import org.mockito.ArgumentCaptor;
 
 class TaskItemCreationServiceTests {
 	private TaskItemCreationService service;
+	private TaskStore tasks;
+	private TaskVersionStore versions;
 	private TaskItemStore items;
 	private SafeRemoteMediaDownloader downloader;
 	private MediaAssetStore assets;
+	private RecordingMediaStorage cleanupStorage;
 	private TaskVersion version;
 	private PlatformPrincipal admin;
 
 	@BeforeEach
 	void setUp() {
-		TaskStore tasks = org.mockito.Mockito.mock(TaskStore.class);
-		TaskVersionStore versions = org.mockito.Mockito.mock(TaskVersionStore.class);
+		tasks = org.mockito.Mockito.mock(TaskStore.class);
+		versions = org.mockito.Mockito.mock(TaskVersionStore.class);
 		items = org.mockito.Mockito.mock(TaskItemStore.class);
 		downloader = org.mockito.Mockito.mock(SafeRemoteMediaDownloader.class);
 		assets = org.mockito.Mockito.mock(MediaAssetStore.class);
@@ -115,6 +124,114 @@ class TaskItemCreationServiceTests {
 		ArgumentCaptor<MediaAsset> attached = ArgumentCaptor.forClass(MediaAsset.class);
 		org.mockito.Mockito.verify(assets, org.mockito.Mockito.times(2)).save(attached.capture());
 		assertThat(attached.getAllValues()).allSatisfy((asset) -> assertThat(asset.getItemId()).isEqualTo(created.getId()));
+	}
+
+	@Test
+	void videoDownloadFailureRemovesTheSavedAudioFileAndMetadata() {
+		useCleanupAwareDownloader();
+		MediaAsset audio = asset("audio-1", MediaKind.REFERENCE_AUDIO);
+		doReturn(audio).when(downloader).download(
+			URI.create("https://cdn.example.com/a.wav"), RemoteMediaType.AUDIO, "task-1", "I000001"
+		);
+		doThrow(new ApiException(
+			org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY,
+			"REMOTE_MEDIA_DOWNLOAD_FAILED",
+			"视频下载失败"
+		)).when(downloader).download(
+			URI.create("https://cdn.example.com/v.mp4"), RemoteMediaType.VIDEO, "task-1", "I000001"
+		);
+
+		assertThatThrownBy(() -> service.add(
+			"task-1",
+			new AddTaskItemCommand(null, null, "https://cdn.example.com/a.wav", "https://cdn.example.com/v.mp4"),
+			"add-video-failure",
+			admin
+		)).isInstanceOfSatisfying(ApiException.class, (exception) ->
+			assertThat(exception.getCode()).isEqualTo("REMOTE_MEDIA_DOWNLOAD_FAILED")
+		);
+
+		verify(cleanupStorage).delete(audio.getRelativePath());
+		verify(assets).deleteById("audio-1");
+	}
+
+	@Test
+	void itemSaveFailureRemovesEveryDownloadedFileAndMetadataDocument() {
+		useCleanupAwareDownloader();
+		MediaAsset audio = asset("audio-1", MediaKind.REFERENCE_AUDIO);
+		MediaAsset video = asset("video-1", MediaKind.REFERENCE_VIDEO);
+		doReturn(audio).when(downloader).download(
+			URI.create("https://cdn.example.com/a.wav"), RemoteMediaType.AUDIO, "task-1", "I000001"
+		);
+		doReturn(video).when(downloader).download(
+			URI.create("https://cdn.example.com/v.mp4"), RemoteMediaType.VIDEO, "task-1", "I000001"
+		);
+		doThrow(new IllegalStateException("simulated item save failure")).when(items).save(any());
+
+		assertThatThrownBy(() -> service.add(
+			"task-1",
+			new AddTaskItemCommand(null, null, "https://cdn.example.com/a.wav", "https://cdn.example.com/v.mp4"),
+			"add-save-failure",
+			admin
+		)).isInstanceOf(IllegalStateException.class).hasMessageContaining("item save failure");
+
+		verify(cleanupStorage).delete(audio.getRelativePath());
+		verify(cleanupStorage).delete(video.getRelativePath());
+		verify(assets).deleteById("audio-1");
+		verify(assets).deleteById("video-1");
+	}
+
+	@Test
+	void cleanupFailureIsReportedInsteadOfBeingSilentlyDiscarded() {
+		useCleanupAwareDownloader();
+		MediaAsset audio = asset("audio-1", MediaKind.REFERENCE_AUDIO);
+		doReturn(audio).when(downloader).download(
+			URI.create("https://cdn.example.com/a.wav"), RemoteMediaType.AUDIO, "task-1", "I000001"
+		);
+		doThrow(new ApiException(
+			org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY,
+			"REMOTE_MEDIA_DOWNLOAD_FAILED",
+			"视频下载失败"
+		)).when(downloader).download(
+			URI.create("https://cdn.example.com/v.mp4"), RemoteMediaType.VIDEO, "task-1", "I000001"
+		);
+		doThrow(new IllegalStateException("simulated file cleanup failure"))
+			.when(cleanupStorage).delete(audio.getRelativePath());
+		doThrow(new IllegalStateException("simulated metadata cleanup failure"))
+			.when(assets).deleteById("audio-1");
+
+		assertThatThrownBy(() -> service.add(
+			"task-1",
+			new AddTaskItemCommand(null, null, "https://cdn.example.com/a.wav", "https://cdn.example.com/v.mp4"),
+			"add-cleanup-failure",
+			admin
+		)).isInstanceOfSatisfying(ApiException.class, (exception) -> {
+			assertThat(exception.getStatus().value()).isEqualTo(500);
+			assertThat(exception.getCode()).isEqualTo("REFERENCE_MEDIA_CLEANUP_FAILED");
+			assertThat(exception.getSuppressed()).hasSize(2);
+		});
+		verify(cleanupStorage).delete(audio.getRelativePath());
+		verify(assets).deleteById("audio-1");
+	}
+
+	private void useCleanupAwareDownloader() {
+		cleanupStorage = org.mockito.Mockito.mock(RecordingMediaStorage.class);
+		downloader = org.mockito.Mockito.spy(new SafeRemoteMediaDownloader(
+			org.mockito.Mockito.mock(RemoteUrlPolicy.class),
+			org.mockito.Mockito.mock(RemoteHttpTransport.class),
+			cleanupStorage,
+			assets,
+			Clock.fixed(Instant.parse("2026-07-11T12:00:00Z"), ZoneOffset.UTC),
+			Duration.ofSeconds(1),
+			0
+		));
+		service = new TaskItemCreationService(
+			tasks,
+			versions,
+			items,
+			downloader,
+			assets,
+			Clock.fixed(Instant.parse("2026-07-11T12:00:00Z"), ZoneOffset.UTC)
+		);
 	}
 
 	private MediaAsset asset(String id, MediaKind kind) {

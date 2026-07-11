@@ -4,9 +4,11 @@ import com.recording.platform.api.ApiException;
 import com.recording.platform.media.MediaAsset;
 import com.recording.platform.media.MediaAssetStore;
 import com.recording.platform.media.MediaKind;
+import com.recording.platform.media.MediaCleanupService;
 import com.recording.platform.media.PreparedRecording;
 import com.recording.platform.media.RecordingMediaStorage;
 import com.recording.platform.media.RecordingReplacement;
+import com.recording.platform.media.RecordingRetirement;
 import com.recording.platform.security.PlatformPrincipal;
 import com.recording.platform.task.model.SubmittedRecording;
 import com.recording.platform.task.model.TaskItem;
@@ -21,6 +23,7 @@ import com.recording.platform.task.store.TaskStore;
 import com.recording.platform.task.store.TaskVersionStore;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.List;
 import java.util.concurrent.locks.ReentrantLock;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -35,6 +38,7 @@ public class TaskItemSubmissionService {
 	private final TaskPoolService pool;
 	private final RecordingMediaStorage storage;
 	private final MediaAssetStore assets;
+	private final MediaCleanupService cleanup;
 	private final Clock clock;
 	private final ReentrantLock[] itemLocks = createLocks();
 
@@ -45,6 +49,7 @@ public class TaskItemSubmissionService {
 		TaskPoolService pool,
 		RecordingMediaStorage storage,
 		MediaAssetStore assets,
+		MediaCleanupService cleanup,
 		Clock clock
 	) {
 		this.items = items;
@@ -53,6 +58,7 @@ public class TaskItemSubmissionService {
 		this.pool = pool;
 		this.storage = storage;
 		this.assets = assets;
+		this.cleanup = cleanup;
 		this.clock = clock;
 	}
 
@@ -79,6 +85,7 @@ public class TaskItemSubmissionService {
 	) {
 		TaskItem item = requireItem(itemId);
 		if (item.getOperations().stream().anyMatch((operation) -> form.operationId().equals(operation.getOperationId()))) {
+			cleanup.retry(itemId, form.operationId());
 			return pool.submit(itemId, new SubmitTaskItemCommand(
 				form.operationId(), form.assignmentId(), form.expectedRevision(), form.text(), null
 			), actor);
@@ -86,10 +93,25 @@ public class TaskItemSubmissionService {
 		TaskItemResult previous = item.getCurrentResult();
 		SubmittedRecording previousAudio = previous == null ? null : previous.audio();
 		if (audio == null || audio.isEmpty()) {
-			TaskItemActionResult result = pool.submit(itemId, new SubmitTaskItemCommand(
-				form.operationId(), form.assignmentId(), form.expectedRevision(), form.text(), null
-			), actor);
-			retire(previousAudio, true);
+			RecordingRetirement retirement = previousAudio == null
+				? null : storage.stageRetirement(previousAudio.relativePath());
+			TaskItemActionResult result;
+			try {
+				result = pool.submit(itemId, new SubmitTaskItemCommand(
+					form.operationId(), form.assignmentId(), form.expectedRevision(), form.text(), null
+				), actor);
+			} catch (RuntimeException exception) {
+				rollback(retirement, exception);
+				throw exception;
+			}
+			if (previousAudio != null) {
+				cleanup.scheduleAndTry(
+					itemId,
+					form.operationId(),
+					single(retirement.deferCleanup()),
+					single(previousAudio.mediaId())
+				);
+			}
 			return result;
 		}
 		TaskRecord task = tasks.findById(item.getTaskId())
@@ -123,8 +145,15 @@ public class TaskItemSubmissionService {
 			assets.deleteById(asset.getId());
 			return result;
 		}
-		replacement.complete();
-		retire(previousAudio, false);
+		String backupRelativePath = replacement.deferCleanup();
+		if (backupRelativePath != null || previousAudio != null) {
+			cleanup.scheduleAndTry(
+				itemId,
+				form.operationId(),
+				single(backupRelativePath),
+				single(previousAudio == null ? null : previousAudio.mediaId())
+			);
+		}
 		return result;
 	}
 
@@ -145,10 +174,17 @@ public class TaskItemSubmissionService {
 		return asset;
 	}
 
-	private void retire(SubmittedRecording recording, boolean deleteFile) {
-		if (recording == null) return;
-		if (deleteFile) storage.delete(recording.relativePath());
-		assets.deleteById(recording.mediaId());
+	private List<String> single(String value) {
+		return value == null || value.isBlank() ? List.of() : List.of(value);
+	}
+
+	private void rollback(RecordingRetirement retirement, RuntimeException original) {
+		if (retirement == null) return;
+		try {
+			retirement.rollback();
+		} catch (RuntimeException rollbackFailure) {
+			original.addSuppressed(rollbackFailure);
+		}
 	}
 
 	private TaskItem requireItem(String itemId) {

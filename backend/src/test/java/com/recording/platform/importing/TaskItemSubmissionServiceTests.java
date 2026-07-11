@@ -1,7 +1,6 @@
 package com.recording.platform.importing;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.times;
@@ -13,6 +12,9 @@ import static org.mockito.Mockito.doThrow;
 import com.recording.platform.identity.model.SessionType;
 import com.recording.platform.identity.model.UserRole;
 import com.recording.platform.media.MediaAssetStore;
+import com.recording.platform.media.InMemoryMediaCleanupJobStore;
+import com.recording.platform.media.MediaCleanupService;
+import com.recording.platform.media.MediaCleanupStatus;
 import com.recording.platform.media.PreparedRecording;
 import com.recording.platform.media.RecordingMediaStorage;
 import com.recording.platform.media.RecordingReplacement;
@@ -50,6 +52,7 @@ class TaskItemSubmissionServiceTests {
 		TaskPoolService pool = org.mockito.Mockito.mock(TaskPoolService.class);
 		RecordingMediaStorage storage = org.mockito.Mockito.mock(RecordingMediaStorage.class);
 		MediaAssetStore assets = org.mockito.Mockito.mock(MediaAssetStore.class);
+		MediaCleanupService cleanup = org.mockito.Mockito.mock(MediaCleanupService.class);
 		AtomicBoolean committed = new AtomicBoolean();
 		when(items.findById("item-1")).thenAnswer((ignored) -> Optional.of(item(committed.get())));
 		TaskRecord task = new TaskRecord();
@@ -81,6 +84,7 @@ class TaskItemSubmissionServiceTests {
 			pool,
 			storage,
 			assets,
+			cleanup,
 			Clock.fixed(Instant.parse("2026-07-11T12:00:00Z"), ZoneOffset.UTC)
 		);
 		SubmitTaskItemForm form = new SubmitTaskItemForm("submit-1", "assignment-1", 1, null);
@@ -104,19 +108,25 @@ class TaskItemSubmissionServiceTests {
 
 		verify(storage, times(1)).prepare(any(), eq(version), eq("TASK-001"), eq("I000001"));
 		verify(storage, times(1)).activate(prepared, null);
-		verify(replacement, times(1)).complete();
+		verify(replacement, times(1)).deferCleanup();
 		verify(assets, times(1)).save(any());
 	}
 
 	@Test
-	void cleanupFailureAfterMongoCommitDoesNotRollbackTheCommittedCurrentFile() {
+	void cleanupFailureAfterMongoCommitIsRetriedByTheSameOperationWithoutRollingBackCurrent() {
 		TaskItemStore items = org.mockito.Mockito.mock(TaskItemStore.class);
 		TaskStore tasks = org.mockito.Mockito.mock(TaskStore.class);
 		TaskVersionStore versions = org.mockito.Mockito.mock(TaskVersionStore.class);
 		TaskPoolService pool = org.mockito.Mockito.mock(TaskPoolService.class);
 		RecordingMediaStorage storage = org.mockito.Mockito.mock(RecordingMediaStorage.class);
 		MediaAssetStore assets = org.mockito.Mockito.mock(MediaAssetStore.class);
-		when(items.findById("item-1")).thenReturn(Optional.of(item(false)));
+		SubmittedRecording previousRecording = new SubmittedRecording(
+			"old-media", "recordings/TASK-001/I000001/current.wav", RecordingFormat.WAV,
+			32044, 16000, 1, 1000
+		);
+		TaskItem pending = item(false);
+		pending.setCurrentResult(new TaskItemResult(previousRecording, "旧文本"));
+		TaskItem replay = item(true);
 		TaskRecord task = new TaskRecord();
 		task.setTaskCode("TASK-001");
 		when(tasks.findById("task-1")).thenReturn(Optional.of(task));
@@ -129,19 +139,30 @@ class TaskItemSubmissionServiceTests {
 		PreparedRecording prepared = new PreparedRecording(recording, Path.of("temp.wav"));
 		when(storage.prepare(any(), eq(version), eq("TASK-001"), eq("I000001"))).thenReturn(prepared);
 		RecordingReplacement replacement = org.mockito.Mockito.mock(RecordingReplacement.class);
-		when(storage.activate(prepared, null)).thenReturn(replacement);
+		when(storage.activate(prepared, previousRecording.relativePath())).thenReturn(replacement);
+		when(replacement.deferCleanup()).thenReturn("temp/backups/old.wav");
 		when(assets.save(any())).thenAnswer((invocation) -> invocation.getArgument(0));
 		TaskItemActionResult committed = new TaskItemActionResult(
 			"item-1", TaskItemStatus.REVIEW_PENDING, 2, "assignment-1", new TaskItemResult(recording, null)
 		);
+		replay.setCurrentResult(committed.result());
+		when(items.findById("item-1")).thenReturn(Optional.of(pending), Optional.of(replay));
 		when(pool.submit(eq("item-1"), any(), any())).thenReturn(committed);
 		doThrow(new com.recording.platform.api.ApiException(
 			org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR,
 			"MEDIA_DELETE_FAILED",
 			"媒体文件暂时无法删除"
-		)).when(replacement).complete();
+		)).doNothing().when(storage).delete("temp/backups/old.wav");
+		InMemoryMediaCleanupJobStore cleanupJobs = new InMemoryMediaCleanupJobStore();
+		MediaCleanupService cleanup = new MediaCleanupService(
+			cleanupJobs,
+			storage,
+			assets,
+			Runnable::run,
+			Clock.fixed(Instant.parse("2026-07-11T12:00:00Z"), ZoneOffset.UTC)
+		);
 		TaskItemSubmissionService service = new TaskItemSubmissionService(
-			items, tasks, versions, pool, storage, assets,
+			items, tasks, versions, pool, storage, assets, cleanup,
 			Clock.fixed(Instant.parse("2026-07-11T12:00:00Z"), ZoneOffset.UTC)
 		);
 		SubmitTaskItemForm form = new SubmitTaskItemForm("submit-1", "assignment-1", 1, null);
@@ -151,12 +172,18 @@ class TaskItemSubmissionServiceTests {
 			UserRole.COLLECTOR, SessionType.MINIPROGRAM, false
 		);
 
-		assertThatThrownBy(() -> service.submit("item-1", form, audio, collector))
-			.isInstanceOfSatisfying(com.recording.platform.api.ApiException.class, (exception) ->
-				assertThat(exception.getCode()).isEqualTo("MEDIA_DELETE_FAILED")
-			);
+		assertThat(service.submit("item-1", form, audio, collector)).isEqualTo(committed);
+		assertThat(cleanupJobs.findByItemIdAndOperationId("item-1", "submit-1").orElseThrow().getStatus())
+			.isEqualTo(MediaCleanupStatus.PENDING);
+
+		assertThat(service.submit("item-1", form, audio, collector)).isEqualTo(committed);
+		assertThat(cleanupJobs.findByItemIdAndOperationId("item-1", "submit-1").orElseThrow().getStatus())
+			.isEqualTo(MediaCleanupStatus.COMPLETED);
+
 		verify(replacement, never()).rollback();
 		verify(assets, never()).deleteById("media-1");
+		verify(assets, times(2)).deleteById("old-media");
+		verify(storage, times(2)).delete("temp/backups/old.wav");
 	}
 
 	private TaskItem item(boolean committed) {
