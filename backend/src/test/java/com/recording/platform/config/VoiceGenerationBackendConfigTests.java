@@ -25,20 +25,21 @@ class VoiceGenerationBackendConfigTests {
 	}
 
 	@Test
-	void applicationPropertiesDoesNotRequirePersistentDatabaseForVoiceGenerationTrial() throws Exception {
+	void applicationPropertiesConfiguresMongoPersistenceWithoutDependingOnADeveloperMachine() throws Exception {
 		String properties = Files.readString(Path.of("src/main/resources/application.properties"));
 
-		assertThat(properties).doesNotContain("spring.datasource");
-		assertThat(properties).doesNotContain("spring.jpa");
-		assertThat(properties).doesNotContain("spring.flyway");
-		assertThat(properties).doesNotContain("spring.data.mongodb");
+		assertThat(properties).contains(
+			"spring.data.mongodb.uri=${MONGODB_URI:mongodb://localhost:27017/recording_platform}",
+			"spring.data.mongodb.auto-index-creation=true"
+		);
 	}
 
 	@Test
-	void applicationPropertiesAllowsMiniMaxCloneAudioUploadSize() throws Exception {
+	void applicationPropertiesAllowsLargeRecordingUploadsWhileCloneKeepsItsBusinessLimit() throws Exception {
 		String properties = Files.readString(Path.of("src/main/resources/application.properties"));
 
-		assertThat(properties).contains("spring.servlet.multipart.max-file-size=20MB");
-		assertThat(properties).contains("spring.servlet.multipart.max-request-size=21MB");
+		assertThat(properties).contains("spring.servlet.multipart.max-file-size=100MB");
+		assertThat(properties).contains("spring.servlet.multipart.max-request-size=105MB");
+		assertThat(properties).contains("recording.storage-dir=${RECORDING_STORAGE_DIR:backend/storage/recordings}");
 	}
 }

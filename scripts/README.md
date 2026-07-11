@@ -46,6 +46,6 @@ npm run dev -- --host localhost --port 5173
 http://localhost:5173/admin/voice-generation/workbench
 ```
 
-脚本只启动后端和前端，不启动数据库，不创建 `.env`，也不会写入或打印任何 API Key。当前语音生成测试阶段不需要数据库；真实联调只需要在根目录 `.env` 中填写真实 `MINIMAX_API_KEY`。
+脚本只启动后端和前端，不启动 MongoDB，不创建 `.env`，也不会写入或打印任何 API Key。当前后端身份、会话和语音生成记录依赖 MongoDB，启动前需要自行确保 `MONGODB_URI` 指向的实例可用；真实语音生成联调还需要在根目录 `.env` 中填写 `MINIMAX_API_KEY`。
 
 脚本不再创建或写入根目录 `logs/`；实时输出直接显示在两个 `pwsh` 窗口中。

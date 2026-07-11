@@ -306,3 +306,22 @@
   - `git status --short --branch`：修改前当前仓库干净。
   - `git diff --check -- docs/daily-maintenance-log.md`：通过，仅提示 CRLF 换行转换警告。
   - 字节级对比：`docs/daily-maintenance-log.md` 的 HEAD 原始内容前缀保持一致，仅追加本次记录。
+
+## 2026-07-11 20:27 MongoDB 身份、会话与语音生成持久化基础
+
+- 时间：2026-07-11 20:27
+- commit ID：待提交后补记
+- 修改内容：
+  - 引入 Spring Data MongoDB，配置 `users`、`sessions`、`voice_generation_records`、`voice_generation_configs` 集合与唯一索引、TTL 索引，统一使用 UTC `Instant`。
+  - 新增 `ADMIN`、`REVIEWER`、`COLLECTOR` 三角色、BCrypt 后台密码、首管理员安全初始化和首次登录强制改密。
+  - 统一 BCrypt 编码前密码规则为至少 8 个字符且 UTF-8 不超过 72 字节，覆盖管理员初始密码、首管理员配置和改密；超限登录凭证按无效凭证处理，不穿透编码器异常。
+  - 新增后台不透明单会话、HttpOnly/SameSite=Lax Cookie、空闲续期、重复登录冲突、短时一次性接管、旧会话 `SESSION_REPLACED`、退出/改密/停用废止会话，以及认证态 CSRF token 获取与 Cookie/Header 校验。
+  - 新增微信 `jscode2session` 服务端边界、小程序 30 天不透明 Bearer token 和录音人员姓名设置；严格拒绝客户端额外提交 OpenID。
+  - 新增后台登录/接管/当前用户/退出/改密、微信登录/姓名和管理员创建/查询/停用后台账号接口，并按角色保护 `/api/**` 与语音生成接口。
+  - 统一 API 错误为 `{ code, message, requestId, details? }`，响应回传 `X-Request-Id`，覆盖常见 4xx/5xx、脱敏异常和上传限制；请求结构错误保持 400，不支持的 Content-Type 返回 415，改密、姓名和后台角色等业务值错误使用 422。
+  - 将语音生成记录、默认声音配置从内存迁到 MongoDB；MiniMax 合成失败持久化 `FAILED`，全局 multipart 提升为 100MB/105MB，克隆保留 20MB 业务限制。
+  - 更新 `.env.example`、`README.md`、`AGENTS.md`、`scripts/README.md`，仅保留空值或安全默认值；未修改 Web、小程序和每日维护日志。
+- 验证结果：
+  - 按 TDD 先运行身份/Mongo/统一错误/语音持久化测试，确认缺少生产能力时测试编译失败；并发会话、未知 OpenID、非法 requestId、统一 400、首次改密 CSRF、密码 422、非法姓名 422、不支持媒体类型 415、管理员初始密码和首管理员 BCrypt 上限场景均先观察到预期红灯，再完成最小修复。
+  - MiniMax 失败测试在保存时记录不可变状态快照；临时移除异常分支第二次保存后测试按预期红灯，恢复后转绿，排除同一可变对象别名造成的假阳性。
+  - `backend\\mvnw.cmd test`：通过，73 个测试全部通过；本机未启动 MongoDB，测试期间驱动后台连接提示被拒绝，但测试不依赖开发机 MongoDB，Maven 最终为 `BUILD SUCCESS`。

@@ -1,8 +1,12 @@
 package com.recording.platform.voice.model;
 
 import java.time.Instant;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.mapping.Document;
 
+@Document(collection = "voice_generation_configs")
 public class VoiceGenerationConfig {
+	@Id
 	private String id;
 	private String voiceId;
 	private double speed;

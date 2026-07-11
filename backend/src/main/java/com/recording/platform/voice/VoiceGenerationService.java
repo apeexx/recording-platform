@@ -1,5 +1,6 @@
 package com.recording.platform.voice;
 
+import com.recording.platform.api.ApiException;
 import com.recording.platform.voice.dto.SynthesisRequest;
 import com.recording.platform.voice.dto.VoiceGenerationResponse;
 import com.recording.platform.voice.integration.MiniMaxSynthesisResult;
@@ -14,6 +15,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Service;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.multipart.MultipartFile;
 
 @Service
@@ -46,6 +48,13 @@ public class VoiceGenerationService {
 	}
 
 	public void cloneVoice(MultipartFile audio, String voiceId) {
+		if (audio.getSize() > 20L * 1024 * 1024) {
+			throw new ApiException(
+				HttpStatus.PAYLOAD_TOO_LARGE,
+				"CLONE_AUDIO_TOO_LARGE",
+				"克隆母带音频不能超过 20MB"
+			);
+		}
 		String fileId = miniMaxVoiceClient.uploadAudio(audio, "voice_clone");
 		miniMaxVoiceClient.cloneVoice(fileId, voiceId);
 		VoiceGenerationRecord record = new VoiceGenerationRecord();
@@ -94,7 +103,15 @@ public class VoiceGenerationService {
 	) {
 		VoiceGenerationRecord completed = buildRecord(request, mode, GenerationStatus.PENDING);
 		completed = saveRecord(completed);
-		MiniMaxSynthesisResult result = miniMaxVoiceClient.synthesize(request, promptFileId);
+		MiniMaxSynthesisResult result;
+		try {
+			result = miniMaxVoiceClient.synthesize(request, promptFileId);
+		} catch (RuntimeException exception) {
+			completed.setStatus(GenerationStatus.FAILED);
+			completed.setMessage("MiniMax 合成失败");
+			saveRecord(completed);
+			throw exception;
+		}
 		completed.setStatus(GenerationStatus.COMPLETED);
 		completed.setMessage("生成成功");
 		Path audioPath = storage.save(completed.getId(), result.format(), result.audioBytes());

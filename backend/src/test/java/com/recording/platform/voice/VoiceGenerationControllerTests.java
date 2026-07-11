@@ -9,6 +9,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.recording.platform.api.GlobalApiExceptionHandler;
+import com.recording.platform.api.RequestIdFilter;
 import com.recording.platform.voice.dto.VoiceGenerationResponse;
 import com.recording.platform.voice.model.GenerationMode;
 import com.recording.platform.voice.model.GenerationStatus;
@@ -53,14 +55,17 @@ class VoiceGenerationControllerTests {
 			.when(service)
 			.deleteVoice("voice-1");
 		MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new VoiceGenerationController(service))
-			.setControllerAdvice(new VoiceGenerationErrorHandler())
+			.setControllerAdvice(new GlobalApiExceptionHandler())
+			.addFilters(new RequestIdFilter())
 			.build();
 
 		mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete(
 				"/api/voice-generation/voices/voice-1"
 			))
 			.andExpect(status().isBadRequest())
-			.andExpect(jsonPath("$.error").value("音色删除失败"));
+			.andExpect(jsonPath("$.code").value("VOICE_GENERATION_ERROR"))
+			.andExpect(jsonPath("$.message").value("音色删除失败"))
+			.andExpect(jsonPath("$.requestId").isNotEmpty());
 	}
 
 	@Test
@@ -82,12 +87,14 @@ class VoiceGenerationControllerTests {
 	@Test
 	void maxUploadSizeExceededReturnsReadableJson() throws Exception {
 		MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new UploadFailureController())
-			.setControllerAdvice(new VoiceGenerationErrorHandler())
+			.setControllerAdvice(new GlobalApiExceptionHandler())
+			.addFilters(new RequestIdFilter())
 			.build();
 
 		mockMvc.perform(get("/simulate-upload-too-large"))
 			.andExpect(status().is(413))
-			.andExpect(jsonPath("$.error").value("上传音频文件过大，请使用不超过 20MB 的 mp3、m4a 或 wav 母带音频"));
+			.andExpect(jsonPath("$.code").value("UPLOAD_TOO_LARGE"))
+			.andExpect(jsonPath("$.message").value("上传内容超过 100MB 全局限制"));
 	}
 
 	@RestController

@@ -1,0 +1,46 @@
+package com.recording.platform.identity.model;
+
+import java.time.Instant;
+import lombok.Getter;
+import lombok.Setter;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.annotation.Version;
+import org.springframework.data.mongodb.core.index.CompoundIndex;
+import org.springframework.data.mongodb.core.index.CompoundIndexes;
+import org.springframework.data.mongodb.core.index.Indexed;
+import org.springframework.data.mongodb.core.mapping.Document;
+
+@Getter
+@Setter
+@Document(collection = "users")
+@CompoundIndexes({
+	@CompoundIndex(
+		name = "unique_wechat_identity",
+		def = "{'wechatAppId': 1, 'wechatOpenId': 1}",
+		unique = true,
+		sparse = true
+	)
+})
+public class UserAccount {
+	@Id
+	private String id;
+
+	@Version
+	private Long version;
+
+	@Indexed(unique = true)
+	private String internalUserNo;
+
+	@Indexed(unique = true, sparse = true)
+	private String username;
+
+	private String name;
+	private String passwordHash;
+	private UserRole role;
+	private UserStatus status;
+	private boolean firstPasswordChangeRequired;
+	private String wechatAppId;
+	private String wechatOpenId;
+	private Instant createdAt;
+	private Instant updatedAt;
+}

@@ -1,8 +1,13 @@
 package com.recording.platform.voice.model;
 
 import java.time.Instant;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.Indexed;
+import org.springframework.data.mongodb.core.mapping.Document;
 
+@Document(collection = "voice_generation_records")
 public class VoiceGenerationRecord {
+	@Id
 	private String id;
 	private GenerationMode mode;
 	private GenerationStatus status;
@@ -15,6 +20,7 @@ public class VoiceGenerationRecord {
 	private String audioFormat;
 	private long durationMillis;
 	private String message;
+	@Indexed
 	private Instant createdAt;
 
 	public String getId() {
