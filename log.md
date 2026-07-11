@@ -325,3 +325,20 @@
   - 按 TDD 先运行身份/Mongo/统一错误/语音持久化测试，确认缺少生产能力时测试编译失败；并发会话、未知 OpenID、非法 requestId、统一 400、首次改密 CSRF、密码 422、非法姓名 422、不支持媒体类型 415、管理员初始密码和首管理员 BCrypt 上限场景均先观察到预期红灯，再完成最小修复。
   - MiniMax 失败测试在保存时记录不可变状态快照；临时移除异常分支第二次保存后测试按预期红灯，恢复后转绿，排除同一可变对象别名造成的假阳性。
   - `backend\\mvnw.cmd test`：通过，73 个测试全部通过；本机未启动 MongoDB，测试期间驱动后台连接提示被拒绝，但测试不依赖开发机 MongoDB，Maven 最终为 `BUILD SUCCESS`。
+
+## 2026-07-11 22:02 统一身份接口错误契约
+
+- 时间：2026-07-11 22:02
+- commit ID：待提交后补记
+- 修改内容：
+  - 调整管理员创建请求的初始密码 DTO 约束：缺字段或 `null` 仍按结构错误返回 400，空、短或超过 BCrypt 上限的已提供值统一交由服务层返回 422 `PASSWORD_TOO_WEAK`。
+  - 会话认证过滤器复用统一 `ApiErrorWriter`；访问会话存储遇到数据库不可用时返回脱敏 503 `DATABASE_UNAVAILABLE`，其他未预期运行时异常返回脱敏 500 `INTERNAL_ERROR`。
+  - 新增独立身份错误契约集成测试，覆盖管理员真实创建端点、真实 Spring Security 过滤器链、请求 ID 回传及异常敏感文本不泄漏。
+  - 现有 `README.md` 与 `AGENTS.md` 已明确上述 422、503/500 和脱敏契约，本轮未重复修改；未修改 Web、小程序或每日维护日志。
+- 验证结果：
+  - 管理员创建端点测试先确认空、短、129 字符初始密码均错误返回 400，修复后 3 个用例统一返回 422 `PASSWORD_TOO_WEAK`。
+  - 会话过滤器测试先确认数据库异常和未预期异常会直接穿透，修复后分别返回统一脱敏 503 与 500 响应。
+  - `backend\\mvnw.cmd "-Dtest=GlobalApiExceptionHandlerTests,AdminUserServiceTests,SecurityAuthorizationTests,IdentityErrorContractIntegrationTests" test`：35/35 通过。
+  - `backend\\mvnw.cmd test`：78/78 通过，0 failures、0 errors、0 skipped，`BUILD SUCCESS`；本机未启动 MongoDB，驱动后台连接提示被拒绝但不影响测试结果。
+  - `git diff --check`：exit 0，仅有工作区 LF/CRLF 转换提示，无空白错误。
+  - 敏感扫描：API Key/长 Bearer、已填写敏感环境变量、带凭证 MongoDB URI 均无匹配。

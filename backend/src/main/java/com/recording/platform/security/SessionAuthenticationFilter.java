@@ -1,6 +1,7 @@
 package com.recording.platform.security;
 
 import com.recording.platform.api.ApiException;
+import com.recording.platform.api.ApiErrorWriter;
 import com.recording.platform.identity.service.SessionIdentity;
 import com.recording.platform.identity.service.SessionService;
 import jakarta.servlet.FilterChain;
@@ -13,7 +14,9 @@ import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -26,15 +29,18 @@ import org.springframework.web.filter.OncePerRequestFilter;
 public class SessionAuthenticationFilter extends OncePerRequestFilter {
 	public static final String WEB_COOKIE_NAME = "REC_WEB_SESSION";
 	private final SessionService sessions;
+	private final ApiErrorWriter errorWriter;
 	private final boolean secureCookie;
 	private final Duration webCookieLifetime;
 
 	public SessionAuthenticationFilter(
 		SessionService sessions,
+		ApiErrorWriter errorWriter,
 		@Value("${recording.web-session.cookie-secure:false}") boolean secureCookie,
 		@Value("${recording.web-session.idle-hours:12}") long webIdleHours
 	) {
 		this.sessions = sessions;
+		this.errorWriter = errorWriter;
 		this.secureCookie = secureCookie;
 		this.webCookieLifetime = Duration.ofHours(Math.max(webIdleHours, 1));
 	}
@@ -47,7 +53,27 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
 	) throws ServletException, IOException {
 		String authenticatedWebToken = null;
 		if (SecurityContextHolder.getContext().getAuthentication() == null) {
-			authenticatedWebToken = tryAuthenticate(request);
+			try {
+				authenticatedWebToken = tryAuthenticate(request);
+			} catch (DataAccessResourceFailureException exception) {
+				errorWriter.write(
+					request,
+					response,
+					HttpStatus.SERVICE_UNAVAILABLE,
+					"DATABASE_UNAVAILABLE",
+					"数据库暂时不可用"
+				);
+				return;
+			} catch (RuntimeException exception) {
+				errorWriter.write(
+					request,
+					response,
+					HttpStatus.INTERNAL_SERVER_ERROR,
+					"INTERNAL_ERROR",
+					"服务暂时不可用，请稍后重试"
+				);
+				return;
+			}
 		}
 		if (StringUtils.hasText(authenticatedWebToken) && shouldRenewWebCookie(request)) {
 			response.addHeader(HttpHeaders.SET_COOKIE, renewedCookie(authenticatedWebToken).toString());
