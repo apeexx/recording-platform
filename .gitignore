@@ -43,6 +43,7 @@ backend/target/
 backend/storage/uploads/
 backend/storage/temp/
 backend/storage/voice-generation/
+backend/storage/recordings/
 
 # WeChat Mini Program
 miniprogram_npm/

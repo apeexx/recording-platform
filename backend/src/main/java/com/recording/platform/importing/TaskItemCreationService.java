@@ -1,0 +1,168 @@
+package com.recording.platform.importing;
+
+import com.recording.platform.api.ApiException;
+import com.recording.platform.identity.model.UserRole;
+import com.recording.platform.media.MediaAsset;
+import com.recording.platform.media.MediaAssetStore;
+import com.recording.platform.security.PlatformPrincipal;
+import com.recording.platform.task.model.OperationHistory;
+import com.recording.platform.task.model.ReferenceType;
+import com.recording.platform.task.model.TaskItem;
+import com.recording.platform.task.model.TaskItemStatus;
+import com.recording.platform.task.model.TaskLifecycle;
+import com.recording.platform.task.model.TaskRecord;
+import com.recording.platform.task.model.TaskVersion;
+import com.recording.platform.task.store.TaskItemStore;
+import com.recording.platform.task.store.TaskStore;
+import com.recording.platform.task.store.TaskVersionStore;
+import java.net.URI;
+import java.time.Clock;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
+import java.util.UUID;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+
+@Service
+public class TaskItemCreationService {
+	private final TaskStore tasks;
+	private final TaskVersionStore versions;
+	private final TaskItemStore items;
+	private final SafeRemoteMediaDownloader downloader;
+	private final MediaAssetStore assets;
+	private final Clock clock;
+
+	public TaskItemCreationService(
+		TaskStore tasks,
+		TaskVersionStore versions,
+		TaskItemStore items,
+		SafeRemoteMediaDownloader downloader,
+		MediaAssetStore assets,
+		Clock clock
+	) {
+		this.tasks = tasks;
+		this.versions = versions;
+		this.items = items;
+		this.downloader = downloader;
+		this.assets = assets;
+		this.clock = clock;
+	}
+
+	public TaskItem add(
+		String taskId,
+		AddTaskItemCommand command,
+		String operationId,
+		PlatformPrincipal actor
+	) {
+		if (actor == null || actor.role() != UserRole.ADMIN) throw forbidden();
+		String normalizedOperationId = requiredOperationId(operationId);
+		Optional<TaskItem> replay = items.findByTaskIdAndCreationOperationId(taskId, normalizedOperationId);
+		if (replay.isPresent()) return replay.get();
+		TaskRecord task = tasks.findById(taskId)
+			.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "TASK_NOT_FOUND", "任务不存在"));
+		if (task.getLifecycle() != TaskLifecycle.RUNNING && task.getLifecycle() != TaskLifecycle.PAUSED) {
+			throw new ApiException(HttpStatus.CONFLICT, "TASK_VERSION_NOT_PUBLISHED", "任务发布后才能添加数据");
+		}
+		TaskVersion version = versions.findById(task.getCurrentVersionId())
+			.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "TASK_VERSION_NOT_FOUND", "任务版本不存在"));
+		if (!version.isPublished()) {
+			throw new ApiException(HttpStatus.CONFLICT, "TASK_VERSION_NOT_PUBLISHED", "任务版本尚未发布");
+		}
+		String externalId = trimToNull(command.externalItemId());
+		String text = trimToNull(command.referenceText());
+		String audioUrl = trimToNull(command.referenceAudioUrl());
+		String videoUrl = trimToNull(command.referenceVideoUrl());
+		if (text == null && audioUrl == null && videoUrl == null) {
+			throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "ITEM_REFERENCE_REQUIRED", "每条数据至少需要一种参考内容");
+		}
+		validateEnabledReferences(version, text, audioUrl, videoUrl);
+		if (externalId != null && items.findByTaskIdAndExternalItemId(taskId, externalId).isPresent()) {
+			throw new ApiException(HttpStatus.CONFLICT, "EXTERNAL_ITEM_EXISTS", "externalItemId 在任务内已存在");
+		}
+		long sequence = tasks.nextItemSequence(taskId);
+		if (sequence < 1) throw new ApiException(HttpStatus.CONFLICT, "TASK_STATE_CHANGED", "任务状态已变化");
+		String itemCode = "I" + String.format(Locale.ROOT, "%06d", sequence);
+		TaskItem item = new TaskItem();
+		item.setId(UUID.randomUUID().toString());
+		item.setTaskId(taskId);
+		item.setTaskVersionId(version.getId());
+		item.setTaskVersionNumber(version.getVersionNumber());
+		item.setSequence(sequence);
+		item.setItemCode(itemCode);
+		item.setExternalItemId(externalId);
+		item.setCreationOperationId(normalizedOperationId);
+		item.setReferenceText(text);
+		item.setStatus(TaskItemStatus.AVAILABLE);
+		Instant now = Instant.now(clock);
+		item.setCreatedAt(now);
+		item.setUpdatedAt(now);
+		List<MediaAsset> downloaded = new ArrayList<>();
+		try {
+			if (audioUrl != null) {
+				MediaAsset audio = downloader.download(uri(audioUrl), RemoteMediaType.AUDIO, taskId, itemCode);
+				downloaded.add(audio);
+				audio.setItemId(item.getId());
+				assets.save(audio);
+				item.setReferenceAudioMediaId(audio.getId());
+			}
+			if (videoUrl != null) {
+				MediaAsset video = downloader.download(uri(videoUrl), RemoteMediaType.VIDEO, taskId, itemCode);
+				downloaded.add(video);
+				video.setItemId(item.getId());
+				assets.save(video);
+				item.setReferenceVideoMediaId(video.getId());
+			}
+			item.getOperations().add(OperationHistory.creation(
+				normalizedOperationId,
+				actor.userId(),
+				actor.username() == null ? actor.name() : actor.username(),
+				now,
+				item
+			));
+			return items.save(item);
+		} catch (DuplicateKeyException exception) {
+			cleanup(downloaded);
+			return items.findByTaskIdAndCreationOperationId(taskId, normalizedOperationId)
+				.orElseThrow(() -> new ApiException(HttpStatus.CONFLICT, "ITEM_CONFLICT", "任务条目已存在"));
+		} catch (RuntimeException exception) {
+			cleanup(downloaded);
+			throw exception;
+		}
+	}
+
+	private void validateEnabledReferences(TaskVersion version, String text, String audio, String video) {
+		if (text != null && !version.getReferenceTypes().contains(ReferenceType.TEXT)
+			|| audio != null && !version.getReferenceTypes().contains(ReferenceType.AUDIO)
+			|| video != null && !version.getReferenceTypes().contains(ReferenceType.VIDEO)) {
+			throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "REFERENCE_TYPE_NOT_ENABLED", "参考内容类型未在任务版本中启用");
+		}
+	}
+
+	private URI uri(String value) {
+		try {
+			return URI.create(value);
+		} catch (IllegalArgumentException exception) {
+			throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "REMOTE_URL_INVALID", "远程媒体 URL 不合法");
+		}
+	}
+
+	private void cleanup(List<MediaAsset> downloaded) {
+		for (MediaAsset asset : downloaded) {
+			try { downloader.delete(asset); } catch (RuntimeException ignored) { }
+		}
+	}
+
+	private String requiredOperationId(String operationId) {
+		if (operationId == null || operationId.isBlank()) {
+			throw new ApiException(HttpStatus.BAD_REQUEST, "OPERATION_ID_REQUIRED", "Idempotency-Key 不能为空");
+		}
+		return operationId.trim();
+	}
+
+	private String trimToNull(String value) { return value == null || value.isBlank() ? null : value.trim(); }
+	private ApiException forbidden() { return new ApiException(HttpStatus.FORBIDDEN, "ACCESS_DENIED", "没有权限执行此操作"); }
+}

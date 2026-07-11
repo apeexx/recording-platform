@@ -342,3 +342,24 @@
   - `backend\\mvnw.cmd test`：78/78 通过，0 failures、0 errors、0 skipped，`BUILD SUCCESS`；本机未启动 MongoDB，驱动后台连接提示被拒绝但不影响测试结果。
   - `git diff --check`：exit 0，仅有工作区 LF/CRLF 转换提示，无空白错误。
   - 敏感扫描：API Key/长 Bearer、已填写敏感环境变量、带凭证 MongoDB URI 均无匹配。
+
+## 2026-07-11 23:24 平台、任务池与录音采集后端闭环
+
+- 时间：2026-07-11 23:24
+- commit ID：待提交后补记
+- 修改内容：
+  - 新增平台 CRUD、任务生命周期和发布后不可变版本；任务结构变更创建下一版本，限制任务编码、参考组件、微信采样率、单声道和首期 AI 禁用。
+  - 新增任务授权、权限申请及 PENDING 条件原子决策；授权撤销只阻止新领取，已批准申请重放不会复活已撤销授权。
+  - 新增任务池条目、可选 externalItemId 部分唯一索引、任务内 itemCode 序号和 Mongo `findAndModify` 原子领取；保证采集员全系统最多一条待录制作业。
+  - 新增 operationId/assignmentId/revision 条件提交、人工待审、驳回返修和释放；幂等历史绑定原操作者，释放清当前结果并保留提交/操作历史。
+  - 新增 WAV/MP3 录音校验、100MB 限制、稳定 `current.ext` 临时写入/原子替换/失败回滚、条目级并发串行、媒体鉴权和单 Range 读取。
+  - 新增单条数据添加与 CSV/XLSX 异步导入，支持 operationId 幂等、部分成功和失败行重试；部分成功后只留失败行重试 CSV，移除成功行签名 URL。
+  - 为平台、任务生命周期、授权、领取和导入重试等全部 Task 2 非 operationId 写入口增加持久化 Idempotency-Key，按操作者与操作类型保存 IN_PROGRESS/COMPLETED 首次响应并阻止重复执行。
+  - 为任务/版本跨文档写入增加失败补偿；导入增加 50000 行上限、每 100 行进度、1000 条错误摘要上限、完整失败行号、10 分钟 worker 租约、心跳和启动恢复。
+  - 新增远程参考媒体下载策略，默认 HTTPS，限制超时、重定向、类型和大小，阻止本机/私网等地址并将校验 IP 绑定到实际连接；持久化只保留 hostname、状态和脱敏摘要。
+  - 修复 Web Cookie 请求夹带 Bearer 头时可能跳过 CSRF、重复 Mongo status 条件、跨采集员 operationId 重放、驳回快照不一致、领取 revision/历史非同次更新、删除异常被吞掉及大媒体魔数检查整文件入堆问题。
+  - 更新 `.env.example`、`.gitignore`、`README.md`、`AGENTS.md` 和后端配置；未修改 Web、小程序或每日维护日志。
+- 验证结果：
+  - 按 TDD 分批观察任务/版本、授权/领取、媒体/SSRF、导入、持久化幂等、失败补偿和租约恢复的预期红灯并完成最小实现。
+  - Task 2 定向 `clean test`：60/60 通过，0 failures、0 errors、0 skipped，`BUILD SUCCESS`。
+  - 后端全量 `clean test`：138/138 通过，0 failures、0 errors、0 skipped，`BUILD SUCCESS`；本机未启动 MongoDB，Spring 上下文仅输出后台连接拒绝提示，不影响退出码和测试结果。

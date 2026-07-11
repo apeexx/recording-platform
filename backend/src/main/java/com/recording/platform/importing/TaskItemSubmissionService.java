@@ -1,0 +1,168 @@
+package com.recording.platform.importing;
+
+import com.recording.platform.api.ApiException;
+import com.recording.platform.media.MediaAsset;
+import com.recording.platform.media.MediaAssetStore;
+import com.recording.platform.media.MediaKind;
+import com.recording.platform.media.PreparedRecording;
+import com.recording.platform.media.RecordingMediaStorage;
+import com.recording.platform.media.RecordingReplacement;
+import com.recording.platform.security.PlatformPrincipal;
+import com.recording.platform.task.model.SubmittedRecording;
+import com.recording.platform.task.model.TaskItem;
+import com.recording.platform.task.model.TaskItemResult;
+import com.recording.platform.task.model.TaskRecord;
+import com.recording.platform.task.model.TaskVersion;
+import com.recording.platform.task.service.SubmitTaskItemCommand;
+import com.recording.platform.task.service.TaskItemActionResult;
+import com.recording.platform.task.service.TaskPoolService;
+import com.recording.platform.task.store.TaskItemStore;
+import com.recording.platform.task.store.TaskStore;
+import com.recording.platform.task.store.TaskVersionStore;
+import java.time.Clock;
+import java.time.Instant;
+import java.util.concurrent.locks.ReentrantLock;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
+
+@Service
+public class TaskItemSubmissionService {
+	private static final int ITEM_LOCK_STRIPES = 256;
+	private final TaskItemStore items;
+	private final TaskStore tasks;
+	private final TaskVersionStore versions;
+	private final TaskPoolService pool;
+	private final RecordingMediaStorage storage;
+	private final MediaAssetStore assets;
+	private final Clock clock;
+	private final ReentrantLock[] itemLocks = createLocks();
+
+	public TaskItemSubmissionService(
+		TaskItemStore items,
+		TaskStore tasks,
+		TaskVersionStore versions,
+		TaskPoolService pool,
+		RecordingMediaStorage storage,
+		MediaAssetStore assets,
+		Clock clock
+	) {
+		this.items = items;
+		this.tasks = tasks;
+		this.versions = versions;
+		this.pool = pool;
+		this.storage = storage;
+		this.assets = assets;
+		this.clock = clock;
+	}
+
+	public TaskItemActionResult submit(
+		String itemId,
+		SubmitTaskItemForm form,
+		MultipartFile audio,
+		PlatformPrincipal actor
+	) {
+		ReentrantLock itemLock = itemLock(itemId);
+		itemLock.lock();
+		try {
+			return submitLocked(itemId, form, audio, actor);
+		} finally {
+			itemLock.unlock();
+		}
+	}
+
+	private TaskItemActionResult submitLocked(
+		String itemId,
+		SubmitTaskItemForm form,
+		MultipartFile audio,
+		PlatformPrincipal actor
+	) {
+		TaskItem item = requireItem(itemId);
+		if (item.getOperations().stream().anyMatch((operation) -> form.operationId().equals(operation.getOperationId()))) {
+			return pool.submit(itemId, new SubmitTaskItemCommand(
+				form.operationId(), form.assignmentId(), form.expectedRevision(), form.text(), null
+			), actor);
+		}
+		TaskItemResult previous = item.getCurrentResult();
+		SubmittedRecording previousAudio = previous == null ? null : previous.audio();
+		if (audio == null || audio.isEmpty()) {
+			TaskItemActionResult result = pool.submit(itemId, new SubmitTaskItemCommand(
+				form.operationId(), form.assignmentId(), form.expectedRevision(), form.text(), null
+			), actor);
+			retire(previousAudio, true);
+			return result;
+		}
+		TaskRecord task = tasks.findById(item.getTaskId())
+			.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "TASK_NOT_FOUND", "任务不存在"));
+		TaskVersion version = versions.findById(item.getTaskVersionId())
+			.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "TASK_VERSION_NOT_FOUND", "任务版本不存在"));
+		PreparedRecording prepared = storage.prepare(audio, version, task.getTaskCode(), item.getItemCode());
+		RecordingReplacement replacement = storage.activate(
+			prepared,
+			previousAudio == null ? null : previousAudio.relativePath()
+		);
+		MediaAsset asset = asset(item, prepared.recording());
+		TaskItemActionResult result;
+		try {
+			assets.save(asset);
+			result = pool.submit(itemId, new SubmitTaskItemCommand(
+				form.operationId(), form.assignmentId(), form.expectedRevision(), form.text(), prepared.recording()
+			), actor);
+		} catch (RuntimeException exception) {
+			replacement.rollback();
+			try {
+				assets.deleteById(asset.getId());
+			} catch (RuntimeException cleanupFailure) {
+				exception.addSuppressed(cleanupFailure);
+			}
+			throw exception;
+		}
+		SubmittedRecording committedAudio = result.result() == null ? null : result.result().audio();
+		if (committedAudio == null || !prepared.recording().mediaId().equals(committedAudio.mediaId())) {
+			replacement.rollback();
+			assets.deleteById(asset.getId());
+			return result;
+		}
+		replacement.complete();
+		retire(previousAudio, false);
+		return result;
+	}
+
+	private MediaAsset asset(TaskItem item, SubmittedRecording recording) {
+		MediaAsset asset = new MediaAsset();
+		asset.setId(recording.mediaId());
+		asset.setTaskId(item.getTaskId());
+		asset.setItemId(item.getId());
+		asset.setKind(MediaKind.RECORDING);
+		asset.setRelativePath(recording.relativePath());
+		asset.setContentType(recording.format().name().equals("WAV") ? "audio/wav" : "audio/mpeg");
+		asset.setSizeBytes(recording.sizeBytes());
+		asset.setAudioFormat(recording.format());
+		asset.setSampleRate(recording.sampleRate());
+		asset.setChannels(recording.channels());
+		asset.setDurationMillis(recording.durationMillis());
+		asset.setCreatedAt(Instant.now(clock));
+		return asset;
+	}
+
+	private void retire(SubmittedRecording recording, boolean deleteFile) {
+		if (recording == null) return;
+		if (deleteFile) storage.delete(recording.relativePath());
+		assets.deleteById(recording.mediaId());
+	}
+
+	private TaskItem requireItem(String itemId) {
+		return items.findById(itemId)
+			.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "TASK_ITEM_NOT_FOUND", "任务条目不存在"));
+	}
+
+	private ReentrantLock itemLock(String itemId) {
+		return itemLocks[Math.floorMod(itemId.hashCode(), itemLocks.length)];
+	}
+
+	private static ReentrantLock[] createLocks() {
+		ReentrantLock[] locks = new ReentrantLock[ITEM_LOCK_STRIPES];
+		for (int index = 0; index < locks.length; index++) locks[index] = new ReentrantLock();
+		return locks;
+	}
+}

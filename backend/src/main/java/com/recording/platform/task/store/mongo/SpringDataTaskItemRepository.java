@@ -1,0 +1,15 @@
+package com.recording.platform.task.store.mongo;
+
+import com.recording.platform.task.model.TaskItem;
+import com.recording.platform.task.model.TaskItemStatus;
+import java.util.Optional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.mongodb.repository.MongoRepository;
+
+interface SpringDataTaskItemRepository extends MongoRepository<TaskItem, String> {
+	Optional<TaskItem> findFirstByCollectorIdAndStatus(String collectorId, TaskItemStatus status);
+	Optional<TaskItem> findByTaskIdAndExternalItemId(String taskId, String externalItemId);
+	Optional<TaskItem> findByTaskIdAndCreationOperationId(String taskId, String creationOperationId);
+	Page<TaskItem> findAllByTaskId(String taskId, Pageable pageable);
+}

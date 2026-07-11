@@ -1,6 +1,6 @@
 # 录音任务平台
 
-录音任务平台用于管理录音任务的创建、领取、录制、上传和审核流程。当前仓库处于基础设施阶段，已具备管理员/审核员后台身份、录音人员微信登录边界、MongoDB 会话与语音生成持久化；任务领取、录音上传和审核状态机仍待后续阶段实现。
+录音任务平台用于管理录音任务的创建、领取、录制、上传和审核流程。当前仓库已具备管理员/审核员后台身份、录音人员微信登录边界、MongoDB 会话、语音生成持久化，以及平台、不可变任务版本、授权申请、任务池原子领取、录音提交/返修/释放、媒体读取和 CSV/XLSX 异步导入后端闭环；完整审核状态机和对应前端页面仍待后续阶段实现。
 
 ## 项目定位
 
@@ -32,14 +32,14 @@ recording-platform/
 
 - `apps/web`：管理员 Web 端和审核 Web 端的前端工程，当前为 Vite Vue 空项目。
 - `apps/miniprogram`：微信小程序录音端，当前仅保留占位说明。
-- `backend`：Spring Boot 后端服务，提供身份、会话、后台用户管理、微信登录边界和语音生成接口。
+- `backend`：Spring Boot 后端服务，提供身份、会话、用户管理、任务池、录音媒体、导入和语音生成接口。
 - `scripts`：后续放置本地开发、数据处理或运维辅助脚本。
 - `AGENTS.md`：Codex 长期执行规则，同时记录接口和数据库说明入口。
 - `log.md`：AI 辅助修改日志。
 
 ## 当前阶段
 
-当前已实现项目根目录、Web 端主题基础、管理员端前端导航壳、后端身份/会话基础和语音生成 Web 生产台。任务管理、录音上传、审核流和小程序业务页面仍未实现。
+当前已实现项目根目录、Web 端主题基础、管理员端前端导航壳、后端身份/会话基础、语音生成 Web 生产台和任务采集后端闭环。管理员任务页面、审核工作台、机器审核与小程序业务页面仍未实现。
 
 仓库内不维护 Docker Compose 配置。后端运行需要开发者在本机或外部环境提供 MongoDB；默认连接为 `mongodb://localhost:27017/recording_platform`，真实账号密码只能放在本地环境变量或未提交的 `.env` 中。
 
@@ -82,6 +82,9 @@ MINIMAX_API_BASE_URL=https://api.minimaxi.com
 VOICE_GENERATION_STORAGE_DIR=backend/storage/voice-generation
 MONGODB_URI=mongodb://localhost:27017/recording_platform
 RECORDING_STORAGE_DIR=backend/storage/recordings
+REMOTE_MEDIA_ALLOW_HTTP=false
+REMOTE_MEDIA_TIMEOUT_SECONDS=15
+REMOTE_MEDIA_MAX_REDIRECTS=3
 WECHAT_APP_ID=
 WECHAT_APP_SECRET=
 INITIAL_ADMIN_USERNAME=
@@ -117,6 +120,9 @@ Windows PowerShell 本地联调可使用一键启动脚本：
 - 同一后台账号只允许一个活动 Web 会话。重复登录返回 `409 ACCOUNT_IN_USE` 和短时一次性 `takeoverToken`；确认接管后旧会话返回 `401 SESSION_REPLACED`。
 - 小程序只向后端提交 `wx.login` 临时 `code`。后端使用 `WECHAT_APP_ID`、`WECHAT_APP_SECRET` 调用微信 `jscode2session`，不接受客户端直接提交 OpenID；小程序 Bearer token 默认 30 天。
 - `/api/voice-generation/**` 与 `/api/admin/**` 仅 `ADMIN` 可访问；除 Web/微信登录与接管接口外，其余 `/api/**` 默认要求认证。
+- `/api/platforms/**`、任务管理、授权管理、任务条目管理和导入仅 `ADMIN` 可写；`COLLECTOR` 通过小程序 Bearer token 申请权限、领取、提交和释放本人条目；`REVIEWER`/`ADMIN` 可驳回待审结果。
+- Web Cookie 写请求必须携带 CSRF token。只有不含 `REC_WEB_SESSION` Cookie 的小程序 Bearer 采集写请求豁免 CSRF，夹带 Bearer 头不能绕过 Web CSRF。
+- Task 2 所有写接口必须提供幂等标识：平台、任务、授权、领取和导入入口使用 `Idempotency-Key`；提交、释放、驳回使用请求中的 `operationId`。通用幂等记录按操作者、操作类型和幂等键唯一，重复请求返回首次完成结果；相同请求仍在处理时返回 `409 OPERATION_IN_PROGRESS`。
 - 所有响应回传 `X-Request-Id`；统一错误结构为 `{ code, message, requestId, details? }`，未预期异常不返回内部堆栈、数据库消息或敏感 payload。
 - 缺字段、未知字段、类型错误和 malformed JSON 等请求结构问题返回 400，不支持的 `Content-Type` 返回 415；字段结构有效但新密码少于 8 个字符或 UTF-8 超过 72 字节、非法姓名或非法后台角色等业务值问题返回 422。
 
@@ -136,12 +142,46 @@ GET  /api/admin/users?page=0&size=20
 POST /api/admin/users/{userId}/disable
 ```
 
+## 任务池、录音媒体与导入
+
+- 平台和任务：`/api/platforms` 提供 ADMIN CRUD；`/api/tasks` 提供创建、结构编辑、发布、暂停、恢复、结束和分页查询。任务编码限制为字母、数字、下划线或连字符。已发布任务修改结构时创建下一不可变版本，旧条目继续绑定旧版本；跨 `tasks`/`task_versions` 写入失败时执行删除新文档或恢复旧版本补偿；首期固定 `aiEnabled=false`。
+- 授权：`/api/tasks/{taskId}/grants` 与 `/access-requests` 管理直接授权、申请、原子批准/驳回和撤销。撤销只阻止新领取，不影响已领取条目的提交或释放；批准申请重放不会复活后来已撤销的授权。
+- 数据池：ADMIN 使用 `POST /api/tasks/{taskId}/items` 单条添加并传 `Idempotency-Key`，或通过 `/api/import-jobs` 异步导入。COLLECTOR 使用 `POST /api/tasks/{taskId}/items/start` 原子领取或继续全系统唯一的当前条目。
+- 提交与返修：`POST /api/task-items/{itemId}/submit` 接收 multipart 的 `operationId`、`assignmentId`、`expectedRevision`、可选文字和录音；重复 operationId 返回首次结果，过期修订返回 `409 STALE_STATE`。驳回保留原采集员，释放清除当前结果但保留提交和操作历史。
+- 录音文件：`RECORDING_STORAGE_DIR` 下只使用相对路径；当前录音固定为 `recordings/{taskCode}/{itemCode}/current.wav|mp3`。上传先进入 `temp/`，完成扩展名、魔数、100MB、单声道、采样率和时长校验后原子替换，失败恢复旧文件。`GET /api/media/{mediaId}` 鉴权读取并支持单 Range。
+- 导入固定列为 `externalItemId`、`referenceText`、`referenceAudioUrl`、`referenceVideoUrl`，支持 `.csv` 和 `.xlsx`、部分成功、失败行重试及幂等。单文件最多 50000 个数据行；每 100 行持久化一次进度，行错误摘要最多保存 1000 条，完整失败行号单独保留用于重试。worker 使用 10 分钟 Mongo 租约和心跳，应用启动时自动重新排队 PENDING 或租约过期的 PROCESSING 作业。部分成功后源文件立即改写为只含失败行的重试 CSV，成功行签名 URL 不再落盘。
+- 远程参考媒体生产默认只允许 HTTPS；每次重定向重新执行协议、主机和地址策略，禁止本机、环回、私网、链路本地与多播地址，并将校验后的地址绑定到实际连接。开发环境只有显式设置 `REMOTE_MEDIA_ALLOW_HTTP=true` 才允许 HTTP，仍不允许私网目标。音频上限 100MB、视频上限 500MB。
+
+任务相关分页响应统一为 `{ items, page, size, total }`。常用端点：
+
+```text
+POST/GET/PUT/DELETE /api/platforms[/{id}]
+POST/GET/PUT        /api/tasks[/{taskId}]
+POST                /api/tasks/{taskId}/publish|pause|resume|end
+POST/GET/DELETE     /api/tasks/{taskId}/grants[/{userId}]
+POST/GET            /api/tasks/{taskId}/access-requests
+POST                /api/tasks/{taskId}/access-requests/{requestId}/approve|reject
+POST/GET            /api/tasks/{taskId}/items
+POST                /api/tasks/{taskId}/items/start
+GET                 /api/task-items/{itemId}
+POST                /api/task-items/{itemId}/submit|release|reject
+POST/GET            /api/import-jobs[/{jobId}]
+POST                /api/import-jobs/{jobId}/retry
+GET                 /api/media/{mediaId}
+```
+
 MongoDB 当前集合：
 
 - `users`：后台用户名、内部用户编号和测试期 `(wechatAppId, wechatOpenId)` 唯一身份。
 - `sessions`：仅保存令牌哈希，包含状态、最后访问时间和 TTL 到期时间。
 - `voice_generation_records`：语音生成记录。
 - `voice_generation_configs`：默认声音配置。
+- `platforms`、`tasks`、`task_versions`：平台、任务生命周期和不可变版本快照。
+- `task_grants`、`task_access_requests`：任务授权与待决申请。
+- `task_items`：池条目、领取归属、当前结果、提交历史和操作历史。
+- `media_assets`：参考媒体与当前录音元数据，只保存相对路径。
+- `import_jobs`：异步导入文件摘要、分批进度、失败行号、有限脱敏行错误和 worker 租约。
+- `idempotency_records`：Task 2 通用写操作的 IN_PROGRESS/COMPLETED 状态与首次响应快照。
 
 测试默认使用 mock/fake store，不依赖开发机 MongoDB；需要真实 Mongo 集成测试时单独提供 `MONGODB_TEST_URI`，不得复用生产库。
 

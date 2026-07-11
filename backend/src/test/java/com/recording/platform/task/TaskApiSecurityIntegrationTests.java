@@ -1,0 +1,268 @@
+package com.recording.platform.task;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.lenient;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import com.recording.platform.RecordingPlatformBackendApplication;
+import com.recording.platform.idempotency.IdempotencyService;
+import com.recording.platform.identity.model.SessionType;
+import com.recording.platform.identity.model.UserRole;
+import com.recording.platform.importing.ImportJobService;
+import com.recording.platform.importing.TaskItemActionService;
+import com.recording.platform.importing.TaskItemSubmissionService;
+import com.recording.platform.security.PlatformPrincipal;
+import com.recording.platform.task.model.ImportJob;
+import com.recording.platform.task.model.ImportJobStatus;
+import com.recording.platform.task.model.PlatformRecord;
+import com.recording.platform.task.model.TaskItem;
+import com.recording.platform.task.model.TaskItemStatus;
+import com.recording.platform.task.model.AccessRequestStatus;
+import com.recording.platform.task.model.TaskAccessRequest;
+import com.recording.platform.task.model.TaskLifecycle;
+import com.recording.platform.task.model.TaskRecord;
+import com.recording.platform.task.service.TaskAccessService;
+import com.recording.platform.task.service.TaskManagementService;
+import com.recording.platform.task.service.TaskQueryService;
+import com.recording.platform.task.service.PlatformService;
+import com.recording.platform.task.service.TaskItemActionResult;
+import com.recording.platform.task.service.TaskPoolService;
+import jakarta.servlet.http.Cookie;
+import java.util.UUID;
+import java.util.function.Supplier;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.HttpHeaders;
+import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.security.authentication.TestingAuthenticationToken;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.web.servlet.MockMvc;
+
+@SpringBootTest(
+	classes = RecordingPlatformBackendApplication.class,
+	properties = {
+		"spring.data.mongodb.auto-index-creation=false",
+		"INITIAL_ADMIN_USERNAME=",
+		"INITIAL_ADMIN_PASSWORD="
+	}
+)
+@AutoConfigureMockMvc
+class TaskApiSecurityIntegrationTests {
+	@Autowired
+	private MockMvc mockMvc;
+
+	@MockitoBean
+	private PlatformService platformService;
+	@MockitoBean
+	private TaskPoolService taskPoolService;
+	@MockitoBean
+	private TaskItemSubmissionService submissionService;
+	@MockitoBean
+	private TaskItemActionService actionService;
+	@MockitoBean
+	private ImportJobService importJobService;
+	@MockitoBean
+	private TaskManagementService taskManagementService;
+	@MockitoBean
+	private TaskAccessService taskAccessService;
+	@MockitoBean
+	private TaskQueryService taskQueryService;
+	@MockitoBean
+	private IdempotencyService idempotencyService;
+
+	@BeforeEach
+	void executeControllerIdempotencyMutations() {
+		lenient().when(idempotencyService.execute(any(), anyString(), anyString(), any(), any()))
+			.thenAnswer((invocation) -> ((Supplier<?>) invocation.getArgument(4)).get());
+	}
+
+	@Test
+	void platformWritesAreAdminOnlyAndUseTheCreatedContract() throws Exception {
+		PlatformRecord platform = new PlatformRecord();
+		platform.setId("platform-1");
+		platform.setCode("WECHAT");
+		platform.setName("微信采集");
+		platform.setActive(true);
+		when(platformService.create(any())).thenReturn(platform);
+
+		mockMvc.perform(post("/api/platforms")
+				.with(user("admin").roles("ADMIN"))
+				.with(csrf())
+				.header("Idempotency-Key", "platform-create-1")
+				.contentType("application/json")
+				.content("{\"code\":\"WECHAT\",\"name\":\"微信采集\"}"))
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.id").value("platform-1"));
+		mockMvc.perform(post("/api/platforms")
+				.with(user("collector").roles("COLLECTOR"))
+				.with(csrf())
+				.header("Idempotency-Key", "platform-create-2")
+				.contentType("application/json")
+				.content("{\"code\":\"WECHAT\",\"name\":\"微信采集\"}"))
+			.andExpect(status().isForbidden());
+	}
+
+	@Test
+	void collectorBearerWritesSkipCookieCsrfButWebStyleRequestsDoNot() throws Exception {
+		PlatformPrincipal collector = principal("collector-1", UserRole.COLLECTOR, SessionType.MINIPROGRAM);
+		TaskItem claimed = new TaskItem();
+		claimed.setId("item-1");
+		claimed.setStatus(TaskItemStatus.RECORDING_PENDING);
+		when(taskPoolService.start("task-1", collector)).thenReturn(claimed);
+		TestingAuthenticationToken authentication = new TestingAuthenticationToken(collector, null, "ROLE_COLLECTOR");
+
+		mockMvc.perform(post("/api/tasks/task-1/items/start")
+				.with(authentication(authentication))
+				.header(HttpHeaders.AUTHORIZATION, "Bearer test-miniprogram-token")
+				.header("Idempotency-Key", "start-1"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.id").value("item-1"));
+		mockMvc.perform(post("/api/tasks/task-1/items/start")
+				.with(authentication(authentication))
+				.header("Idempotency-Key", "start-2"))
+			.andExpect(status().isForbidden())
+			.andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+	}
+
+	@Test
+	void multipartSubmissionAndImportUseTheirDocumentedRoleAndStatusContracts() throws Exception {
+		PlatformPrincipal collector = principal("collector-1", UserRole.COLLECTOR, SessionType.MINIPROGRAM);
+		TaskItemActionResult submitted = new TaskItemActionResult(
+			"item-1", TaskItemStatus.REVIEW_PENDING, 2, "assignment-1", null
+		);
+		when(submissionService.submit(anyString(), any(), any(), any())).thenReturn(submitted);
+		MockMultipartFile audio = new MockMultipartFile("audio", "voice.wav", "audio/wav", new byte[] {1, 2, 3});
+
+		mockMvc.perform(multipart("/api/task-items/item-1/submit")
+				.file(audio)
+				.param("operationId", "submit-1")
+				.param("assignmentId", "assignment-1")
+				.param("expectedRevision", "1")
+				.with(authentication(new TestingAuthenticationToken(collector, null, "ROLE_COLLECTOR")))
+				.header(HttpHeaders.AUTHORIZATION, "Bearer test-miniprogram-token"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.status").value("REVIEW_PENDING"));
+
+		ImportJob job = new ImportJob();
+		job.setId(UUID.randomUUID().toString());
+		job.setStatus(ImportJobStatus.PENDING);
+		when(importJobService.create(anyString(), anyString(), any(), any())).thenReturn(job);
+		MockMultipartFile csv = new MockMultipartFile("file", "items.csv", "text/csv", "header".getBytes());
+		mockMvc.perform(multipart("/api/import-jobs")
+				.file(csv)
+				.param("taskId", "task-1")
+				.header("Idempotency-Key", "import-1")
+				.with(user("admin").roles("ADMIN"))
+				.with(csrf()))
+			.andExpect(status().isAccepted())
+			.andExpect(jsonPath("$.importJobId").value(job.getId()));
+	}
+
+	@Test
+	void adminReleaseStillRequiresCsrfWhileCollectorBearerReleaseDoesNot() throws Exception {
+		TaskItemActionResult released = new TaskItemActionResult("item-1", TaskItemStatus.AVAILABLE, 3, null, null);
+		when(actionService.release(anyString(), anyString(), any(Long.class), any())).thenReturn(released);
+		mockMvc.perform(post("/api/task-items/item-1/release")
+				.with(user("admin").roles("ADMIN"))
+				.cookie(new Cookie("REC_WEB_SESSION", "test-web-token"))
+				.header(HttpHeaders.AUTHORIZATION, "Bearer injected-token")
+				.contentType("application/json")
+				.content("{\"operationId\":\"release-1\",\"expectedRevision\":2}"))
+			.andExpect(status().isForbidden());
+
+		mockMvc.perform(post("/api/task-items/item-1/release")
+				.with(user("admin").roles("ADMIN"))
+				.contentType("application/json")
+				.content("{\"operationId\":\"release-1\",\"expectedRevision\":2}"))
+			.andExpect(status().isForbidden());
+
+		PlatformPrincipal collector = principal("collector-1", UserRole.COLLECTOR, SessionType.MINIPROGRAM);
+		mockMvc.perform(post("/api/task-items/item-1/release")
+				.with(authentication(new TestingAuthenticationToken(collector, null, "ROLE_COLLECTOR")))
+				.header(HttpHeaders.AUTHORIZATION, "Bearer test-miniprogram-token")
+				.contentType("application/json")
+				.content("{\"operationId\":\"release-1\",\"expectedRevision\":2}"))
+			.andExpect(status().isOk());
+	}
+
+	@Test
+	void taskLifecycleAndAccessApprovalRoutesUseTheRoleSpecificContracts() throws Exception {
+		TaskRecord task = new TaskRecord();
+		task.setId("task-1");
+		task.setLifecycle(TaskLifecycle.DRAFT);
+		when(taskManagementService.create(any())).thenReturn(task);
+		String body = """
+			{
+			  "taskCode":"TASK-001","platformId":"platform-1","name":"朗读任务",
+			  "version":{"referenceTypes":["TEXT"],"recordingFormat":"WAV","sampleRates":[16000]}
+			}
+			""";
+		mockMvc.perform(post("/api/tasks")
+				.with(user("admin").roles("ADMIN"))
+				.with(csrf())
+				.header("Idempotency-Key", "task-create-1")
+				.contentType("application/json")
+				.content(body))
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.id").value("task-1"));
+		mockMvc.perform(post("/api/tasks")
+				.with(user("collector").roles("COLLECTOR"))
+				.with(csrf())
+				.header("Idempotency-Key", "task-create-2")
+				.contentType("application/json")
+				.content(body))
+			.andExpect(status().isForbidden());
+
+		PlatformPrincipal collector = principal("collector-1", UserRole.COLLECTOR, SessionType.MINIPROGRAM);
+		TaskAccessRequest request = new TaskAccessRequest();
+		request.setId("request-1");
+		request.setStatus(AccessRequestStatus.PENDING);
+		when(taskAccessService.requestAccess("task-1", collector)).thenReturn(request);
+		mockMvc.perform(post("/api/tasks/task-1/access-requests")
+				.with(authentication(new TestingAuthenticationToken(collector, null, "ROLE_COLLECTOR")))
+				.header(HttpHeaders.AUTHORIZATION, "Bearer test-miniprogram-token")
+				.header("Idempotency-Key", "access-request-1"))
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.id").value("request-1"));
+
+		mockMvc.perform(post("/api/tasks/task-1/access-requests/request-1/approve")
+				.with(user("admin").roles("ADMIN"))
+				.with(csrf())
+				.header("Idempotency-Key", "access-approve-1"))
+			.andExpect(status().isOk());
+	}
+
+	@Test
+	void reviewerCanRejectButCannotUseCollectorStartEndpoint() throws Exception {
+		TaskItemActionResult rejected = new TaskItemActionResult(
+			"item-1", TaskItemStatus.RECORDING_PENDING, 3, "assignment-1", null
+		);
+		when(actionService.reject(anyString(), anyString(), any(Long.class), anyString(), any())).thenReturn(rejected);
+		mockMvc.perform(post("/api/task-items/item-1/reject")
+				.with(user("reviewer").roles("REVIEWER"))
+				.with(csrf())
+				.contentType("application/json")
+				.content("{\"operationId\":\"reject-1\",\"expectedRevision\":2,\"reason\":\"噪音过大\"}"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.status").value("RECORDING_PENDING"));
+		mockMvc.perform(post("/api/tasks/task-1/items/start")
+				.with(user("reviewer").roles("REVIEWER"))
+				.with(csrf()))
+			.andExpect(status().isForbidden());
+	}
+
+	private PlatformPrincipal principal(String id, UserRole role, SessionType sessionType) {
+		return new PlatformPrincipal("session-" + id, id, id, id, role, sessionType, false);
+	}
+}
