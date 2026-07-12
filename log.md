@@ -431,3 +431,20 @@
   - 后端全量 `clean test`：152/152 通过，0 failures、0 errors、0 skipped，`BUILD SUCCESS`；本机 MongoDB 未启动，仅输出后台连接拒绝提示。
   - `git diff --check`：exit 0，仅有工作区 LF/CRLF 转换提示，无空白错误。
   -  tracked-file 敏感扫描：未发现真实 API Key、长 Bearer、带凭证 MongoDB URI 或已填写的敏感环境变量。
+
+## 2026-07-12 16:00 完成后台登录与角色导航
+
+- 时间：2026-07-12 16:00
+- commit ID：待提交后补记
+- 修改内容：
+  - 新增后台统一 HTTP 客户端，支持同源 Cookie、CSRF、JSON/multipart、Idempotency-Key、统一错误和会话被接管通知。
+  - 新增管理员/审核员登录、账号占用确认接管、首次登录强制改密及重新登录流程。
+  - 新增会话初始化、ADMIN/REVIEWER 路由守卫和动态侧边栏；旧静态原型从生产导航及路由隐藏。
+  - 语音生成 API 改为复用统一请求客户端，避免登录后写请求缺失 CSRF。
+  - 增加 Vitest、Vue Test Utils、jsdom 测试基础，同时保留原有 Node 源码测试。
+- 验证结果：
+  - TDD 红灯覆盖请求客户端、登录/接管、首次改密、角色越权、身份服务不可用和重复会话接管。
+  - `npm test -- --run`：原有 Node 9 项和 Vitest 10 项全部通过。
+  - `npm run build`：通过。
+  - 浏览器验证：后端未启动时登录页仍正常显示，提交显示脱敏 502；390px 窄屏无横向溢出。
+  - 未验证项：真实 MongoDB 后台账号登录/接管和首次改密联调，留待最终全链路验收。

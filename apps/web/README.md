@@ -4,10 +4,13 @@
 
 ## 当前范围
 
-当前已建立管理员端前端导航壳，并完善除“语音生成”预留模块外的静态前端原型页面：
+当前已建立后台真实身份流程和按角色过滤的生产导航：
 
-- Vue Router 管理 `/admin/*` 页面。
-- `/` 和 `/admin` 默认进入 `/admin/dashboard`。
+- `/login` 支持管理员/审核员账号密码登录及账号占用后的二次确认接管。
+- `/first-password` 处理首次登录强制改密，成功后清会话并要求重新登录。
+- `httpClient.js` 统一处理 Cookie、CSRF、JSON/multipart、Idempotency-Key、统一错误与 `SESSION_REPLACED`。
+- ADMIN 默认进入 `/admin/dashboard`；REVIEWER 默认进入 `/admin/review/queue`。
+- 侧边栏和路由按角色保护，未业务化静态原型已从生产导航和路由隐藏。
 - 左侧侧边栏、顶部栏和主内容区已经搭建。
 - 侧边栏大分类支持展开和收缩，多个分类可以同时展开。
 - 侧边栏二级菜单使用 CSS grid 过渡实现平滑展开和收起，不卸载菜单 DOM。
@@ -15,13 +18,16 @@
 - 静态原型支持筛选、标签页、表格行详情、本地状态切换、模拟操作提示和窄屏响应式展示。
 - 工作台展示静态待办、模块入口和流程进度，不跳转到语音生成业务页面。
 
-当前不实现登录、JWT、权限守卫、任务管理、审核流程或录音上传业务。语音生成模块已接入后端真实接口，用于 MiniMax 试听、克隆、合成、音色管理和生成记录。
+当前不使用 JWT 或 Pinia。任务管理、审核工作台和统计页面仍将在下一阶段接入真实接口；语音生成模块已改为复用统一鉴权请求客户端，用于 MiniMax 试听、克隆、合成、音色管理和生成记录。
 
 语音生成工作台中，付费克隆模式只上传母带音频并填写新音色 ID，不展示语速、音量、语调配置；这些调音参数只用于 0 元试听和日常合成。克隆母带需符合 MiniMax 限制：mp3、m4a 或 wav，10 秒到 5 分钟，不超过 20MB；超过后端上传限制时会返回 HTTP 413 和可读错误摘要。
 
 ## 目录约定
 
 - `src/config/adminSidebar.js`：管理员侧边栏菜单配置。
+- `src/lib/httpClient.js`、`src/lib/authApi.js`：统一请求与后台身份 API。
+- `src/composables/useAdminSession.js`：无 Pinia 的后台会话状态。
+- `src/pages/auth/`：登录与首次改密页面。
 - `src/router/`：管理员端路由配置。
 - `src/layouts/AdminLayout.vue`：管理员端布局壳。
 - `src/components/admin/`：侧边栏和顶部栏组件。
@@ -55,4 +61,6 @@ node --check src/router/adminRoutes.js
 node --check src/config/adminSidebar.js
 node --check src/data/adminStaticData.js
 node --test src/tests/adminPrototypePages.test.js
+npm test -- --run
+npm run build
 ```

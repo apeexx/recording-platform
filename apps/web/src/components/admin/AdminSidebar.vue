@@ -1,13 +1,16 @@
 <script setup>
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import {
-  adminSidebar,
+  sidebarForRole,
   findAdminSidebarGroupKeyByPath
 } from '../../config/adminSidebar.js'
 import AdminSidebarGroup from './AdminSidebarGroup.vue'
+import { useAdminSession } from '../../composables/useAdminSession.js'
 
 const route = useRoute()
+const session = useAdminSession()
+const sidebarItems = computed(() => sidebarForRole(session.user.value?.role))
 const openGroupKeys = ref(new Set())
 
 function hasChildren(item) {
@@ -65,7 +68,7 @@ watch(() => route.path, addRouteGroupKey, { immediate: true })
 
     <nav class="admin-sidebar__nav" aria-label="管理员菜单">
       <AdminSidebarGroup
-        v-for="item in adminSidebar"
+        v-for="item in sidebarItems"
         :key="item.key"
         :item="item"
         :is-open="isGroupOpen(item)"

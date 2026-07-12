@@ -31,6 +31,7 @@
 - [x] 阶段二本地复核完成；修复导入 worker 丢失租约时可能删除数据库仍引用源文件的问题，后端 153 个测试通过。
 - [x] 人工审核、动态状态、释放、软废弃恢复后端。
 - [x] 操作记录查询与统计后端。
+- [x] 后台登录、账号接管、首次改密、CSRF 请求层与角色导航。
 - [ ] 管理员与审核员 Web 真实业务页面。
 - [ ] 原生微信小程序采集端。
 - [ ] 启动脚本、健康检查、安全加固和全链路验收。
@@ -212,23 +213,23 @@
 
 **接口消费：** `/api/auth/web/login|takeover|me|csrf|logout|password`。
 
-- [ ] **Step 3.1：加入 Vitest、Vue Test Utils 和 jsdom 开发依赖。**
+- [x] **Step 3.1：加入 Vitest、Vue Test Utils 和 jsdom 开发依赖。**
 
   只用于测试，不进入生产 bundle；新增 `npm test` 脚本。不得引入 Pinia、Tailwind 或 UI 库。
 
-- [ ] **Step 3.2：写 httpClient 红灯测试。**
+- [x] **Step 3.2：写 httpClient 红灯测试。**
 
   覆盖 Cookie credentials、CSRF 获取/回传、JSON/multipart、Idempotency-Key、非 JSON 错误、401/403/409/413/415/422；`SESSION_REPLACED` 只触发一次清会话和跳转。
 
-- [ ] **Step 3.3：实现登录、接管和首次改密页面。**
+- [x] **Step 3.3：实现登录、接管和首次改密页面。**
 
   `ACCOUNT_IN_USE` 显示“账号正在其他设备使用”并二次确认；接管使用 takeoverToken；首次改密完成后清会话并要求重新登录。
 
-- [ ] **Step 3.4：实现角色路由守卫和动态导航。**
+- [x] **Step 3.4：实现角色路由守卫和动态导航。**
 
   ADMIN 显示全部核心业务与语音生成；REVIEWER 只显示审核池、统计和个人账号；未业务化静态原型从导航和生产路由隐藏。
 
-- [ ] **Step 3.5：验证并提交。**
+- [x] **Step 3.5：验证并提交。**
 
   ```powershell
   npm test -- --run
