@@ -1,0 +1,27 @@
+{
+  "pages": [
+    "pages/login/index",
+    "pages/tasks/index",
+    "pages/work/index",
+    "pages/profile/index"
+  ],
+  "window": {
+    "navigationBarTitleText": "录音任务平台",
+    "navigationBarBackgroundColor": "#ffffff",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#f4f7fb"
+  },
+  "permission": {
+    "scope.record": {"desc": "用于完成已签约录音任务的语音采集"}
+  },
+  "tabBar": {
+    "color": "#64748b",
+    "selectedColor": "#2563eb",
+    "backgroundColor": "#ffffff",
+    "list": [
+      {"pagePath": "pages/tasks/index", "text": "任务"},
+      {"pagePath": "pages/profile/index", "text": "我的"}
+    ]
+  },
+  "sitemapLocation": "sitemap.json"
+}

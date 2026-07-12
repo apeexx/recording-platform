@@ -1,0 +1,24 @@
+const { recorderOptions, validateSubmission } = require('../../services/recorder.js')
+const { createWorkflow, shouldAutoClaim } = require('../../services/workflow.js')
+
+function durationText(milliseconds){const seconds=Math.floor((milliseconds||0)/1000);return `${String(Math.floor(seconds/60)).padStart(2,'0')}:${String(seconds%60).padStart(2,'0')}`}
+
+Page({
+  data:{item:{},version:{},loading:true,error:'',referenceAudioPath:'',referenceVideoPath:'',audioPath:'',audioDuration:0,text:'',recordState:'idle',recordStateText:'尚未录音',durationText:'00:00',autoNext:false,submitting:false,releasing:false,statusText:'待录制'},
+  onLoad(options){this.itemId=options.itemId;this.recorder=wx.getRecorderManager();this.bindRecorder();this.setData({autoNext:!!wx.getStorageSync('autoNext')});this.load()},
+  onUnload(){if(this.timer)clearInterval(this.timer)},
+  bindRecorder(){
+    this.recorder.onStart(()=>{this.startedAt=Date.now();this.setData({recordState:'recording',recordStateText:'正在录音'});this.timer=setInterval(()=>this.setData({durationText:durationText(Date.now()-this.startedAt)}),500)})
+    this.recorder.onPause(()=>this.setData({recordState:'paused',recordStateText:'已暂停'}))
+    this.recorder.onResume(()=>this.setData({recordState:'recording',recordStateText:'正在录音'}))
+    this.recorder.onStop(result=>{if(this.timer)clearInterval(this.timer);this.setData({recordState:'stopped',recordStateText:'录音已完成',audioPath:result.tempFilePath,audioDuration:result.duration||0,durationText:durationText(result.duration)})})
+    this.recorder.onError(error=>{if(this.timer)clearInterval(this.timer);this.setData({recordState:'idle',recordStateText:'录音失败',error:error.errMsg||'录音失败，请检查麦克风权限'})})
+  },
+  async load(){if(!this.itemId){this.setData({loading:false,error:'缺少作业编号'});return}try{const api=getApp().globalData.api;const item=await api.item(this.itemId);const versions=await api.versions(item.taskId);const version=versions.find(x=>x.id===item.taskVersionId)||versions.find(x=>x.versionNumber===item.taskVersionNumber)||{};this.setData({item,version,text:item.currentResult?.text||''});const [audio,video]=await Promise.all([api.media(item.referenceAudioMediaId),api.media(item.referenceVideoMediaId)]);this.setData({referenceAudioPath:audio,referenceVideoPath:video})}catch(e){this.setData({error:e.message||'加载作业失败'})}finally{this.setData({loading:false})}},
+  startRecord(){this.setData({error:'',audioPath:'',audioDuration:0,durationText:'00:00'});this.recorder.start(recorderOptions(this.data.version))},
+  pauseRecord(){this.recorder.pause()},resumeRecord(){this.recorder.resume()},stopRecord(){this.recorder.stop()},
+  textInput(e){this.setData({text:e.detail.value})},
+  autoNextChange(e){const enabled=e.detail.value;wx.setStorageSync('autoNext',enabled);this.setData({autoNext:enabled})},
+  async submit(){const version=this.data.version;const validation=validateSubmission(version,{audio:this.data.audioPath,text:this.data.text});if(validation){this.setData({error:validation.message});return}if(this.data.audioPath&&(this.data.audioDuration<version.minDurationMillis||this.data.audioDuration>version.maxDurationMillis)){this.setData({error:`录音时长需在 ${durationText(version.minDurationMillis)} 至 ${durationText(version.maxDurationMillis)} 之间`});return}this.setData({submitting:true,error:''});const api=getApp().globalData.api;const flow=createWorkflow({operationId:()=>api.operationId('submit'),submit:payload=>api.submit(this.itemId,payload)});try{await flow.submitWithRetry({assignmentId:this.data.item.assignmentId,expectedRevision:this.data.item.revision,text:this.data.text.trim(),audioPath:this.data.audioPath});wx.removeStorageSync('currentTaskItemId');if(shouldAutoClaim({enabled:this.data.autoNext,submitted:true,grantActive:true,taskRunning:true,poolEmpty:false})){try{const next=await api.start(this.data.item.taskId);wx.setStorageSync('currentTaskItemId',next.id);wx.redirectTo({url:`/pages/work/index?itemId=${next.id}`});return}catch(e){if(!['NO_AVAILABLE_ITEM','TASK_GRANT_REQUIRED','INVALID_TASK_STATE'].includes(e.code))throw e;wx.showToast({title:e.code==='NO_AVAILABLE_ITEM'?'任务池已空':'已停止自动领取',icon:'none'})}}wx.showToast({title:'提交成功'});setTimeout(()=>wx.switchTab({url:'/pages/tasks/index'}),500)}catch(e){this.setData({error:e.message||'提交失败'})}finally{this.setData({submitting:false})}},
+  release(){wx.showModal({title:'确认释放',content:'释放后当前录音和文字结果会被清除，操作历史仍保留。',success:async result=>{if(!result.confirm)return;this.setData({releasing:true,error:''});try{await getApp().globalData.api.release(this.itemId,this.data.item.revision,getApp().globalData.api.operationId('release'));wx.removeStorageSync('currentTaskItemId');wx.showToast({title:'已释放'});setTimeout(()=>wx.switchTab({url:'/pages/tasks/index'}),400)}catch(e){this.setData({error:e.message||'释放失败'})}finally{this.setData({releasing:false})}}})}
+})

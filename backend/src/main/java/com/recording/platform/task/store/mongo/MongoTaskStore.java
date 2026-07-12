@@ -1,6 +1,7 @@
 package com.recording.platform.task.store.mongo;
 
 import com.recording.platform.task.model.TaskRecord;
+import com.recording.platform.task.model.TaskLifecycle;
 import com.recording.platform.task.store.TaskStore;
 import java.util.Optional;
 import java.util.Collection;
@@ -29,6 +30,12 @@ public class MongoTaskStore implements TaskStore {
 	@Override public Optional<TaskRecord> findById(String id) { return repository.findById(id); }
 	@Override public Optional<TaskRecord> findByTaskCode(String taskCode) { return repository.findByTaskCode(taskCode); }
 	@Override public Page<TaskRecord> findAll(Pageable pageable) { return repository.findAll(pageable); }
+	@Override public Page<TaskRecord> findAllCollectorVisible(Pageable pageable) {
+		return repository.findAllByLifecycleIn(
+			List.of(TaskLifecycle.RUNNING, TaskLifecycle.PAUSED),
+			pageable
+		);
+	}
 	@Override public List<TaskRecord> findAllByIdIn(Collection<String> ids) { return repository.findAllByIdIn(ids); }
 	@Override public boolean existsByPlatformId(String platformId) { return repository.existsByPlatformId(platformId); }
 

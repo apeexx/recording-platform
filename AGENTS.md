@@ -28,7 +28,7 @@
 ```text
 管理员 Web 端空项目
 审核 Web 端后续预留
-微信小程序录音端占位目录
+微信小程序录音采集端
 Java Spring Boot 后端项目
 MongoDB 身份、会话与统一 API 错误基础
 语音生成 Web 生产台
@@ -112,7 +112,7 @@ scripts/README.md
 ## 6. 默认技术栈
 
 - Web 前端：Vite + Vue3 + JavaScript
-- 微信小程序端：目录为 `apps/miniprogram`，当前仅保留占位说明
+- 微信小程序端：原生小程序，目录为 `apps/miniprogram`
 - 后端：Java 17 + Spring Boot + Maven
 - 数据库：MongoDB，默认数据库 `recording_platform`
 - 文档记录：根目录 `README.md`、`AGENTS.md`、`log.md`
@@ -315,9 +315,9 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 请求参数：创建含 taskCode、platformId、name、description、version；结构编辑含 name、description、version；所有写操作携带 Idempotency-Key；列表 page、size
 响应结构：任务/权限视图或 {items,page,size,total}；创建返回 201
 错误码：404 TASK_NOT_FOUND/TASK_VERSION_NOT_FOUND；409 INVALID_TASK_STATE/TASK_CODE_EXISTS；422 REFERENCE_REQUIRED、AI_NOT_SUPPORTED、INVALID_TASK_CODE 等
-权限要求：写操作仅 ADMIN；ADMIN 查询全部，COLLECTOR 只查询已授权任务及权限状态
+权限要求：写操作仅 ADMIN；ADMIN/REVIEWER 查询全部，COLLECTOR 查询进行中/已暂停任务及 ACTIVE/PENDING/NONE 权限状态，单任务详情与版本仍需 ACTIVE 授权
 数据一致性要求：发布后版本不可变；结构修改创建下一版本；旧条目继续绑定旧版本；任务/版本跨文档失败时使用保存后最新 @Version 做 CAS 补偿，补偿本身失败记录日志并返回受控一致性错误；写操作持久化幂等；aiEnabled 首期必须 false
-前端调用位置：apps/web/src/lib/taskApi.js、apps/web/src/pages/admin/tasks/*、小程序后续任务列表
+前端调用位置：apps/web/src/lib/taskApi.js、apps/web/src/pages/admin/tasks/*、apps/miniprogram/pages/tasks/*
 ```
 
 ```text
@@ -328,7 +328,7 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 错误码：404 TASK_NOT_FOUND
 权限要求：ADMIN/REVIEWER；COLLECTOR 仍受任务授权边界保护
 数据一致性要求：只读版本快照，不修改 published 或历史条目绑定
-前端调用位置：apps/web/src/lib/taskApi.js、任务编辑与审核工作台
+前端调用位置：apps/web/src/lib/taskApi.js、任务编辑与审核工作台、apps/miniprogram/pages/work/*
 ```
 
 ```text
@@ -339,7 +339,7 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 错误码：404 TASK/USER/ACCESS_REQUEST/GRANT_NOT_FOUND；409 TASK_ALREADY_GRANTED/ACCESS_REQUEST_DECIDED；422 INVALID_COLLECTOR
 权限要求：申请仅 COLLECTOR；查询、直接授权、批准、驳回、撤销仅 ADMIN
 数据一致性要求：同一任务/用户仅一个 PENDING；决策使用 PENDING 条件 CAS；批准幂等创建授权；所有写操作持久化幂等；撤销不影响已领取条目，批准重放不复活 REVOKED
-前端调用位置：后续管理员授权页、小程序任务申请
+前端调用位置：apps/web/src/pages/admin/tasks/TaskPermissionsPage.vue、apps/miniprogram/pages/tasks/*
 ```
 
 ```text
@@ -350,7 +350,7 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 错误码：404 NO_AVAILABLE_ITEM/TASK_ITEM_NOT_FOUND；409 ITEM_CONFLICT/EXTERNAL_ITEM_EXISTS；422 ITEM_REFERENCE_REQUIRED/远程媒体错误
 权限要求：添加和任务条目列表仅 ADMIN；start 仅 COLLECTOR；详情仅 ADMIN/REVIEWER/当前采集员
 数据一致性要求：新条目绑定 currentVersion；itemCode 任务内递增唯一；externalItemId 可空且存在时任务内唯一；添加和领取均持久化幂等；领取 findAndModify 原子更新并以同一更新递增 revision、追加新 revision 的操作历史，同时保持采集员全局唯一待录制
-前端调用位置：后续管理员数据池页、小程序录音页
+前端调用位置：apps/web/src/pages/admin/tasks/TaskPoolPage.vue、apps/miniprogram/pages/tasks/*、apps/miniprogram/pages/work/*
 ```
 
 ```text
@@ -361,7 +361,7 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 错误码：409 STALE_STATE；413 UPLOAD_TOO_LARGE；422 录音格式/采样率/声道/时长/驳回原因错误
 权限要求：submit/release 仅当前 COLLECTOR（ADMIN 也可 release）；reject 仅 ADMIN/REVIEWER
 数据一致性要求：operationId 绑定操作者并返回首次结果；稳定 current 文件原子替换；驳回保留原采集员；释放清当前结果但保留提交/操作历史；提交/释放成功后的旧文件和 metadata 清理持久化并可由 operation 重放/启动恢复重试
-前端调用位置：后续小程序录音页、审核页
+前端调用位置：apps/miniprogram/pages/work/*、apps/web/src/pages/admin/review/*
 ```
 
 ```text

@@ -1,0 +1,12 @@
+<view class="page">
+  <view class="card login-card">
+    <view class="title">录音任务平台</view>
+    <view class="subtle">使用微信身份登录，系统不会信任客户端传入的 OpenID。</view>
+    <view wx:if="{{error}}" class="error">{{error}}</view>
+    <button wx:if="{{!needsName}}" class="button" loading="{{loading}}" bindtap="login">微信快捷登录</button>
+    <block wx:else>
+      <input class="input" maxlength="50" placeholder="请填写合同中的真实姓名" value="{{name}}" bindinput="nameInput" />
+      <button class="button" loading="{{loading}}" bindtap="saveName">确认姓名</button>
+    </block>
+  </view>
+</view>

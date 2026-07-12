@@ -48,6 +48,9 @@ backend/storage/recordings/
 # WeChat Mini Program
 miniprogram_npm/
 apps/recorder-miniprogram/miniprogram_npm/
+apps/miniprogram/project.config.json
+apps/miniprogram/project.private.config.json
+apps/miniprogram/config/private.js
 
 # Temporary files
 *.tmp

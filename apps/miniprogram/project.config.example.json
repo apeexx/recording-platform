@@ -1,0 +1,8 @@
+{
+  "description": "录音任务平台本地开发配置模板",
+  "compileType": "miniprogram",
+  "libVersion": "trial",
+  "appid": "touristappid",
+  "projectname": "recording-platform",
+  "setting": {"es6": true, "enhance": true, "urlCheck": false}
+}
