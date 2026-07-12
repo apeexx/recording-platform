@@ -160,6 +160,14 @@ POST /api/admin/users/{userId}/disable
 - 未启用的审核或 AI 阶段不可进入；废弃保留归属、当前结果、文件和历史，恢复回废弃前状态。
 - 所有写接口使用 operationId、持久化幂等快照及 revision/CAS；批量操作逐条返回成功或冲突结果。
 
+## 操作记录与统计
+
+- `GET /api/task-items/{itemId}/operations` 按条目权限分页返回东八区时间、操作人和操作内容；`GET /api/operations` 使用 MongoDB operation 级展开分页。
+- `/api/reports/tasks|collectors|reviewers|me|me/submissions` 提供任务、采集员、审核员、个人汇总和逐次提交明细。
+- 累计工作量包含首次提交与全部返修；当前有效结果只统计当前 `COMPLETED`，释放和废弃单列。
+- 提交历史保存提交当时的 collectorId，释放或重新分配后仍能正确归属历史工作量。
+- 任务/采集汇总、审核员操作过滤和个人提交分页均下推到 MongoDB aggregation。
+
 任务相关分页响应统一为 `{ items, page, size, total }`。常用端点：
 
 ```text
@@ -178,6 +186,9 @@ GET/POST            /api/reviews/{itemId}|release|approve|reject
 POST                /api/reviews/batch/approve
 POST                /api/task-items/{itemId}/status|discard|restore
 POST                /api/task-items/batch/status|release|discard|restore
+GET                 /api/task-items/{itemId}/operations
+GET                 /api/operations
+GET                 /api/reports/tasks|collectors|reviewers|me|me/submissions
 POST/GET            /api/import-jobs[/{jobId}]
 POST                /api/import-jobs/{jobId}/retry
 GET                 /api/media/{mediaId}

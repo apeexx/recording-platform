@@ -30,7 +30,7 @@
 - [x] `59f59de`：导入 lease/fencing、版本补偿、平台引用保护、媒体清理任务和单条添加补偿。
 - [x] 阶段二本地复核完成；修复导入 worker 丢失租约时可能删除数据库仍引用源文件的问题，后端 153 个测试通过。
 - [x] 人工审核、动态状态、释放、软废弃恢复后端。
-- [ ] 操作记录查询/统计后端。
+- [x] 操作记录查询与统计后端。
 - [ ] 管理员与审核员 Web 真实业务页面。
 - [ ] 原生微信小程序采集端。
 - [ ] 启动脚本、健康检查、安全加固和全链路验收。
@@ -164,23 +164,23 @@
 - `GET /api/operations`
 - `GET /api/reports/tasks|collectors|reviewers|me|me/submissions`
 
-- [ ] **Step 2.1：写操作记录三列红灯测试。**
+- [x] **Step 2.1：写操作记录三列红灯测试。**
 
   对外字段固定为东八区时间、操作人、操作内容；内部仍保存 UTC、operatorId、姓名快照、actionCode、from/to、batchId。释放、废弃和状态调整不得删除旧记录。
 
-- [ ] **Step 2.2：实现分页查询和权限。**
+- [x] **Step 2.2：实现分页查询和权限。**
 
   ADMIN 可查全部；COLLECTOR 只查本人条目；REVIEWER 按审核权限读取。分页固定 `{items,page,size,total}`。
 
-- [ ] **Step 2.3：写两套统计口径红灯测试。**
+- [x] **Step 2.3：写两套统计口径红灯测试。**
 
   累计工作量统计所有提交/返修次数和时长；当前有效结果只统计 `COMPLETED` 且非 `DISCARDED` 的当前结果；释放/废弃单列。审核员统计领取、释放、通过、驳回、平均处理时长。
 
-- [ ] **Step 2.4：实现 Mongo 聚合与个人详情。**
+- [x] **Step 2.4：实现 Mongo 聚合与个人详情。**
 
   查询使用 UTC 时间范围；API 返回 ISO 时间或东八区展示字段，不把东八区字符串写入 Mongo。
 
-- [ ] **Step 2.5：验证并提交。**
+- [x] **Step 2.5：验证并提交。**
 
   ```powershell
   .\mvnw.cmd "-Dtest=ReportServiceTests,OperationControllerTests" test

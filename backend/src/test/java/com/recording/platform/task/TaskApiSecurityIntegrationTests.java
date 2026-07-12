@@ -9,6 +9,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -37,6 +38,9 @@ import com.recording.platform.task.service.TaskItemActionResult;
 import com.recording.platform.task.service.TaskPoolService;
 import com.recording.platform.review.service.ReviewService;
 import com.recording.platform.task.service.TaskItemAdministrationService;
+import com.recording.platform.operation.service.OperationService;
+import com.recording.platform.report.service.ReportService;
+import com.recording.platform.report.dto.WorkSummary;
 import java.util.List;
 import jakarta.servlet.http.Cookie;
 import java.util.UUID;
@@ -87,6 +91,10 @@ class TaskApiSecurityIntegrationTests {
 	private ReviewService reviewService;
 	@MockitoBean
 	private TaskItemAdministrationService administrationService;
+	@MockitoBean
+	private OperationService operationService;
+	@MockitoBean
+	private ReportService reportService;
 
 	@BeforeEach
 	void executeControllerIdempotencyMutations() {
@@ -304,6 +312,26 @@ class TaskApiSecurityIntegrationTests {
 				.contentType("application/json")
 				.content(batch))
 			.andExpect(status().isForbidden());
+	}
+
+	@Test
+	void operationAndReportRoutesEnforceReadRoleBoundaries() throws Exception {
+		when(reportService.task(anyString(), any())).thenReturn(new WorkSummary(0, 0, 0, 0, 0, 0));
+
+		mockMvc.perform(get("/api/reports/tasks")
+				.with(user("admin").roles("ADMIN"))
+				.param("taskId", "task-1"))
+			.andExpect(status().isOk());
+		mockMvc.perform(get("/api/reports/tasks")
+				.with(user("reviewer").roles("REVIEWER"))
+				.param("taskId", "task-1"))
+			.andExpect(status().isForbidden());
+		mockMvc.perform(get("/api/operations")
+				.with(user("collector").roles("COLLECTOR")))
+			.andExpect(status().isForbidden());
+		mockMvc.perform(get("/api/reports/me")
+				.with(user("collector").roles("COLLECTOR")))
+			.andExpect(status().isOk());
 	}
 
 	private PlatformPrincipal principal(String id, UserRole role, SessionType sessionType) {

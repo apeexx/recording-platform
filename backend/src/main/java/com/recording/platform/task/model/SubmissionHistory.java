@@ -10,6 +10,7 @@ import lombok.Setter;
 public class SubmissionHistory {
 	private String operationId;
 	private String assignmentId;
+	private String collectorId;
 	private Instant submittedAt;
 	private Long durationMillis;
 	private boolean textPresent;
@@ -21,6 +22,7 @@ public class SubmissionHistory {
 		SubmissionHistory history = new SubmissionHistory();
 		history.setOperationId(mutation.operationId());
 		history.setAssignmentId(mutation.assignmentId());
+		history.setCollectorId(mutation.collectorId());
 		history.setSubmittedAt(mutation.occurredAt());
 		TaskItemResult result = mutation.result();
 		SubmittedRecording audio = result == null ? null : result.audio();

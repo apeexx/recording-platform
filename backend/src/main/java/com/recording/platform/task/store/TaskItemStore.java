@@ -4,6 +4,7 @@ import com.recording.platform.task.model.TaskItem;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import java.util.List;
 
 public interface TaskItemStore {
 	TaskItem save(TaskItem item);
@@ -29,4 +30,5 @@ public interface TaskItemStore {
 	Optional<TaskItem> rejectIfCurrent(RejectMutation mutation);
 	Optional<TaskItem> releaseIfCurrent(ReleaseMutation mutation);
 	Page<TaskItem> findAllByTaskId(String taskId, Pageable pageable);
+	default List<TaskItem> findForReport(String collectorId, String taskId) { return List.of(); }
 }

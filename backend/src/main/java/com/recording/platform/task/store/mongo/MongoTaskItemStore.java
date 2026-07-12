@@ -365,6 +365,16 @@ public class MongoTaskItemStore implements TaskItemStore {
 		return repository.findAllByTaskId(taskId, pageable);
 	}
 
+	@Override public List<TaskItem> findForReport(String collectorId, String taskId) {
+		Criteria criteria = new Criteria();
+		List<Criteria> filters = new java.util.ArrayList<>();
+		if (collectorId != null) filters.add(Criteria.where("collectorId").is(collectorId));
+		if (taskId != null) filters.add(Criteria.where("taskId").is(taskId));
+		Query query = filters.isEmpty() ? new Query()
+			: Query.query(criteria.andOperator(filters.toArray(Criteria[]::new)));
+		return mongoTemplate.find(query, TaskItem.class);
+	}
+
 	@Override public Page<TaskItem> findReviewPool(Pageable pageable) {
 		return repository.findAllByStatusAndReviewerIdIsNull(TaskItemStatus.REVIEW_PENDING, pageable);
 	}

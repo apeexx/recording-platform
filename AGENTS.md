@@ -209,6 +209,7 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 ## 7. 接口说明
 
 当前后端提供身份、会话、后台用户管理、语音生成、平台、任务版本、授权、任务池、人工审核、动态状态、软废弃恢复、录音媒体和导入 API；尚不提供机器审核执行或真实 AI 转写 API。
+当前同时提供操作记录与统计 API：条目操作记录按权限读取，全局操作记录仅 ADMIN/REVIEWER；任务和指定采集员汇总仅 ADMIN，审核员可查看本人统计，采集员可查看本人汇总及逐次提交明细。
 
 所有 API 响应必须带 `X-Request-Id`；错误响应统一为 `{ code, message, requestId, details? }`。未预期异常只能返回脱敏摘要，不得返回堆栈、数据库内部消息、密钥或完整第三方 payload。统一状态至少覆盖 400、401、403、404、409、413、415、422、429、500 和 503。
 
@@ -548,7 +549,7 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 
 ```text
 集合名称：task_items
-字段名称：taskId、taskVersionId/Number、sequence、itemCode、externalItemId、creationOperationId、status、collectorId、reviewerId、assignmentId、revision、参考字段、currentResult、submissions、operations、createdAt、updatedAt
+字段名称：taskId、taskVersionId/Number、sequence、itemCode、externalItemId、creationOperationId、status、collectorId、reviewerId、assignmentId、reviewAssignmentId、revision、参考字段、currentResult、submissions（含提交时 collectorId）、operations、discardedPreviousStatus、createdAt、updatedAt
 字段类型：字符串、枚举、数值、嵌套文档、数组、UTC Instant
 默认值：新条目 AVAILABLE、revision=0、历史数组为空
 唯一约束：(taskId,itemCode)；externalItemId 存在时 (taskId,externalItemId)；creationOperationId 存在时任务内唯一；RECORDING_PENDING collectorId 全系统唯一
