@@ -12,10 +12,11 @@ function Show-Help {
   Write-Host '  pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-dev.ps1'
   Write-Host ''
   Write-Host 'Behavior:'
-  Write-Host '  1. Check and stop processes listening on ports 8080 and 5173.'
-  Write-Host '  2. Open a visible pwsh window for backend: backend\mvnw.cmd spring-boot:run.'
-  Write-Host '  3. Open a visible pwsh window for frontend: npm run dev -- --host localhost --port 5173.'
-  Write-Host '  4. Print the voice generation workbench URL.'
+  Write-Host '  1. Check configured MongoDB connectivity and recording storage writability.'
+  Write-Host '  2. Check and stop processes listening on ports 8080 and 5173.'
+  Write-Host '  3. Open a visible pwsh window for backend: backend\mvnw.cmd spring-boot:run.'
+  Write-Host '  4. Open a visible pwsh window for frontend: npm run dev -- --host localhost --port 5173.'
+  Write-Host '  5. Print the voice generation workbench URL.'
 }
 
 if ($Help) {
@@ -51,6 +52,81 @@ function ConvertTo-PowerShellLiteral {
   param([string]$Value)
 
   return "'" + $Value.Replace("'", "''") + "'"
+}
+
+function Get-LocalSetting {
+  param(
+    [string]$Name,
+    [string]$DefaultValue
+  )
+
+  $environmentValue = [Environment]::GetEnvironmentVariable($Name)
+  if (-not [string]::IsNullOrWhiteSpace($environmentValue)) {
+    return $environmentValue
+  }
+  $envFile = Join-Path $RepoRoot '.env'
+  if (Test-Path -LiteralPath $envFile) {
+    $prefix = "$Name="
+    $line = Get-Content -LiteralPath $envFile | Where-Object { $_.StartsWith($prefix) } | Select-Object -Last 1
+    if ($line) {
+      $value = $line.Substring($prefix.Length).Trim().Trim('"').Trim("'")
+      if (-not [string]::IsNullOrWhiteSpace($value)) { return $value }
+    }
+  }
+  return $DefaultValue
+}
+
+function Get-MongoEndpoint {
+  param([string]$ConnectionString)
+
+  try {
+    $uri = [Uri]$ConnectionString
+    $hostName = $uri.Host
+    if ([string]::IsNullOrWhiteSpace($hostName)) { return $null }
+    if ($uri.Scheme -eq 'mongodb+srv') {
+      $record = Resolve-DnsName -Name "_mongodb._tcp.$hostName" -Type SRV -ErrorAction Stop |
+        Where-Object { $_.Type -eq 'SRV' } | Select-Object -First 1
+      if (-not $record) { return $null }
+      return @{ Host = $record.NameTarget.TrimEnd('.'); Port = [int]$record.Port }
+    }
+    $port = if ($uri.Port -gt 0) { $uri.Port } else { 27017 }
+    return @{ Host = $hostName; Port = $port }
+  } catch {
+    return $null
+  }
+}
+
+function Test-MongoConnection {
+  param([string]$ConnectionString)
+
+  $endpoint = Get-MongoEndpoint -ConnectionString $ConnectionString
+  if (-not $endpoint) { return $false }
+  $client = [System.Net.Sockets.TcpClient]::new()
+  try {
+    $connection = $client.ConnectAsync($endpoint.Host, $endpoint.Port)
+    return $connection.Wait([TimeSpan]::FromSeconds(3)) -and $client.Connected
+  } catch {
+    return $false
+  } finally {
+    $client.Dispose()
+  }
+}
+
+function Test-RecordingStorage {
+  param([string]$ConfiguredPath)
+
+  $path = if ([IO.Path]::IsPathRooted($ConfiguredPath)) { $ConfiguredPath } else { Join-Path $RepoRoot $ConfiguredPath }
+  $probe = $null
+  try {
+    $directory = [IO.Directory]::CreateDirectory($path)
+    $probe = Join-Path $directory.FullName ('.write-probe-' + [Guid]::NewGuid().ToString('N'))
+    [IO.File]::WriteAllText($probe, '')
+    return $true
+  } catch {
+    return $false
+  } finally {
+    if ($probe) { Remove-Item -LiteralPath $probe -Force -ErrorAction SilentlyContinue }
+  }
 }
 
 function Stop-PortProcess {
@@ -99,6 +175,19 @@ Assert-PathExists -Path $BackendDir -Description 'backend directory'
 Assert-PathExists -Path $WebDir -Description 'web directory'
 Assert-PathExists -Path (Join-Path $BackendDir 'mvnw.cmd') -Description 'backend Maven Wrapper'
 Assert-CommandExists -Command 'pwsh'
+
+Write-Host 'Checking MongoDB and recording storage...'
+$mongoConnection = Get-LocalSetting -Name 'MONGODB_URI' -DefaultValue 'mongodb://localhost:27017/recording_platform'
+if (-not (Test-MongoConnection -ConnectionString $mongoConnection)) {
+  Write-Host 'MongoDB is unavailable. Start the configured MongoDB instance, then retry.'
+  exit 1
+}
+$recordingStorage = Get-LocalSetting -Name 'RECORDING_STORAGE_DIR' -DefaultValue 'backend/storage/recordings'
+if (-not (Test-RecordingStorage -ConfiguredPath $recordingStorage)) {
+  Write-Host 'Recording storage is not writable. Check the configured directory permissions, then retry.'
+  exit 1
+}
+Write-Host 'MongoDB and recording storage are ready.'
 
 Write-Host 'Checking development ports...'
 foreach ($port in $Ports) {

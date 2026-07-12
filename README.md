@@ -112,6 +112,10 @@ Windows PowerShell 本地联调可使用一键启动脚本：
 
 脚本会在启动前检查并结束占用 `8080` 和 `5173` 端口的进程，然后打开两个可见的 `pwsh` 窗口分别运行 Spring Boot 后端和 Vite 前端，实时日志直接显示在窗口中。脚本不启动 MongoDB，不创建 `.env`，不再创建或写入根目录 `logs/`；启动前需要自行确保 MongoDB 可用，语音生成真实联调还需要已填写 MiniMax 配置的根目录 `.env`。
 
+脚本现在会在结束 `8080/5173` 旧进程之前，先脱敏检查 MongoDB TCP 可达性和 `RECORDING_STORAGE_DIR` 可写性。失败时直接停止；不打印 URI，不安装、启动、停止 MongoDB，不处理 `27017` 端口进程。
+
+后端提供公开只读就绪接口 `GET /api/health/ready`：仅返回 `overall`、`mongo`、`storage` 的 `UP/DOWN`；全部就绪时为 HTTP 200，任一项失败时为 HTTP 503，不返回 URI、绝对路径、密码或异常文本。
+
 ## 身份、会话与接口边界
 
 - 固定角色为 `ADMIN`、`REVIEWER`、`COLLECTOR`。后台账号使用 BCrypt 密码；所有新编码密码至少 8 个字符且 UTF-8 不超过 72 字节。首管理员仅在数据库没有 `ADMIN` 且同时配置 `INITIAL_ADMIN_USERNAME`、`INITIAL_ADMIN_PASSWORD` 时创建；首次登录必须改密。

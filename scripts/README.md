@@ -24,7 +24,14 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-dev.ps1
 pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-dev.ps1 -Help
 ```
 
-脚本启动前会检查固定开发端口：
+脚本启动前会先执行两项脱敏前置检查：
+
+- 从当前进程环境或根目录 `.env` 读取 `MONGODB_URI`，默认检查 `localhost:27017` 的 TCP 可达性。
+- 从同样位置读取 `RECORDING_STORAGE_DIR`，使用临时探针文件检查录音目录是否可写。
+
+检查失败时脚本在结束旧 Web/后端进程和启动新窗口之前退出。脚本不打印 MongoDB URI、用户名或密码，不安装/启动/停止 MongoDB，也不会结束 `27017` 端口上的任何进程。TCP 检查只能证明端点可达，账号权限和数据库命令仍由后端就绪接口校验。
+
+前置通过后，脚本会检查固定开发端口：
 
 - `8080`：Spring Boot 后端。
 - `5173`：Vite Web 前端。
@@ -46,6 +53,6 @@ npm run dev -- --host localhost --port 5173
 http://localhost:5173/admin/voice-generation/workbench
 ```
 
-脚本只启动后端和前端，不启动 MongoDB，不创建 `.env`，也不会写入或打印任何 API Key。当前后端身份、会话和语音生成记录依赖 MongoDB，启动前需要自行确保 `MONGODB_URI` 指向的实例可用；真实语音生成联调还需要在根目录 `.env` 中填写 `MINIMAX_API_KEY`。
+脚本只启动后端和前端，不创建 `.env`，也不会写入或打印任何 API Key。当前后端身份、会话和语音生成记录依赖 MongoDB；真实语音生成联调还需要在根目录 `.env` 中填写 `MINIMAX_API_KEY`。
 
 脚本不再创建或写入根目录 `logs/`；实时输出直接显示在两个 `pwsh` 窗口中。

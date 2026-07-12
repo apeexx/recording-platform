@@ -20,6 +20,23 @@ describe('start-dev.ps1', () => {
     assert.match(script, /admin\/voice-generation\/workbench/)
   })
 
+  it('stops before startup when MongoDB or recording storage is unavailable', () => {
+    assert.match(script, /function\s+Test-MongoConnection/)
+    assert.match(script, /function\s+Test-RecordingStorage/)
+    assert.match(script, /MongoDB is unavailable/)
+    assert.match(script, /Recording storage is not writable/)
+    const preflight = script.indexOf('Test-MongoConnection')
+    const backendStart = script.indexOf('Starting Spring Boot backend')
+    assert.ok(preflight >= 0 && preflight < backendStart)
+  })
+
+  it('never starts, stops or prints the MongoDB process and URI', () => {
+    assert.doesNotMatch(script, /Stop-PortProcess\s+-Port\s+27017/)
+    assert.doesNotMatch(script, /(?:^|\s|[&'"])mongod(?:\.exe)?(?:\s|['"]|$)/im)
+    assert.doesNotMatch(script, /Write-(?:Host|Output).*MongoUri/i)
+    assert.doesNotMatch(script, /MONGODB_URI\s*=/)
+  })
+
   it('opens visible pwsh windows for live backend and frontend logs', () => {
     assert.match(script, /Start-Process\s+`?\s*-FilePath\s+'pwsh'/)
     assert.match(script, /Recording Backend/)

@@ -129,14 +129,14 @@ Windows PowerShell 本地联调可使用：
 .\scripts\start-dev.cmd
 ```
 
-该脚本会在启动前检查并结束占用 `8080` 和 `5173` 端口的监听进程，然后打开两个可见的 `pwsh` 窗口分别运行：
+该脚本会先从当前进程环境或根目录 `.env` 读取配置，脱敏检查 MongoDB TCP 可达性和录音目录可写性。失败时必须在结束端口进程或启动服务之前退出；不得打印 MongoDB URI，不得安装/启动/停止 MongoDB，也不得结束 `27017` 进程。前置通过后，脚本检查并结束占用 `8080` 和 `5173` 端口的监听进程，然后打开两个可见的 `pwsh` 窗口分别运行：
 
 ```text
 backend\mvnw.cmd spring-boot:run
 npm run dev -- --host localhost --port 5173
 ```
 
-两个窗口标题分别为 `Recording Backend` 和 `Recording Frontend`，用于查看实时日志。脚本只负责启动后端和 Web 前端，不启动 MongoDB，不创建 `.env`，不写入或打印 API Key，不再创建或写入根目录 `logs/`。后端联调前需自行确保 MongoDB 可用；语音生成真实联调仍需根目录 `.env` 提供 MiniMax 配置。
+两个窗口标题分别为 `Recording Backend` 和 `Recording Frontend`，用于查看实时日志。脚本只负责启动后端和 Web 前端，不创建 `.env`，不写入或打印 API Key，不再创建或写入根目录 `logs/`。语音生成真实联调仍需根目录 `.env` 提供 MiniMax 配置。
 
 ## 6.2 前端视觉规范
 
@@ -297,6 +297,17 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 ```
 
 平台、任务池与导入接口：
+
+```text
+请求方法：GET
+请求路径：/api/health/ready
+请求参数：无
+响应结构：{ overall, mongo, storage }，字段只使用 UP/DOWN；全部就绪返回 200，任一项不就绪返回 503
+错误码：无业务错误体；503 仍返回同一脱敏状态结构
+权限要求：公开只读
+数据一致性要求：只执行 Mongo ping 和录音根目录临时可写探针；不返回 URI、绝对路径、密码或异常文本
+前端调用位置：本地启动与运维就绪检查，当前 Web 无必须调用
+```
 
 ```text
 请求方法：POST / GET / PUT / DELETE
