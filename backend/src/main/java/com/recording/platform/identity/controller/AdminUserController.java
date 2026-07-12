@@ -2,6 +2,8 @@ package com.recording.platform.identity.controller;
 
 import com.recording.platform.identity.dto.CreateBackendUserRequest;
 import com.recording.platform.identity.dto.UserResponse;
+import com.recording.platform.identity.dto.ResetPasswordRequest;
+import com.recording.platform.identity.model.UserRole;
 import com.recording.platform.identity.service.AdminUserService;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
@@ -35,8 +37,26 @@ public class AdminUserController {
 		return users.list(page, size);
 	}
 
+	@GetMapping("/search")
+	public Page<UserResponse> search(
+		@RequestParam(defaultValue = "") String query,
+		@RequestParam(required = false) UserRole role,
+		@RequestParam(defaultValue = "0") int page,
+		@RequestParam(defaultValue = "20") int size
+	) {
+		return users.search(query, role, page, size);
+	}
+
 	@PostMapping("/{userId}/disable")
 	public UserResponse disable(@PathVariable String userId) {
 		return users.disable(userId);
+	}
+
+	@PostMapping("/{userId}/reset-password")
+	public UserResponse resetPassword(
+		@PathVariable String userId,
+		@Valid @RequestBody ResetPasswordRequest request
+	) {
+		return users.resetPassword(userId, request.newPassword());
 	}
 }

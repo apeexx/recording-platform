@@ -25,10 +25,7 @@ const pageFiles = [
   'src/pages/admin/results/ResultExportPage.vue',
   'src/pages/admin/reports/ProjectStatisticsPage.vue',
   'src/pages/admin/reports/RecorderStatisticsPage.vue',
-  'src/pages/admin/reports/ReviewerStatisticsPage.vue',
-  'src/pages/admin/system/UsersPage.vue',
   'src/pages/admin/system/RolesPage.vue',
-  'src/pages/admin/system/OperationLogsPage.vue',
   'src/pages/admin/system/SystemSettingsPage.vue'
 ]
 

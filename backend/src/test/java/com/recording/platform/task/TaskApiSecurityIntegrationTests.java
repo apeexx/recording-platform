@@ -41,6 +41,8 @@ import com.recording.platform.task.service.TaskItemAdministrationService;
 import com.recording.platform.operation.service.OperationService;
 import com.recording.platform.report.service.ReportService;
 import com.recording.platform.report.dto.WorkSummary;
+import com.recording.platform.api.ApiException;
+import org.springframework.http.HttpStatus;
 import java.util.List;
 import jakarta.servlet.http.Cookie;
 import java.util.UUID;
@@ -332,6 +334,19 @@ class TaskApiSecurityIntegrationTests {
 		mockMvc.perform(get("/api/reports/me")
 				.with(user("collector").roles("COLLECTOR")))
 			.andExpect(status().isOk());
+	}
+
+	@Test
+	void taskVersionReadReusesCollectorGrantBoundary() throws Exception {
+		PlatformPrincipal collector = principal("collector-1", UserRole.COLLECTOR, SessionType.MINIPROGRAM);
+		when(taskQueryService.get("task-private", collector)).thenThrow(
+			new ApiException(HttpStatus.FORBIDDEN, "TASK_GRANT_REQUIRED", "没有该任务的有效授权")
+		);
+
+		mockMvc.perform(get("/api/tasks/task-private/versions")
+				.with(authentication(new TestingAuthenticationToken(collector, null, "ROLE_COLLECTOR"))))
+			.andExpect(status().isForbidden())
+			.andExpect(jsonPath("$.code").value("TASK_GRANT_REQUIRED"));
 	}
 
 	private PlatformPrincipal principal(String id, UserRole role, SessionType sessionType) {

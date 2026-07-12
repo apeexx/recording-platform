@@ -38,7 +38,7 @@ MongoDB 身份、会话与统一 API 错误基础
 本文件 AGENTS.md
 ```
 
-当前已实现身份、会话、后台用户管理、微信登录边界、语音生成持久化，以及平台、不可变任务版本、授权申请、任务池领取、录音提交/返修/释放、人工审核、动态状态、软废弃恢复、媒体读取和 CSV/XLSX 导入后端闭环；Web 已实现后台登录、接管、首次改密、CSRF 请求层和角色导航，仍不实现机器审核执行、真实 AI 转写或完整任务/审核业务页面。
+当前已实现身份、会话、后台用户管理、微信登录边界、语音生成持久化，以及平台、不可变任务版本、授权申请、任务池领取、录音提交/返修/释放、人工审核、动态状态、软废弃恢复、媒体读取和 CSV/XLSX 导入后端闭环；Web 已实现后台身份、平台/任务/版本、数据池/导入、权限、审核、用户、操作记录与统计页面，仍不实现机器审核执行或真实 AI 转写。
 
 Spring Security 已配置为不透明服务端会话，不使用 JWT。除 Web/微信登录与接管接口外，其余 `/api/**` 默认认证；管理员、平台、任务管理、授权管理、导入和语音生成接口按角色保护，采集写接口仅允许 `COLLECTOR` 小程序 Bearer 身份。
 
@@ -282,7 +282,18 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 错误码：404 USER_NOT_FOUND；409 USERNAME_EXISTS；422 INVALID_BACKEND_ROLE/PASSWORD_TOO_WEAK
 权限要求：仅 ADMIN
 数据一致性要求：后台账号仅 ADMIN/REVIEWER；停用账号同时废止其活动会话
-前端调用位置：后续系统用户管理页
+前端调用位置：apps/web/src/lib/userApi.js、apps/web/src/pages/admin/system/UsersPage.vue
+```
+
+```text
+请求方法：GET / POST
+请求路径：/api/admin/users/search?query=&role=&page=&size=、/api/admin/users/{userId}/reset-password
+请求参数：搜索支持姓名、内部用户编号或后台用户名及可选角色；重置 JSON newPassword
+响应结构：Spring Page<UserResponse> 或用户摘要
+错误码：404 USER_NOT_FOUND；409 ACCOUNT_STATE_CHANGED；422 INVALID_BACKEND_ROLE/PASSWORD_TOO_WEAK
+权限要求：仅 ADMIN
+数据一致性要求：重置只允许活动 ADMIN/REVIEWER，密码 BCrypt 编码，强制下次改密并废止全部会话
+前端调用位置：apps/web/src/lib/userApi.js、用户管理与任务采集权限页
 ```
 
 平台、任务池与导入接口：
@@ -306,7 +317,18 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 错误码：404 TASK_NOT_FOUND/TASK_VERSION_NOT_FOUND；409 INVALID_TASK_STATE/TASK_CODE_EXISTS；422 REFERENCE_REQUIRED、AI_NOT_SUPPORTED、INVALID_TASK_CODE 等
 权限要求：写操作仅 ADMIN；ADMIN 查询全部，COLLECTOR 只查询已授权任务及权限状态
 数据一致性要求：发布后版本不可变；结构修改创建下一版本；旧条目继续绑定旧版本；任务/版本跨文档失败时使用保存后最新 @Version 做 CAS 补偿，补偿本身失败记录日志并返回受控一致性错误；写操作持久化幂等；aiEnabled 首期必须 false
-前端调用位置：后续管理员任务页、小程序任务列表
+前端调用位置：apps/web/src/lib/taskApi.js、apps/web/src/pages/admin/tasks/*、小程序后续任务列表
+```
+
+```text
+请求方法：GET
+请求路径：/api/tasks/{taskId}/versions
+请求参数：任务 ID
+响应结构：按 versionNumber 升序的不可变 TaskVersion 列表
+错误码：404 TASK_NOT_FOUND
+权限要求：ADMIN/REVIEWER；COLLECTOR 仍受任务授权边界保护
+数据一致性要求：只读版本快照，不修改 published 或历史条目绑定
+前端调用位置：apps/web/src/lib/taskApi.js、任务编辑与审核工作台
 ```
 
 ```text

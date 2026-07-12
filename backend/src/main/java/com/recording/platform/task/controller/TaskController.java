@@ -103,6 +103,15 @@ public class TaskController {
 		return queries.get(taskId, actor);
 	}
 
+	@GetMapping("/{taskId}/versions")
+	public java.util.List<com.recording.platform.task.model.TaskVersion> versions(
+		@PathVariable String taskId,
+		@AuthenticationPrincipal PlatformPrincipal actor
+	) {
+		queries.get(taskId, actor);
+		return management.versions(taskId);
+	}
+
 	private TaskRecord transition(
 		Authentication authentication,
 		String action,

@@ -62,6 +62,27 @@ public class MongoUserStore implements UserStore {
 	}
 
 	@Override
+	public Page<UserAccount> search(String term, UserRole role, Pageable pageable) {
+		Criteria criteria = new Criteria();
+		List<Criteria> filters = new java.util.ArrayList<>();
+		if (role != null) filters.add(Criteria.where("role").is(role));
+		if (term != null && !term.isBlank()) {
+			String safe = java.util.regex.Pattern.quote(term.trim());
+			filters.add(new Criteria().orOperator(
+				Criteria.where("name").regex(safe, "i"),
+				Criteria.where("internalUserNo").regex(safe, "i"),
+				Criteria.where("username").regex(safe, "i")
+			));
+		}
+		Query query = new Query(filters.isEmpty() ? criteria : new Criteria().andOperator(filters));
+		long total = mongoTemplate.count(Query.of(query).limit(-1).skip(-1), UserAccount.class);
+		query.with(pageable);
+		return new org.springframework.data.domain.PageImpl<>(
+			mongoTemplate.find(query, UserAccount.class), pageable, total
+		);
+	}
+
+	@Override
 	public Optional<UserAccount> disableBackendIfActive(String userId, Instant updatedAt) {
 		Query query = Query.query(Criteria.where("_id").is(userId)
 			.and("role").in(UserRole.ADMIN, UserRole.REVIEWER)
@@ -92,6 +113,20 @@ public class MongoUserStore implements UserStore {
 			.set("firstPasswordChangeRequired", false)
 			.set("updatedAt", updatedAt);
 		return mongoTemplate.updateFirst(query, update, UserAccount.class).getMatchedCount() == 1;
+	}
+
+	@Override
+	public Optional<UserAccount> resetBackendPasswordIfActive(String userId, String passwordHash, Instant updatedAt) {
+		Query query = Query.query(Criteria.where("_id").is(userId)
+			.and("role").in(UserRole.ADMIN, UserRole.REVIEWER)
+			.and("status").is(UserStatus.ACTIVE));
+		Update update = new Update()
+			.set("passwordHash", passwordHash)
+			.set("firstPasswordChangeRequired", true)
+			.set("updatedAt", updatedAt);
+		return Optional.ofNullable(mongoTemplate.findAndModify(
+			query, update, FindAndModifyOptions.options().returnNew(true), UserAccount.class
+		));
 	}
 
 	@Override

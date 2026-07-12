@@ -1,6 +1,6 @@
 # 录音任务平台
 
-录音任务平台用于管理录音任务的创建、领取、录制、上传和审核流程。当前仓库已具备管理员/审核员后台身份、录音人员微信登录边界、MongoDB 会话、语音生成持久化，以及平台、不可变任务版本、授权申请、任务池原子领取、录音提交/返修/释放、人工审核、动态状态、软废弃恢复、媒体读取和 CSV/XLSX 异步导入后端闭环；Web 已完成后台登录、账号接管、首次改密、CSRF 请求封装和 ADMIN/REVIEWER 角色导航，管理业务页面与小程序采集端仍待后续阶段实现。
+录音任务平台用于管理录音任务的创建、领取、录制、上传和审核流程。当前仓库已具备管理员/审核员后台身份、录音人员微信登录边界、MongoDB 会话、平台与不可变任务版本、任务池采集、人工审核、状态/废弃、媒体、导入、操作记录和统计后端闭环；Web 已完成后台身份、平台/任务/版本、数据池/导入、采集权限、审核工作台、用户、操作记录和统计页面，小程序采集端仍待后续阶段实现。
 
 ## 项目定位
 
@@ -39,7 +39,7 @@ recording-platform/
 
 ## 当前阶段
 
-当前已实现项目根目录、Web 端主题基础、后台登录与角色导航、后端身份/会话基础、语音生成 Web 生产台和任务采集后端闭环。管理员任务页面、审核工作台、机器审核与小程序业务页面仍未实现。
+当前已实现 Web 后台身份与主要管理/审核页面、后端身份/会话、语音生成生产台和任务采集审核闭环。机器审核、真实 AI 转写与小程序业务页面仍未实现。
 
 仓库内不维护 Docker Compose 配置。后端运行需要开发者在本机或外部环境提供 MongoDB；默认连接为 `mongodb://localhost:27017/recording_platform`，真实账号密码只能放在本地环境变量或未提交的 `.env` 中。
 
@@ -62,7 +62,7 @@ Web 端已建立基础主题变量，变量文件位于 `apps/web/src/styles/the
 
 Web 管理端已建立 Vue Router 导航壳。未登录访问后台会进入 `/login`；ADMIN 默认进入 `/admin/dashboard`，REVIEWER 默认进入 `/admin/review/queue`。首次登录待改密账号只能访问 `/first-password`，改密后清除会话并要求重新登录。
 
-侧边栏菜单统一配置在 `apps/web/src/config/adminSidebar.js`，路由统一位于 `apps/web/src/router/`。菜单按 ADMIN/REVIEWER 动态过滤，未业务化的旧静态原型不再暴露在生产导航和路由。`apps/web/src/lib/httpClient.js` 统一处理 Cookie、CSRF、JSON/multipart、幂等头、结构化错误和会话接管下线；任务与审核业务页面将在下一阶段接入。
+侧边栏菜单统一配置在 `apps/web/src/config/adminSidebar.js`，路由统一位于 `apps/web/src/router/`。菜单按 ADMIN/REVIEWER 动态过滤，未业务化的旧静态原型不再暴露在生产导航和路由。`apps/web/src/lib/httpClient.js` 统一处理 Cookie、CSRF、JSON/multipart、幂等头、结构化错误和会话接管下线；平台、任务、数据池、授权、审核、用户、记录和统计页面均通过该请求层接入真实接口。
 
 “语音生成”模块位于 `apps/web/src/pages/admin/voice-generation/`，当前已接入后端真实接口，支持 0 元试听、付费克隆、日常合成、声音配置和生成记录。
 

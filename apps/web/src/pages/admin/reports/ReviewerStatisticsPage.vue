@@ -1,7 +1,2 @@
-<script setup>
-import AdminPrototypePage from '../../../components/admin/AdminPrototypePage.vue'
-</script>
-
-<template>
-  <AdminPrototypePage page-key="reviewer-statistics" />
-</template>
+<script setup>import{onMounted,ref}from'vue';import PageActions from'../../../components/admin/PageActions.vue';import{reportApi}from'../../../lib/reportApi.js';import{useAdminSession}from'../../../composables/useAdminSession.js';const session=useAdminSession(),userId=ref(''),data=ref(null),error=ref('');async function load(){const id=userId.value||session.user.value?.userId;if(!id)return;try{data.value=await reportApi.reviewers({userId:id})}catch(e){error.value=e.message}}onMounted(load)</script>
+<template><section class="admin-page"><PageActions title="审核统计" description="领取、释放、通过、驳回及平均处理时长。"/><div class="business-card"><form v-if="session.user.value?.role==='ADMIN'" class="business-inline" @submit.prevent="load"><input v-model.trim="userId" required placeholder="审核员用户 ID"/><button class="button-primary">查询</button></form><p v-if="error" class="business-error">{{error}}</p><div v-if="data" class="summary-grid"><div><span>领取</span><strong>{{data.claimCount||0}}</strong></div><div><span>释放</span><strong>{{data.releaseCount||0}}</strong></div><div><span>通过</span><strong>{{data.approveCount||0}}</strong></div><div><span>驳回</span><strong>{{data.rejectCount||0}}</strong></div><div><span>平均处理</span><strong>{{Math.round((data.averageProcessingMillis||0)/1000)}} 秒</strong></div></div><p v-else class="business-note">选择审核员查看统计。</p></div></section></template>

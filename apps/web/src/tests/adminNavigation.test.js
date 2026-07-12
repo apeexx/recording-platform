@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { sidebarForRole } from '../config/adminSidebar.js'
 import { createAdminRouteGuard } from '../router/guards.js'
+import { adminRoutes } from '../router/adminRoutes.js'
 
 function paths(items) {
   return items.flatMap((item) => item.children?.map((child) => child.path) || [item.path])
@@ -13,12 +14,22 @@ describe('后台角色导航', () => {
 
     expect(adminPaths).toContain('/admin/platforms')
     expect(adminPaths).toContain('/admin/tasks')
+    expect(adminPaths).toContain('/admin/pool')
     expect(adminPaths).toContain('/admin/voice-generation/workbench')
     expect(reviewerPaths).toEqual([
       '/admin/review/queue', '/admin/reports/reviewers', '/admin/account'
     ])
     expect(adminPaths).not.toContain('/admin/basic/language-types')
     expect(adminPaths).not.toContain('/admin/system/roles')
+  })
+
+  it('生产路由只保留真实业务路径，不暴露旧原型入口', () => {
+    const routePaths = adminRoutes.children.map(route => `/admin/${route.path}`)
+    expect(routePaths).toContain('/admin/tasks/:id')
+    expect(routePaths).toContain('/admin/review/:itemId')
+    expect(routePaths).not.toContain('/admin/text/import')
+    expect(routePaths).not.toContain('/admin/review/overview')
+    expect(routePaths).not.toContain('/admin/system/roles')
   })
 
   it('未登录去登录页，首次改密被限制，角色越权去各自首页', async () => {

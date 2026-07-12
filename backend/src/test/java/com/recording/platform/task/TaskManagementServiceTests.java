@@ -73,6 +73,18 @@ class TaskManagementServiceTests {
 	}
 
 	@Test
+	void listsImmutableVersionsForTheTaskEditor() {
+		TaskRecord task = service.create(command(spec(Set.of(ReferenceType.TEXT), false)));
+
+		assertThat(service.versions(task.getId()))
+			.extracting(TaskVersion::getVersionNumber)
+			.containsExactly(1);
+		assertThatThrownBy(() -> service.versions("missing"))
+			.isInstanceOfSatisfying(ApiException.class, error ->
+				assertThat(error.getCode()).isEqualTo("TASK_NOT_FOUND"));
+	}
+
+	@Test
 	void taskCodeAndReferenceTypesMatchTheStorageContract() {
 		CreateTaskCommand unsafeCode = new CreateTaskCommand(
 			"中文/任务", platforms.findByCode("WECHAT").orElseThrow().getId(), "朗读任务", null,

@@ -74,6 +74,30 @@ public class AdminUserService {
 		return users.findAllBackend(PageRequest.of(safePage, safeSize)).map(UserResponse::from);
 	}
 
+	public Page<UserResponse> search(String query, UserRole role, int page, int size) {
+		int safePage = Math.max(page, 0);
+		int safeSize = Math.min(Math.max(size, 1), 100);
+		return users.search(query == null ? "" : query.trim(), role, PageRequest.of(safePage, safeSize))
+			.map(UserResponse::from);
+	}
+
+	public UserResponse resetPassword(String userId, String newPassword) {
+		if (!BcryptPasswordPolicy.isValidForEncoding(newPassword)) {
+			throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "PASSWORD_TOO_WEAK",
+				"新密码至少需要 8 个字符，且 UTF-8 编码不能超过 72 字节");
+		}
+		UserAccount user = users.findById(userId)
+			.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "USER_NOT_FOUND", "用户不存在"));
+		if (user.getRole() == UserRole.COLLECTOR) {
+			throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "INVALID_BACKEND_ROLE", "只能重置后台账号密码");
+		}
+		UserAccount saved = users.resetBackendPasswordIfActive(
+			userId, passwordEncoder.encode(newPassword), Instant.now(clock)
+		).orElseThrow(() -> new ApiException(HttpStatus.CONFLICT, "ACCOUNT_STATE_CHANGED", "账号状态已变化，请重试"));
+		sessions.revokeAll(userId);
+		return UserResponse.from(saved);
+	}
+
 	public UserResponse disable(String userId) {
 		UserAccount user = users.findById(userId)
 			.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "USER_NOT_FOUND", "用户不存在"));

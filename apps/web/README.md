@@ -18,7 +18,7 @@
 - 静态原型支持筛选、标签页、表格行详情、本地状态切换、模拟操作提示和窄屏响应式展示。
 - 工作台展示静态待办、模块入口和流程进度，不跳转到语音生成业务页面。
 
-当前不使用 JWT 或 Pinia。任务管理、审核工作台和统计页面仍将在下一阶段接入真实接口；语音生成模块已改为复用统一鉴权请求客户端，用于 MiniMax 试听、克隆、合成、音色管理和生成记录。
+当前不使用 JWT 或 Pinia。平台、任务/不可变版本、数据池/导入、采集权限、审核池/工作台、后台用户、操作记录和统计页面已接入真实接口；语音生成模块同样复用统一鉴权请求客户端。
 
 语音生成工作台中，付费克隆模式只上传母带音频并填写新音色 ID，不展示语速、音量、语调配置；这些调音参数只用于 0 元试听和日常合成。克隆母带需符合 MiniMax 限制：mp3、m4a 或 wav，10 秒到 5 分钟，不超过 20MB；超过后端上传限制时会返回 HTTP 413 和可读错误摘要。
 
@@ -34,6 +34,8 @@
 - `src/components/admin/AdminPrototypePage.vue`：非语音生成页面共用的静态原型渲染组件。
 - `src/data/adminStaticData.js`：管理员端静态原型使用的脱敏示例数据和页面配置。
 - `src/pages/admin/`：管理员端页面。
+- `src/pages/admin/platforms/`、`tasks/`、`review/`、`reports/`、`system/`：真实业务管理页面。
+- `src/lib/platformApi.js`、`taskApi.js`、`reviewApi.js`、`reportApi.js`、`userApi.js`：业务 API 封装。
 - `src/pages/admin/voice-generation/`：语音生成 Web 生产台页面。
 - `src/lib/voiceGenerationApi.js`：语音生成前端 API 封装；不传递 API Key。
 - `src/styles/theme.css`：主题变量。

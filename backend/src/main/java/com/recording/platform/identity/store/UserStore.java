@@ -22,9 +22,17 @@ public interface UserStore {
 
 	Page<UserAccount> findAllBackend(Pageable pageable);
 
+	default Page<UserAccount> search(String query, UserRole role, Pageable pageable) {
+		return role == null ? findAll(pageable) : Page.empty(pageable);
+	}
+
 	Optional<UserAccount> disableBackendIfActive(String userId, Instant updatedAt);
 
 	boolean updatePasswordIfActive(String userId, String expectedPasswordHash, String passwordHash, Instant updatedAt);
+
+	default Optional<UserAccount> resetBackendPasswordIfActive(String userId, String passwordHash, Instant updatedAt) {
+		return Optional.empty();
+	}
 
 	Optional<UserAccount> updateCollectorNameIfActive(String userId, String name, Instant updatedAt);
 }

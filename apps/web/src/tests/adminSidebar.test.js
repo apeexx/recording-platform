@@ -19,6 +19,7 @@ describe('adminSidebar', () => {
       '/admin/dashboard',
       '/admin/platforms',
       '/admin/tasks',
+      '/admin/pool',
       '/admin/permissions',
       '/admin/review/queue',
       '/admin/reports/tasks',

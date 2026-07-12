@@ -127,4 +127,35 @@ class AdminUserServiceTests {
 				assertThat(exception.getCode()).isEqualTo("INVALID_BACKEND_ROLE")
 			);
 	}
+
+	@Test
+	void searchesCollectorsAndResetsBackendPasswordWithSessionRevocation() {
+		UserStore users = org.mockito.Mockito.mock(UserStore.class);
+		SessionService sessions = org.mockito.Mockito.mock(SessionService.class);
+		BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
+		UserAccount collector = new UserAccount();
+		collector.setId("collector-1");
+		collector.setRole(UserRole.COLLECTOR);
+		collector.setStatus(UserStatus.ACTIVE);
+		UserAccount reviewer = new UserAccount();
+		reviewer.setId("reviewer-1");
+		reviewer.setRole(UserRole.REVIEWER);
+		reviewer.setStatus(UserStatus.ACTIVE);
+		when(users.search("张", UserRole.COLLECTOR, PageRequest.of(0, 20)))
+			.thenReturn(new PageImpl<>(List.of(collector)));
+		when(users.findById("reviewer-1")).thenReturn(Optional.of(reviewer));
+		when(users.resetBackendPasswordIfActive(org.mockito.ArgumentMatchers.eq("reviewer-1"), any(), any()))
+			.thenReturn(Optional.of(reviewer));
+		AdminUserService service = new AdminUserService(users, sessions, encoder, CLOCK);
+
+		assertThat(service.search(" 张 ", UserRole.COLLECTOR, 0, 20).getContent()).hasSize(1);
+		service.resetPassword("reviewer-1", "NewPassword-1");
+
+		verify(users).resetBackendPasswordIfActive(
+			org.mockito.ArgumentMatchers.eq("reviewer-1"),
+			org.mockito.ArgumentMatchers.argThat((String hash) -> encoder.matches("NewPassword-1", hash)),
+			org.mockito.ArgumentMatchers.eq(Instant.parse("2026-07-11T12:00:00Z"))
+		);
+		verify(sessions).revokeAll("reviewer-1");
+	}
 }

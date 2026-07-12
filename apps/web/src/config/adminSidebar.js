@@ -4,6 +4,7 @@ export const adminSidebar = [
     key: 'tasks', title: '任务管理', icon: 'task', roles: ['ADMIN'], children: [
       { key: 'platforms', title: '平台管理', path: '/admin/platforms' },
       { key: 'tasks', title: '任务与数据池', path: '/admin/tasks' },
+      { key: 'task-pool', title: '任务数据池', path: '/admin/pool' },
       { key: 'permissions', title: '采集权限', path: '/admin/permissions' }
     ]
   },

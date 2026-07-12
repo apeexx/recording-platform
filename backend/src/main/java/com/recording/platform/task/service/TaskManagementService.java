@@ -351,4 +351,11 @@ public class TaskManagementService {
 		copy.setPublishedAt(source.getPublishedAt());
 		return copy;
 	}
+
+	public java.util.List<com.recording.platform.task.model.TaskVersion> versions(String taskId) {
+		if (tasks.findById(taskId).isEmpty()) {
+			throw new ApiException(HttpStatus.NOT_FOUND, "TASK_NOT_FOUND", "任务不存在");
+		}
+		return versions.findAllByTaskIdOrderByVersionNumber(taskId);
+	}
 }
