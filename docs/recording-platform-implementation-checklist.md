@@ -28,7 +28,7 @@
 - [x] `2f0dc7d`：修复身份接口 422 契约和认证过滤器数据库错误边界。
 - [x] `83a3a4c`：平台、任务版本、授权、任务池、录音媒体、导入和持久化幂等。
 - [x] `59f59de`：导入 lease/fencing、版本补偿、平台引用保护、媒体清理任务和单条添加补偿。
-- [ ] 重新执行阶段二本地复核；上一次外部只读复审因使用额度耗尽，未返回最终 verdict。
+- [x] 阶段二本地复核完成；修复导入 worker 丢失租约时可能删除数据库仍引用源文件的问题，后端 153 个测试通过。
 - [ ] 审核/状态/操作记录/统计后端。
 - [ ] 管理员与审核员 Web 真实业务页面。
 - [ ] 原生微信小程序采集端。
@@ -54,7 +54,7 @@
 - task/version 补偿必须使用保存后的最新 version；补偿失败返回 `TASK_CONSISTENCY_RECOVERY_FAILED`。
 - `media_cleanup_jobs` 必须支持即时尝试、operationId 重放和启动恢复。
 
-- [ ] **Step 0.1：运行后端 clean 全量测试。**
+- [x] **Step 0.1：运行后端 clean 全量测试。**
 
   运行位置：`backend`
 
@@ -64,7 +64,7 @@
 
   预期：至少 152 个测试，0 failures、0 errors、0 skipped，`BUILD SUCCESS`。
 
-- [ ] **Step 0.2：只读检查最终两个提交。**
+- [x] **Step 0.2：只读检查最终两个提交。**
 
   ```powershell
   git diff --check 83a3a4c..59f59de
@@ -73,9 +73,11 @@
 
   预期：无空白错误，工作区干净，`main` 至少 ahead 4。
 
-- [ ] **Step 0.3：确认没有未关闭的 Critical/Important。**
+- [x] **Step 0.3：确认没有未关闭的 Critical/Important。**
 
   检查 import fencing、版本补偿、平台引用、cleanup 重试和单条添加双重清理；若发现缺口，先补失败测试再修复。
+
+  复核结果：新增租约接管回归测试；失败行文件使用 worker 唯一名称，只有 fenced `finish` 成功后才切换并清理旧源文件，丢失租约时保留数据库引用的原文件。
 
 ---
 

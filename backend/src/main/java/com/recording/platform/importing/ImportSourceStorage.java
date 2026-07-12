@@ -61,12 +61,13 @@ public class ImportSourceStorage {
 
 	public String retainFailedRows(
 		String jobId,
-		String currentRelativePath,
+		String attemptId,
 		List<ImportRow> rows,
 		Set<Long> failedRows
 	) {
-		Path target = resolve("temp/imports/" + safe(jobId) + "/retry.csv");
-		Path temporary = target.resolveSibling("retry.csv.tmp");
+		String retryFilename = "retry-" + safe(attemptId) + ".csv";
+		Path target = resolve("temp/imports/" + safe(jobId) + "/" + retryFilename);
+		Path temporary = target.resolveSibling(retryFilename + ".tmp");
 		Map<Long, ImportRow> byNumber = new HashMap<>();
 		long maximumRow = 1;
 		for (ImportRow row : rows) {
@@ -94,12 +95,9 @@ public class ImportSourceStorage {
 			} catch (java.nio.file.AtomicMoveNotSupportedException exception) {
 				Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING);
 			}
-			String retained = relative(target);
-			if (!retained.equals(currentRelativePath)) delete(currentRelativePath);
-			return retained;
+			return relative(target);
 		} catch (IOException exception) {
 			delete(relative(temporary));
-			delete(currentRelativePath);
 			throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "IMPORT_STORAGE_FAILED", "失败行暂时无法安全保存");
 		}
 	}

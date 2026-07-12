@@ -260,6 +260,38 @@ class ImportJobServiceTests {
 	}
 
 	@Test
+	void partialImportThatLosesLeaseKeepsThePersistedOriginalSource() throws Exception {
+		InMemoryImportJobStore jobs = new InMemoryImportJobStore();
+		TaskItemCreationService itemCreation = org.mockito.Mockito.mock(TaskItemCreationService.class);
+		org.mockito.Mockito.when(itemCreation.add(eq("task-1"), any(), any(), any()))
+			.thenReturn(new TaskItem())
+			.thenAnswer((invocation) -> {
+				jobs.stealCurrentLease("replacement-worker");
+				throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "ROW_INVALID", "该行不合法");
+			});
+		ImportSourceStorage sources = new ImportSourceStorage(tempDir);
+		ImportJobService service = new ImportJobService(
+			jobs, new ImportFileParser(), itemCreation, sources, Runnable::run,
+			Clock.fixed(Instant.parse("2026-07-11T12:00:00Z"), ZoneOffset.UTC)
+		);
+		MockMultipartFile file = new MockMultipartFile(
+			"file", "items.csv", "text/csv",
+			("externalItemId,referenceText,referenceAudioUrl,referenceVideoUrl\n"
+				+ "row-1,第一条,,\nrow-2,第二条,,\n").getBytes()
+		);
+		PlatformPrincipal admin = new PlatformPrincipal(
+			"session-1", "admin-1", "admin", "管理员", UserRole.ADMIN, SessionType.WEB, false
+		);
+
+		ImportJob returned = service.create("task-1", "import-partial-lost-lease", file, admin);
+		ImportJob stored = jobs.findById(returned.getId()).orElseThrow();
+
+		assertThat(stored.getStatus()).isEqualTo(ImportJobStatus.PROCESSING);
+		assertThat(stored.getLeaseOwner()).isEqualTo("replacement-worker");
+		assertThat(Files.exists(sources.resolve(stored.getSourceRelativePath()))).isTrue();
+	}
+
+	@Test
 	void largeFailureSetsCapStoredErrorsAndPersistProgressInBatches() {
 		InMemoryImportJobStore jobs = new InMemoryImportJobStore();
 		TaskItemCreationService itemCreation = org.mockito.Mockito.mock(TaskItemCreationService.class);

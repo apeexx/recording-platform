@@ -1,9 +1,21 @@
 # AI 修改日志
 
+## 2026-07-12 14:58 完成阶段二复核并修复导入源文件竞态
+
+- 时间：2026-07-12 14:58
+- commit ID：待提交后补记
+- 修改内容：
+  - 补充导入 worker 在部分成功后丢失租约的回归测试，确认旧实现会删除 MongoDB 仍引用的原始导入文件。
+  - 失败行重试文件改为按 worker 唯一命名；仅在 fenced `finish` 成功后删除旧源文件，租约被接管时保留原文件并清理未发布的重试文件。
+  - 更新完整实施清单，将阶段二复核标记为完成。
+- 验证结果：
+  - `backend\\mvnw.cmd clean test`：153 tests，0 failures，0 errors，0 skipped。
+  - `git diff --check 83a3a4c..59f59de` 与当前工作区 `git diff --check`：通过。
+
 ## 2026-07-12 14:48 增加完整闭环实施清单
 
 - 时间：2026-07-12 14:48
-- commit ID：待提交后补记
+- commit ID：f766f23
 - 修改内容：
   - 新增 `docs/recording-platform-implementation-checklist.md`，记录录音任务平台从阶段二复核到审核后端、Web 管理端、原生微信小程序、启动加固和最终验收的完整任务清单。
   - 清单记录已完成的四个后端提交、剩余文件范围、接口、TDD 步骤、验证命令、提交节点和最终完成条件。

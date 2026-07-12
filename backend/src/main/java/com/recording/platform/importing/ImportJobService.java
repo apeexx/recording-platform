@@ -142,6 +142,8 @@ public class ImportJobService {
 			jobId, workerId, leaseStartedAt, leaseStartedAt.plus(LEASE_DURATION)
 		).orElse(null);
 		if (job == null) return;
+		String originalSourcePath = job.getSourceRelativePath();
+		String preparedRetryPath = null;
 		Set<Long> retryRows = job.getRunMode() == ImportRunMode.FAILED_ROWS
 			&& job.getRetryRowNumbers() != null && !job.getRetryRowNumbers().isEmpty()
 			? new HashSet<>(job.getRetryRowNumbers()) : null;
@@ -193,9 +195,10 @@ public class ImportJobService {
 			job.setStatus(failure == 0 ? ImportJobStatus.COMPLETED
 				: success > 0 ? ImportJobStatus.PARTIAL_SUCCESS : ImportJobStatus.FAILED);
 			if (failure > 0 && success > 0) {
-				job.setSourceRelativePath(sources.retainFailedRows(
-					job.getId(), job.getSourceRelativePath(), rows, failedRowNumbers
-				));
+				preparedRetryPath = sources.retainFailedRows(
+					job.getId(), workerId, rows, failedRowNumbers
+				);
+				job.setSourceRelativePath(preparedRetryPath);
 			}
 		} catch (ApiException exception) {
 			job.setStatus(ImportJobStatus.FAILED);
@@ -207,8 +210,14 @@ public class ImportJobService {
 		job.setUpdatedAt(job.getCompletedAt());
 		if (job.getStatus() == ImportJobStatus.COMPLETED) job.setRetryRowNumbers(new ArrayList<>());
 		ImportJob finished = jobs.finish(job, workerId).orElse(null);
-		if (finished != null && finished.getStatus() == ImportJobStatus.COMPLETED) {
-			sources.delete(finished.getSourceRelativePath());
+		if (finished == null) {
+			if (preparedRetryPath != null) sources.delete(preparedRetryPath);
+			return;
+		}
+		if (finished.getStatus() == ImportJobStatus.COMPLETED) {
+			sources.delete(originalSourcePath);
+		} else if (preparedRetryPath != null && !preparedRetryPath.equals(originalSourcePath)) {
+			sources.delete(originalSourcePath);
 		}
 	}
 

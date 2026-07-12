@@ -204,7 +204,7 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 
 远程参考媒体生产默认只允许 HTTPS。策略必须阻止 localhost、环回、私网、链路本地、多播和危险重定向，并把校验后的公共 IP 绑定到实际 Socket；HTTPS 仍使用原 hostname 做 SNI、证书主机校验和 Host 请求头。`REMOTE_MEDIA_ALLOW_HTTP=true` 仅供显式开发联调，仍不允许私网目标。音频上限 100MB，视频上限 500MB；成功后不得保存完整签名 URL，只能保存 hostname、状态和脱敏错误摘要。
 
-导入只支持 `.csv`、`.xlsx`，固定列为 `externalItemId`、`referenceText`、`referenceAudioUrl`、`referenceVideoUrl`；返回 HTTP 202 和 importJobId，Mongo 持久化状态/计数/失败行号/有限脱敏行错误，支持幂等、部分成功与失败行重试。单文件最多 50000 个数据行，每 100 行持久化一次进度，脱敏行错误摘要最多保存 1000 条。初始导入和过期 PROCESSING 恢复固定使用 `FULL` 模式幂等重放完整源文件，只有用户显式失败行重试使用 `FAILED_ROWS`；worker 必须使用 10 分钟 Mongo 租约并持续心跳，所有 heartbeat/progress/finish 写入都以 `leaseOwner` 做 fencing CAS 并使用返回的新状态，旧 owner 不得覆盖完成或失败状态。应用启动后重新排队 PENDING 或租约过期的 PROCESSING 作业；多实例通过原子租约领取避免重复执行。部分成功后必须把源文件改写成只含失败行的重试 CSV，成功行使用脱敏占位，不保留其签名 URL。
+导入只支持 `.csv`、`.xlsx`，固定列为 `externalItemId`、`referenceText`、`referenceAudioUrl`、`referenceVideoUrl`；返回 HTTP 202 和 importJobId，Mongo 持久化状态/计数/失败行号/有限脱敏行错误，支持幂等、部分成功与失败行重试。单文件最多 50000 个数据行，每 100 行持久化一次进度，脱敏行错误摘要最多保存 1000 条。初始导入和过期 PROCESSING 恢复固定使用 `FULL` 模式幂等重放完整源文件，只有用户显式失败行重试使用 `FAILED_ROWS`；worker 必须使用 10 分钟 Mongo 租约并持续心跳，所有 heartbeat/progress/finish 写入都以 `leaseOwner` 做 fencing CAS 并使用返回的新状态，旧 owner 不得覆盖完成或失败状态。应用启动后重新排队 PENDING 或租约过期的 PROCESSING 作业；多实例通过原子租约领取避免重复执行。部分成功时必须先生成按 worker 唯一命名、只含失败行的重试 CSV；只有 fenced finish 成功后才切换源路径并清理旧文件，丢失租约的 worker 不得删除 MongoDB 仍引用的源文件。成功行使用脱敏占位，不保留其签名 URL。
 
 ## 7. 接口说明
 
