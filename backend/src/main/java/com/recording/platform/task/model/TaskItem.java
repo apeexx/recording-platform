@@ -52,6 +52,7 @@ public class TaskItem {
 	private TaskItemStatus status;
 	private String collectorId;
 	private String reviewerId;
+	private String reviewAssignmentId;
 	private String assignmentId;
 	private long revision;
 	private String referenceText;

@@ -71,6 +71,10 @@ public class SecurityConfig {
 				"/api/auth/miniprogram/login"
 			).permitAll()
 			.requestMatchers("/api/platforms/**", "/api/import-jobs/**").hasRole("ADMIN")
+			.requestMatchers("/api/reviews/**").hasAnyRole("ADMIN", "REVIEWER")
+			.requestMatchers(HttpMethod.POST, "/api/task-items/*/status", "/api/task-items/*/discard", "/api/task-items/*/restore")
+				.hasRole("ADMIN")
+			.requestMatchers(HttpMethod.POST, "/api/task-items/batch/**").hasRole("ADMIN")
 			.requestMatchers(HttpMethod.POST, "/api/tasks/*/items/start", "/api/tasks/*/access-requests")
 				.hasRole("COLLECTOR")
 			.requestMatchers(HttpMethod.POST, "/api/task-items/*/submit").hasRole("COLLECTOR")

@@ -13,6 +13,11 @@ import com.recording.platform.task.service.TaskPoolService;
 import com.recording.platform.task.store.TaskItemStore;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import com.recording.platform.task.service.BatchItemCommand;
+import com.recording.platform.task.service.BatchItemResult;
+import java.util.ArrayList;
+import java.util.List;
+import com.recording.platform.identity.model.UserRole;
 
 @Service
 public class TaskItemActionService {
@@ -71,6 +76,34 @@ public class TaskItemActionService {
 		PlatformPrincipal actor
 	) {
 		return pool.reject(itemId, operationId, expectedRevision, reason, actor);
+	}
+
+	public List<BatchItemResult> batchRelease(
+		String operationId, List<BatchItemCommand> commands, PlatformPrincipal actor
+	) {
+		if (actor == null || actor.role() != UserRole.ADMIN) {
+			throw new ApiException(HttpStatus.FORBIDDEN, "ACCESS_DENIED", "没有权限执行此操作");
+		}
+		if (operationId == null || operationId.isBlank()) {
+			throw new ApiException(HttpStatus.BAD_REQUEST, "OPERATION_ID_REQUIRED", "operationId 不能为空");
+		}
+		if (commands == null || commands.isEmpty() || commands.size() > 100) {
+			throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "INVALID_BATCH_SIZE", "批量操作数量必须为 1 到 100");
+		}
+		List<BatchItemResult> results = new ArrayList<>();
+		String batchId = operationId.trim();
+		for (int index = 0; index < commands.size(); index++) {
+			BatchItemCommand command = commands.get(index);
+			try {
+				TaskItemActionResult result = release(
+					command.itemId(), batchId + ":" + index, command.expectedRevision(), actor
+				);
+				results.add(BatchItemResult.success(command.itemId(), result.revision()));
+			} catch (ApiException exception) {
+				results.add(BatchItemResult.failure(command.itemId(), exception.getCode(), exception.getMessage()));
+			}
+		}
+		return results;
 	}
 
 	private TaskItem requireItem(String itemId) {

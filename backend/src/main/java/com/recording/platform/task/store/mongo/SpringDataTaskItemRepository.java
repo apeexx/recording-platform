@@ -12,4 +12,5 @@ interface SpringDataTaskItemRepository extends MongoRepository<TaskItem, String>
 	Optional<TaskItem> findByTaskIdAndExternalItemId(String taskId, String externalItemId);
 	Optional<TaskItem> findByTaskIdAndCreationOperationId(String taskId, String creationOperationId);
 	Page<TaskItem> findAllByTaskId(String taskId, Pageable pageable);
+	Page<TaskItem> findAllByStatusAndReviewerIdIsNull(TaskItemStatus status, Pageable pageable);
 }

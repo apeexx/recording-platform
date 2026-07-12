@@ -29,7 +29,8 @@
 - [x] `83a3a4c`：平台、任务版本、授权、任务池、录音媒体、导入和持久化幂等。
 - [x] `59f59de`：导入 lease/fencing、版本补偿、平台引用保护、媒体清理任务和单条添加补偿。
 - [x] 阶段二本地复核完成；修复导入 worker 丢失租约时可能删除数据库仍引用源文件的问题，后端 153 个测试通过。
-- [ ] 审核/状态/操作记录/统计后端。
+- [x] 人工审核、动态状态、释放、软废弃恢复后端。
+- [ ] 操作记录查询/统计后端。
 - [ ] 管理员与审核员 Web 真实业务页面。
 - [ ] 原生微信小程序采集端。
 - [ ] 启动脚本、健康检查、安全加固和全链路验收。
@@ -109,31 +110,31 @@
 - `POST /api/task-items/{itemId}/status|discard|restore`
 - `POST /api/task-items/batch/status|approve|release|discard|restore`
 
-- [ ] **Step 1.1：写审核领取红灯测试。**
+- [x] **Step 1.1：写审核领取红灯测试。**
 
   验证 REVIEWER 可跨任务看到 `REVIEW_PENDING`，随机领取和批量领取使用条件更新；同一条目不能被两个审核员领取；ADMIN 可分配；REVIEWER 可释放审核领取且不删除采集结果。
 
-- [ ] **Step 1.2：实现最小审核领取 Store/Service/API。**
+- [x] **Step 1.2：实现最小审核领取 Store/Service/API。**
 
   `findAndModify` 条件必须包含 `status=REVIEW_PENDING`、`reviewerId` 为空和 `revision`；领取后写 `reviewAssignmentId`、审核员和操作历史。
 
-- [ ] **Step 1.3：写通过/驳回红灯测试。**
+- [x] **Step 1.3：写通过/驳回红灯测试。**
 
   通过进入 `COMPLETED`；驳回要求“预设原因至少一项或补充说明非空”，回到 `RECORDING_PENDING`，保留原 collector/assignment，清 reviewer，并把审核结论写入对应 submission 历史。
 
-- [ ] **Step 1.4：实现逐条审核和 ADMIN 批量通过。**
+- [x] **Step 1.4：实现逐条审核和 ADMIN 批量通过。**
 
   REVIEWER 不得调用批量通过；批量返回每条 `{itemId,success,code,message,revision}`，单条冲突不能回滚其他成功项。
 
-- [ ] **Step 1.5：写动态状态、废弃和恢复红灯测试。**
+- [x] **Step 1.5：写动态状态、废弃和恢复红灯测试。**
 
   普通状态调整不得进入 `AVAILABLE`；未启用人工审核不得进入 `REVIEW_PENDING`；首期不得进入 `AI_PROCESSING`；进入 `RECORDING_PENDING` 且无 collector 时必须提供 collectorId；`DISCARDED` 保存 `discardedFromStatus`、归属、结果和文件。
 
-- [ ] **Step 1.6：实现单条/批量状态、释放、废弃和恢复。**
+- [x] **Step 1.6：实现单条/批量状态、释放、废弃和恢复。**
 
   恢复必须重新验证任务版本允许的状态、collector 全局唯一占用和 revision；失败逐条返回冲突。返回池只能调用 release。
 
-- [ ] **Step 1.7：验证并提交。**
+- [x] **Step 1.7：验证并提交。**
 
   ```powershell
   .\mvnw.cmd "-Dtest=ReviewServiceTests,ReviewApiSecurityIntegrationTests,TaskItemAdministrationServiceTests" test

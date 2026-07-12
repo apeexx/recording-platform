@@ -12,6 +12,7 @@ import java.util.function.Supplier;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
+import com.fasterxml.jackson.core.type.TypeReference;
 
 @Service
 public class IdempotencyService {
@@ -35,6 +36,26 @@ public class IdempotencyService {
 		Class<T> responseType,
 		Supplier<T> mutation
 	) {
+		return executeInternal(authentication, action, operationKey, () -> readResponse(responseType), mutation);
+	}
+
+	public <T> T execute(
+		Authentication authentication,
+		String action,
+		String operationKey,
+		TypeReference<T> responseType,
+		Supplier<T> mutation
+	) {
+		return executeInternal(authentication, action, operationKey, () -> readResponse(responseType), mutation);
+	}
+
+	private <T> T executeInternal(
+		Authentication authentication,
+		String action,
+		String operationKey,
+		java.util.function.Supplier<java.util.function.Function<String, T>> readerFactory,
+		Supplier<T> mutation
+	) {
 		String actorUserId = actorUserId(authentication);
 		String normalizedAction = required(action, "IDEMPOTENCY_ACTION_REQUIRED", "幂等操作类型不能为空", 192);
 		String normalizedKey = required(operationKey, "OPERATION_ID_REQUIRED", "Idempotency-Key 不能为空", 256);
@@ -42,7 +63,7 @@ public class IdempotencyService {
 		lock.lock();
 		try {
 			IdempotencyRecord existing = records.find(actorUserId, normalizedAction, normalizedKey).orElse(null);
-			if (existing != null) return replayOrWait(existing, responseType);
+			if (existing != null) return replayOrWait(existing, readerFactory.get());
 
 			Instant now = Instant.now(clock);
 			IdempotencyRecord claim = new IdempotencyRecord();
@@ -55,7 +76,7 @@ public class IdempotencyService {
 			if (!records.insertClaim(claim)) {
 				IdempotencyRecord concurrent = records.find(actorUserId, normalizedAction, normalizedKey)
 					.orElseThrow(this::inProgress);
-				return replayOrWait(concurrent, responseType);
+				return replayOrWait(concurrent, readerFactory.get());
 			}
 
 			T result;
@@ -75,11 +96,11 @@ public class IdempotencyService {
 		}
 	}
 
-	private <T> T replayOrWait(IdempotencyRecord record, Class<T> responseType) {
+	private <T> T replayOrWait(IdempotencyRecord record, java.util.function.Function<String, T> reader) {
 		IdempotencyRecord current = record;
 		for (int attempt = 0; attempt <= REMOTE_WAIT_ATTEMPTS; attempt++) {
 			if (current.getStatus() == IdempotencyStatus.COMPLETED) {
-				return read(current.getResponseJson(), responseType);
+				return reader.apply(current.getResponseJson());
 			}
 			if (attempt == REMOTE_WAIT_ATTEMPTS) throw inProgress();
 			try {
@@ -118,6 +139,22 @@ public class IdempotencyService {
 		} catch (JsonProcessingException exception) {
 			throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "IDEMPOTENCY_REPLAY_FAILED", "操作结果暂时无法重放");
 		}
+	}
+
+	private <T> T read(String json, TypeReference<T> type) {
+		try {
+			return objectMapper.readValue(json, type);
+		} catch (JsonProcessingException exception) {
+			throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "IDEMPOTENCY_REPLAY_FAILED", "操作结果暂时无法重放");
+		}
+	}
+
+	private <T> java.util.function.Function<String, T> readResponse(Class<T> type) {
+		return (json) -> read(json, type);
+	}
+
+	private <T> java.util.function.Function<String, T> readResponse(TypeReference<T> type) {
+		return (json) -> read(json, type);
 	}
 
 	private String required(String value, String code, String message, int maximumLength) {

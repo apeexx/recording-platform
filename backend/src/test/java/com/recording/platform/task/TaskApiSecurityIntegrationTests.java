@@ -35,6 +35,9 @@ import com.recording.platform.task.service.TaskQueryService;
 import com.recording.platform.task.service.PlatformService;
 import com.recording.platform.task.service.TaskItemActionResult;
 import com.recording.platform.task.service.TaskPoolService;
+import com.recording.platform.review.service.ReviewService;
+import com.recording.platform.task.service.TaskItemAdministrationService;
+import java.util.List;
 import jakarta.servlet.http.Cookie;
 import java.util.UUID;
 import java.util.function.Supplier;
@@ -80,10 +83,14 @@ class TaskApiSecurityIntegrationTests {
 	private TaskQueryService taskQueryService;
 	@MockitoBean
 	private IdempotencyService idempotencyService;
+	@MockitoBean
+	private ReviewService reviewService;
+	@MockitoBean
+	private TaskItemAdministrationService administrationService;
 
 	@BeforeEach
 	void executeControllerIdempotencyMutations() {
-		lenient().when(idempotencyService.execute(any(), anyString(), anyString(), any(), any()))
+		lenient().when(idempotencyService.execute(any(), anyString(), anyString(), any(Class.class), any()))
 			.thenAnswer((invocation) -> ((Supplier<?>) invocation.getArgument(4)).get());
 	}
 
@@ -259,6 +266,43 @@ class TaskApiSecurityIntegrationTests {
 		mockMvc.perform(post("/api/tasks/task-1/items/start")
 				.with(user("reviewer").roles("REVIEWER"))
 				.with(csrf()))
+			.andExpect(status().isForbidden());
+	}
+
+	@Test
+	void reviewAndAdministrationRoutesEnforceTheirRoleBoundaries() throws Exception {
+		TaskItem claimed = new TaskItem();
+		claimed.setId("item-review");
+		claimed.setStatus(TaskItemStatus.REVIEW_PENDING);
+		when(reviewService.claim(anyString(), any())).thenReturn(claimed);
+
+		mockMvc.perform(post("/api/reviews/claim")
+				.with(user("reviewer").roles("REVIEWER"))
+				.with(csrf())
+				.header("Idempotency-Key", "claim-review-1"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.id").value("item-review"));
+		mockMvc.perform(post("/api/reviews/claim")
+				.with(user("collector").roles("COLLECTOR"))
+				.with(csrf())
+				.header("Idempotency-Key", "claim-review-2"))
+			.andExpect(status().isForbidden());
+
+		when(administrationService.batchDiscard(anyString(), any(), any())).thenReturn(List.of());
+		String batch = """
+			{"operationId":"batch-1","items":[{"itemId":"item-1","expectedRevision":2}]}
+			""";
+		mockMvc.perform(post("/api/task-items/batch/discard")
+				.with(user("admin").roles("ADMIN"))
+				.with(csrf())
+				.contentType("application/json")
+				.content(batch))
+			.andExpect(status().isOk());
+		mockMvc.perform(post("/api/task-items/batch/discard")
+				.with(user("reviewer").roles("REVIEWER"))
+				.with(csrf())
+				.contentType("application/json")
+				.content(batch))
 			.andExpect(status().isForbidden());
 	}
 

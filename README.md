@@ -1,6 +1,6 @@
 # 录音任务平台
 
-录音任务平台用于管理录音任务的创建、领取、录制、上传和审核流程。当前仓库已具备管理员/审核员后台身份、录音人员微信登录边界、MongoDB 会话、语音生成持久化，以及平台、不可变任务版本、授权申请、任务池原子领取、录音提交/返修/释放、媒体读取和 CSV/XLSX 异步导入后端闭环；完整审核状态机和对应前端页面仍待后续阶段实现。
+录音任务平台用于管理录音任务的创建、领取、录制、上传和审核流程。当前仓库已具备管理员/审核员后台身份、录音人员微信登录边界、MongoDB 会话、语音生成持久化，以及平台、不可变任务版本、授权申请、任务池原子领取、录音提交/返修/释放、人工审核、动态状态、软废弃恢复、媒体读取和 CSV/XLSX 异步导入后端闭环；对应 Web 与小程序业务页面仍待后续阶段实现。
 
 ## 项目定位
 
@@ -152,6 +152,14 @@ POST /api/admin/users/{userId}/disable
 - 导入固定列为 `externalItemId`、`referenceText`、`referenceAudioUrl`、`referenceVideoUrl`，支持 `.csv` 和 `.xlsx`、部分成功、失败行重试及幂等。单文件最多 50000 个数据行；每 100 行持久化一次进度，行错误摘要最多保存 1000 条，完整失败行号单独保留用于重试。初始导入与过期 PROCESSING 恢复使用 `FULL` 模式幂等重放完整源文件，只有用户显式重试使用 `FAILED_ROWS`；worker 的心跳、进度和完成状态均以 `leaseOwner` 条件原子更新，旧 worker 失去租约后不能覆盖最终状态。部分成功时先生成只含失败行的 worker 唯一重试 CSV，只有 fenced 完成写入成功后才切换文件并清理旧源，成功行签名 URL 不再落盘。
 - 远程参考媒体生产默认只允许 HTTPS；每次重定向重新执行协议、主机和地址策略，禁止本机、环回、私网、链路本地与多播地址，并将校验后的地址绑定到实际连接。开发环境只有显式设置 `REMOTE_MEDIA_ALLOW_HTTP=true` 才允许 HTTP，仍不允许私网目标。音频上限 100MB、视频上限 500MB。
 
+## 人工审核与状态管理
+
+- `/api/reviews` 支持审核池、单条/批量领取、管理员指定审核员、释放审核占用、通过、驳回和管理员批量通过。
+- 驳回使用任务版本配置的原因多选加补充说明，回到原采集员的待录制状态；通过可补改文字并进入已完成。
+- ADMIN 可单条或批量调整状态、释放、软废弃和恢复；普通状态调整不能进入待领取，返回池只能使用释放。
+- 未启用的审核或 AI 阶段不可进入；废弃保留归属、当前结果、文件和历史，恢复回废弃前状态。
+- 所有写接口使用 operationId、持久化幂等快照及 revision/CAS；批量操作逐条返回成功或冲突结果。
+
 任务相关分页响应统一为 `{ items, page, size, total }`。常用端点：
 
 ```text
@@ -165,6 +173,11 @@ POST/GET            /api/tasks/{taskId}/items
 POST                /api/tasks/{taskId}/items/start
 GET                 /api/task-items/{itemId}
 POST                /api/task-items/{itemId}/submit|release|reject
+GET/POST            /api/reviews/pool|claim|claim-batch|assign
+GET/POST            /api/reviews/{itemId}|release|approve|reject
+POST                /api/reviews/batch/approve
+POST                /api/task-items/{itemId}/status|discard|restore
+POST                /api/task-items/batch/status|release|discard|restore
 POST/GET            /api/import-jobs[/{jobId}]
 POST                /api/import-jobs/{jobId}/retry
 GET                 /api/media/{mediaId}

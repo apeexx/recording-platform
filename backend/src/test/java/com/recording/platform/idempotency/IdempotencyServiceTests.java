@@ -52,6 +52,25 @@ class IdempotencyServiceTests {
 
 	record Result(String id) { }
 
+	@Test
+	void genericResponseTypeReplaysAListWithoutLosingElementTypes() {
+		InMemoryIdempotencyRecordStore records = new InMemoryIdempotencyRecordStore();
+		IdempotencyService service = new IdempotencyService(
+			records,
+			new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules(),
+			Clock.fixed(Instant.parse("2026-07-11T12:00:00Z"), ZoneOffset.UTC)
+		);
+		TestingAuthenticationToken authentication = new TestingAuthenticationToken("admin-1", null, "ROLE_ADMIN");
+		var type = new com.fasterxml.jackson.core.type.TypeReference<java.util.List<Result>>() { };
+
+		service.execute(authentication, "batch:test", "batch-1", type, () -> java.util.List.of(new Result("one")));
+		java.util.List<Result> replay = service.execute(
+			authentication, "batch:test", "batch-1", type, () -> java.util.List.of(new Result("two"))
+		);
+
+		assertThat(replay).containsExactly(new Result("one"));
+	}
+
 	private static final class InMemoryIdempotencyRecordStore implements IdempotencyRecordStore {
 		private final Map<String, IdempotencyRecord> data = new HashMap<>();
 		@Override public synchronized boolean insertClaim(IdempotencyRecord record) {

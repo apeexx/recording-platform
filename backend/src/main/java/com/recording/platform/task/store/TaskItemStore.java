@@ -16,6 +16,15 @@ public interface TaskItemStore {
 	}
 	Optional<TaskItem> findCurrentByCollector(String collectorId);
 	Optional<TaskItem> claimAvailable(ClaimMutation mutation);
+	default Optional<TaskItem> claimReview(ReviewClaimMutation mutation) { return Optional.empty(); }
+	default Optional<TaskItem> releaseReviewIfCurrent(ReviewReleaseMutation mutation) { return Optional.empty(); }
+	default Optional<TaskItem> decideReviewIfCurrent(ReviewDecisionMutation mutation) { return Optional.empty(); }
+	default Page<TaskItem> findReviewPool(Pageable pageable) { return Page.empty(pageable); }
+	default Optional<TaskItem> assignReviewIfCurrent(ReviewAssignMutation mutation) { return Optional.empty(); }
+	default Optional<TaskItem> adminApproveReviewIfCurrent(AdminReviewApproveMutation mutation) { return Optional.empty(); }
+	default Optional<TaskItem> adminTransitionIfCurrent(AdminItemTransitionMutation mutation) { return Optional.empty(); }
+	default Optional<TaskItem> adminDiscardIfCurrent(AdminItemTransitionMutation mutation) { return Optional.empty(); }
+	default Optional<TaskItem> adminRestoreIfCurrent(AdminItemTransitionMutation mutation) { return Optional.empty(); }
 	Optional<TaskItem> submitIfCurrent(SubmitMutation mutation);
 	Optional<TaskItem> rejectIfCurrent(RejectMutation mutation);
 	Optional<TaskItem> releaseIfCurrent(ReleaseMutation mutation);
