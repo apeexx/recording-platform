@@ -22,6 +22,8 @@ export function configureSessionReplacedHandler(handler) {
 
 export function markWebSessionEstablished() {
   sessionReplacementNotified = false
+  csrfState = null
+  csrfRequest = null
 }
 
 async function parseResponse(response) {

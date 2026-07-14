@@ -47,6 +47,25 @@ describe('httpClient', () => {
     }))
   })
 
+  it('obtains a fresh csrf token after a new web session is established', async () => {
+    fetch
+      .mockResolvedValueOnce(response(200, { headerName: 'X-XSRF-TOKEN', token: 'csrf-old' }))
+      .mockResolvedValueOnce(response(200, { success: true }))
+      .mockResolvedValueOnce(response(200, { headerName: 'X-XSRF-TOKEN', token: 'csrf-new' }))
+      .mockResolvedValueOnce(response(200, { success: true }))
+
+    await httpRequest('/api/platforms', { method: 'POST', json: { code: 'OLD' } })
+    markWebSessionEstablished()
+    await httpRequest('/api/platforms', { method: 'POST', json: { code: 'NEW' } })
+
+    expect(fetch).toHaveBeenNthCalledWith(3, '/api/auth/web/csrf', expect.objectContaining({
+      credentials: 'include'
+    }))
+    expect(fetch).toHaveBeenNthCalledWith(4, '/api/platforms', expect.objectContaining({
+      headers: expect.objectContaining({ 'X-XSRF-TOKEN': 'csrf-new' })
+    }))
+  })
+
   it('does not set multipart content type and preserves structured api errors', async () => {
     fetch
       .mockResolvedValueOnce(response(200, { headerName: 'X-XSRF-TOKEN', token: 'csrf-token' }))
