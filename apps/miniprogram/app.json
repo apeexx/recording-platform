@@ -11,9 +11,6 @@
     "navigationBarTextStyle": "black",
     "backgroundColor": "#f4f7fb"
   },
-  "permission": {
-    "scope.record": {"desc": "用于完成已签约录音任务的语音采集"}
-  },
   "tabBar": {
     "color": "#64748b",
     "selectedColor": "#2563eb",

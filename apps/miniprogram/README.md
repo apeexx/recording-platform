@@ -15,6 +15,8 @@
 
 AppSecret 只存在后端环境变量 `WECHAT_APP_SECRET`，绝不得放入小程序。`project.config.json`、`project.private.config.json` 和 `config/private.js` 均已忽略。
 
+录音授权由实际调用 `wx.getRecorderManager()` 开始录音时触发；不要在 `app.json.permission` 中声明无效的 `scope.record`。麦克风被拒绝后的重新授权仍需在开发者工具和真机验证。
+
 ## 验证
 
 ```powershell
