@@ -15,7 +15,7 @@ import org.springframework.web.client.RestClient;
 class DefaultWeChatClientTests {
 
 	@Test
-	void exchangesTemporaryCodeWithWechatJscode2session() {
+	void exchangesTemporaryCodeWhenWechatReturnsJsonAsTextPlain() {
 		RestClient.Builder builder = RestClient.builder().baseUrl("https://api.weixin.qq.com");
 		MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
 		DefaultWeChatClient client = new DefaultWeChatClient(
@@ -30,7 +30,7 @@ class DefaultWeChatClientTests {
 			.andExpect(queryParam("secret", "test-app-secret"))
 			.andExpect(queryParam("js_code", "temporary-code"))
 			.andExpect(queryParam("grant_type", "authorization_code"))
-			.andRespond(withSuccess("{\"openid\":\"openid-from-wechat\",\"session_key\":\"not-persisted\"}", MediaType.APPLICATION_JSON));
+			.andRespond(withSuccess("{\"openid\":\"openid-from-wechat\",\"session_key\":\"not-persisted\"}", MediaType.TEXT_PLAIN));
 
 		WeChatIdentity identity = client.exchange("temporary-code");
 

@@ -531,3 +531,16 @@
 - 验证结果：
   - 配置测试在修复前稳定失败，删除无效声明后转为通过。
   - 微信开发者工具重新编译后不再出现无效 `scope.record` 警告，模拟器正常显示微信登录页；仅保留不阻塞测试的基础库提示。
+
+## 2026-07-14 兼容微信登录纯文本响应类型
+
+- 时间：2026-07-14
+- commit ID：待提交后补记
+- 修改内容：
+  - 本地小程序联调发现 `jscode2session` 返回 JSON 内容时可能使用 `text/plain` 响应类型，原有 Spring 消息转换按 JSON 媒体类型读取会失败并误返回 `503 WECHAT_UNAVAILABLE`。
+  - 微信客户端改为先读取响应字符串，再将内容解析为受控字段映射；继续只使用 AppID 与 OpenID 建立身份，不保存或输出 `session_key`、临时 code、AppSecret 或第三方完整响应。
+  - 新增 `text/plain` JSON 响应回归测试，覆盖微信实际响应类型兼容边界。
+- 验证结果：
+  - 回归测试在修复前稳定返回 `WECHAT_UNAVAILABLE`；最小修复后定向测试通过。
+  - `backend\\mvnw.cmd clean test`：195/195 通过，0 failures、0 errors、0 skipped，`BUILD SUCCESS`；测试过程实际连接本机 MongoDB。
+  - 微信开发者工具真实联调通过：微信登录后进入姓名设置，保存测试姓名后进入任务大厅，并正确显示已发布任务及未授权状态；未记录临时 code、Bearer token、OpenID 或第三方完整响应。
