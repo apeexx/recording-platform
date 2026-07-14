@@ -8,7 +8,7 @@
 
 - `/login` 支持管理员/审核员账号密码登录及账号占用后的二次确认接管。
 - `/first-password` 处理首次登录强制改密，成功后清会话并要求重新登录。
-- `httpClient.js` 统一处理 Cookie、CSRF、JSON/multipart、Idempotency-Key、统一错误与 `SESSION_REPLACED`。
+- `httpClient.js` 统一处理 Cookie、CSRF、JSON/multipart、Idempotency-Key、统一错误与 `SESSION_REPLACED`；每次受保护的写请求都重新获取当前 CSRF，避免会话或 Cookie 轮换后复用旧 token。
 - ADMIN 默认进入 `/admin/dashboard`；REVIEWER 默认进入 `/admin/review/queue`。
 - 侧边栏和路由按角色保护，未业务化静态原型已从生产导航和路由隐藏。
 - 左侧侧边栏、顶部栏和主内容区已经搭建。

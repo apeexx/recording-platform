@@ -66,6 +66,24 @@ describe('httpClient', () => {
     }))
   })
 
+  it('obtains a fresh csrf token for each consecutive web mutation', async () => {
+    fetch
+      .mockResolvedValueOnce(response(200, { headerName: 'X-XSRF-TOKEN', token: 'csrf-publish' }))
+      .mockResolvedValueOnce(response(200, { status: 'RUNNING' }))
+      .mockResolvedValueOnce(response(200, { headerName: 'X-XSRF-TOKEN', token: 'csrf-pause' }))
+      .mockResolvedValueOnce(response(200, { status: 'PAUSED' }))
+
+    await httpRequest('/api/tasks/task-1/publish', { method: 'POST' })
+    await httpRequest('/api/tasks/task-1/pause', { method: 'POST' })
+
+    expect(fetch).toHaveBeenNthCalledWith(3, '/api/auth/web/csrf', expect.objectContaining({
+      credentials: 'include'
+    }))
+    expect(fetch).toHaveBeenNthCalledWith(4, '/api/tasks/task-1/pause', expect.objectContaining({
+      headers: expect.objectContaining({ 'X-XSRF-TOKEN': 'csrf-pause' })
+    }))
+  })
+
   it('does not set multipart content type and preserves structured api errors', async () => {
     fetch
       .mockResolvedValueOnce(response(200, { headerName: 'X-XSRF-TOKEN', token: 'csrf-token' }))

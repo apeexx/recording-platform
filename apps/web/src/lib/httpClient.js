@@ -75,6 +75,7 @@ async function obtainCsrf() {
 
 export async function httpRequest(url, options = {}) {
   const method = (options.method || 'GET').toUpperCase()
+  const csrfProtectedMutation = options.csrf !== false && MUTATING_METHODS.has(method)
   const headers = { ...(options.headers || {}) }
   let body = options.body
 
@@ -84,17 +85,25 @@ export async function httpRequest(url, options = {}) {
   }
   if (options.idempotencyKey) headers['Idempotency-Key'] = options.idempotencyKey
 
-  if (options.csrf !== false && MUTATING_METHODS.has(method)) {
+  if (csrfProtectedMutation) {
     const csrf = await obtainCsrf()
     headers[csrf.headerName] = csrf.token
   }
 
-  const response = await fetch(url, {
-    method,
-    credentials: 'include',
-    headers,
-    body
-  })
+  let response
+  try {
+    response = await fetch(url, {
+      method,
+      credentials: 'include',
+      headers,
+      body
+    })
+  } finally {
+    if (csrfProtectedMutation) {
+      csrfState = null
+      csrfRequest = null
+    }
+  }
   const payload = await parseResponse(response)
 
   if (!response.ok) {
