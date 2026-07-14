@@ -26,10 +26,19 @@ describe('后台角色导航', () => {
   it('生产路由只保留真实业务路径，不暴露旧原型入口', () => {
     const routePaths = adminRoutes.children.map(route => `/admin/${route.path}`)
     expect(routePaths).toContain('/admin/tasks/:id')
+    expect(routePaths).toContain('/admin/permissions')
     expect(routePaths).toContain('/admin/review/:itemId')
     expect(routePaths).not.toContain('/admin/text/import')
     expect(routePaths).not.toContain('/admin/review/overview')
     expect(routePaths).not.toContain('/admin/system/roles')
+  })
+
+  it('采集权限侧边栏入口打开任务选择页而不是跳回任务列表', () => {
+    const route = adminRoutes.children.find(item => item.path === 'permissions')
+
+    expect(route.redirect).toBeUndefined()
+    expect(route.component).toEqual(expect.any(Function))
+    expect(route.meta.title).toBe('采集权限')
   })
 
   it('未登录去登录页，首次改密被限制，角色越权去各自首页', async () => {

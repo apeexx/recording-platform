@@ -42,6 +42,8 @@
 
 新增后台页面时，需要同时更新路由和 `adminSidebar.js`。不要把菜单项硬编码在 Sidebar 组件中。
 
+侧边栏 `/admin/permissions` 是采集权限任务入口页，先选择任务，再进入 `/admin/tasks/{taskId}/permissions` 处理采集员申请、直接授权和撤销；不得将该入口重定向回任务列表。
+
 带 `children` 的侧边栏大分类只负责展开和收缩，子菜单负责页面跳转；当前路由所在的大分类应保持展开。维护侧边栏折叠动画时，应保持二级菜单 DOM 常驻，通过 class 和 CSS transition 控制动画状态。
 
 ## 本地命令
