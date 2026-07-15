@@ -1,5 +1,17 @@
 # AI 修改日志
 
+## 2026-07-15 生成任务批量导入 CSV 测试数据
+
+- 时间：2026-07-15
+- commit ID：待提交后补记
+- 修改内容：
+  - 新增 `docs/test-data/task-items-import-valid.csv`，提供 8 条仅含中文参考文字的有效任务池数据。
+  - 表头固定为 `externalItemId`、`referenceText`、`referenceAudioUrl`、`referenceVideoUrl`，外部编号使用独立的 `IMPORT-CSV-*` 前缀。
+  - 文件使用 UTF-8 BOM，便于 Windows 表格工具正确显示中文；后端导入解析器会安全移除 BOM。
+- 验证结果：
+  - 使用 Artifact Tool 创建、回读并渲染检查 9 行 4 列数据，中文与空列位置正确。
+  - 后端解析器源码已确认会在校验固定表头前安全移除 UTF-8 BOM；`ImportFileParserTests` 继续验证 CSV/XLSX 固定表头和行数限制。
+
 ## 2026-07-12 15:43 增加操作记录查询与工作统计
 
 - 时间：2026-07-12 15:43

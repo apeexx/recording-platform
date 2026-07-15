@@ -1,0 +1,9 @@
+﻿externalItemId,referenceText,referenceAudioUrl,referenceVideoUrl
+IMPORT-CSV-001,请用自然语速朗读：今天天气很好。,,
+IMPORT-CSV-002,请朗读下面这句话，并保持语气平稳。,,
+IMPORT-CSV-003,测试包含逗号，确保 CSV 字段可以正确解析。,,
+IMPORT-CSV-004,他说：“今天开始测试录音任务。”,,
+IMPORT-CSV-005,请使用普通话朗读数字：一二三四五。,,
+IMPORT-CSV-006,请清晰朗读英文和数字：Recording 2026。,,
+IMPORT-CSV-007,这是一条用于测试批量导入的普通话参考文本。,,
+IMPORT-CSV-008,最后一条测试数据，请完整朗读后提交。,,
