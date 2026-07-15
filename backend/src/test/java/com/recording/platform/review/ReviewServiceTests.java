@@ -26,6 +26,7 @@ import com.recording.platform.identity.model.UserStatus;
 import com.recording.platform.identity.store.UserStore;
 import com.recording.platform.task.store.ReviewAssignMutation;
 import com.recording.platform.task.store.AdminReviewApproveMutation;
+import com.recording.platform.task.store.AdminReviewDecisionMutation;
 import com.recording.platform.review.service.BatchReviewCommand;
 import com.recording.platform.review.service.BatchReviewResult;
 import java.time.Clock;
@@ -169,6 +170,18 @@ class ReviewServiceTests {
 	}
 
 	@Test
+	void adminListsAllPendingItemsIncludingReviewerAssignments() {
+		TaskItemStore items = mock(TaskItemStore.class);
+		PageRequest page = PageRequest.of(0, 20);
+		TaskItem assigned = assigned("item-assigned", 2);
+		when(items.findAllReviewPending(page)).thenReturn(new PageImpl<>(List.of(assigned), page, 1));
+		ReviewService service = new ReviewService(items, mock(TaskVersionStore.class), CLOCK);
+
+		assertThat(service.pool(page, admin()).getContent()).containsExactly(assigned);
+		verify(items).findAllReviewPending(page);
+	}
+
+	@Test
 	void batchClaimReturnsAlreadyClaimedItemsWhenPoolRunsOut() {
 		TaskItemStore items = mock(TaskItemStore.class);
 		TaskItem first = assigned("item-1", 2);
@@ -247,6 +260,50 @@ class ReviewServiceTests {
 		assertThat(results.get(1).success()).isFalse();
 		assertThat(results.get(1).code()).isEqualTo("STALE_STATE");
 		verify(items, org.mockito.Mockito.times(2)).adminApproveReviewIfCurrent(any(AdminReviewApproveMutation.class));
+	}
+
+	@Test
+	void adminMayApproveOneUnassignedPendingItemFromTheReviewWorkbench() {
+		TaskItemStore items = mock(TaskItemStore.class);
+		TaskVersionStore versions = mock(TaskVersionStore.class);
+		TaskItem existing = pending("item-admin", 6);
+		existing.setTaskVersionId("version-1");
+		when(items.findById("item-admin")).thenReturn(Optional.of(existing));
+		when(versions.findById("version-1")).thenReturn(Optional.of(reviewVersion()));
+		TaskItem completed = pending("item-admin", 7);
+		completed.setStatus(TaskItemStatus.COMPLETED);
+		completed.setCurrentResult(new TaskItemResult(null, "管理员修订文本"));
+		when(items.adminDecideReviewIfCurrent(any())).thenReturn(Optional.of(completed));
+		ReviewService service = new ReviewService(items, versions, mock(UserStore.class), CLOCK);
+
+		TaskItem result = service.approve(
+			"item-admin", "admin-single-approve", 6, "管理员修订文本", admin()
+		);
+
+		assertThat(result.getStatus()).isEqualTo(TaskItemStatus.COMPLETED);
+		assertThat(result.getCurrentResult().text()).isEqualTo("管理员修订文本");
+		verify(items).adminDecideReviewIfCurrent(any(AdminReviewDecisionMutation.class));
+	}
+
+	@Test
+	void adminRejectionReachesTheAtomicDecisionInsteadOfBeingDeniedByRole() {
+		TaskItemStore items = mock(TaskItemStore.class);
+		TaskVersionStore versions = mock(TaskVersionStore.class);
+		TaskItem existing = pending("item-admin", 6);
+		existing.setTaskVersionId("version-1");
+		when(items.findById("item-admin")).thenReturn(Optional.of(existing));
+		when(versions.findById("version-1")).thenReturn(Optional.of(reviewVersion()));
+		TaskItem rejected = pending("item-admin", 7);
+		rejected.setStatus(TaskItemStatus.RECORDING_PENDING);
+		when(items.adminDecideReviewIfCurrent(any())).thenReturn(Optional.of(rejected));
+		ReviewService service = new ReviewService(items, versions, mock(UserStore.class), CLOCK);
+
+		TaskItem result = service.reject(
+			"item-admin", "admin-single-reject", 6, List.of("空音频"), "返修", admin()
+		);
+
+		assertThat(result.getStatus()).isEqualTo(TaskItemStatus.RECORDING_PENDING);
+		verify(items).adminDecideReviewIfCurrent(any(AdminReviewDecisionMutation.class));
 	}
 
 	@Test

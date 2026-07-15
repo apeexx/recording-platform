@@ -14,6 +14,8 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
+import org.springframework.security.web.csrf.InvalidCsrfTokenException;
+import org.springframework.security.web.csrf.MissingCsrfTokenException;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
@@ -60,9 +62,17 @@ public class SecurityConfig {
 				String message = attribute(request, SecurityErrorAttributes.MESSAGE, "请先登录");
 				errorWriter.write(request, response, HttpStatus.UNAUTHORIZED, code, message);
 			})
-			.accessDeniedHandler((request, response, exception) ->
-				errorWriter.write(request, response, HttpStatus.FORBIDDEN, "ACCESS_DENIED", "没有权限执行此操作")
-			)
+			.accessDeniedHandler((request, response, exception) -> {
+				boolean csrfInvalid = exception instanceof MissingCsrfTokenException
+					|| exception instanceof InvalidCsrfTokenException;
+				errorWriter.write(
+					request,
+					response,
+					HttpStatus.FORBIDDEN,
+					csrfInvalid ? "CSRF_TOKEN_INVALID" : "ACCESS_DENIED",
+					csrfInvalid ? "安全令牌已失效，请重试" : "没有权限执行此操作"
+				);
+			})
 		);
 		http.authorizeHttpRequests((requests) -> requests
 			.requestMatchers(HttpMethod.GET, "/api/health/ready").permitAll()
@@ -72,6 +82,10 @@ public class SecurityConfig {
 				"/api/auth/miniprogram/login"
 			).permitAll()
 			.requestMatchers("/api/platforms/**", "/api/import-jobs/**").hasRole("ADMIN")
+			.requestMatchers(HttpMethod.POST, "/api/reviews/claim", "/api/reviews/claim-batch", "/api/reviews/*/release")
+				.hasRole("REVIEWER")
+			.requestMatchers(HttpMethod.POST, "/api/reviews/assign", "/api/reviews/batch/approve")
+				.hasRole("ADMIN")
 			.requestMatchers("/api/reviews/**").hasAnyRole("ADMIN", "REVIEWER")
 			.requestMatchers(HttpMethod.POST, "/api/task-items/*/status", "/api/task-items/*/discard", "/api/task-items/*/restore")
 				.hasRole("ADMIN")

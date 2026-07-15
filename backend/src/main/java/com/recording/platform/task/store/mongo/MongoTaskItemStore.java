@@ -12,6 +12,7 @@ import com.recording.platform.task.store.ReviewReleaseMutation;
 import com.recording.platform.task.store.ReviewDecisionMutation;
 import com.recording.platform.task.store.ReviewAssignMutation;
 import com.recording.platform.task.store.AdminReviewApproveMutation;
+import com.recording.platform.task.store.AdminReviewDecisionMutation;
 import com.recording.platform.task.store.AdminItemTransitionMutation;
 import com.recording.platform.task.store.SubmitMutation;
 import com.recording.platform.task.store.TaskItemStore;
@@ -253,6 +254,38 @@ public class MongoTaskItemStore implements TaskItemStore {
 	}
 
 	@Override
+	public Optional<TaskItem> adminDecideReviewIfCurrent(AdminReviewDecisionMutation mutation) {
+		Criteria criteria = Criteria.where("_id").is(mutation.itemId())
+			.and("status").is(TaskItemStatus.REVIEW_PENDING)
+			.and("revision").is(mutation.expectedRevision())
+			.and("operations.operationId").ne(mutation.operationId());
+		if (mutation.reviewedSubmissionOperationId() != null) {
+			criteria = criteria.and("submissions.operationId").is(mutation.reviewedSubmissionOperationId());
+		}
+		TaskItem snapshot = resultSnapshot(
+			mutation.itemId(), null, mutation.expectedRevision() + 1, mutation.targetStatus(), mutation.result()
+		);
+		String type = mutation.targetStatus() == TaskItemStatus.COMPLETED ? "REVIEW_APPROVE" : "REVIEW_REJECT";
+		String content = mutation.targetStatus() == TaskItemStatus.COMPLETED
+			? "审核环节提交" : "审核环节驳回到采集环节：" + mutation.conclusion();
+		Update update = new Update()
+			.set("status", mutation.targetStatus())
+			.set("currentResult", mutation.result())
+			.unset("reviewerId")
+			.unset("reviewAssignmentId")
+			.set("updatedAt", mutation.occurredAt())
+			.inc("revision", 1L)
+			.push("operations", reviewOperation(
+				mutation.operationId(), type, mutation.actorUserId(), mutation.actorUsername(), content,
+				mutation.occurredAt(), snapshot
+			));
+		if (mutation.reviewedSubmissionOperationId() != null) {
+			update.set("submissions.$.reviewConclusion", mutation.conclusion());
+		}
+		return modify(criteria, update);
+	}
+
+	@Override
 	public Optional<TaskItem> adminTransitionIfCurrent(AdminItemTransitionMutation mutation) {
 		Criteria criteria = adminCriteria(mutation).and("status").ne(TaskItemStatus.DISCARDED);
 		Update update = adminUpdate(mutation, "ADMIN_STATUS_CHANGE", "将该任务调整到" + mutation.targetStatus());
@@ -377,6 +410,10 @@ public class MongoTaskItemStore implements TaskItemStore {
 
 	@Override public Page<TaskItem> findReviewPool(Pageable pageable) {
 		return repository.findAllByStatusAndReviewerIdIsNull(TaskItemStatus.REVIEW_PENDING, pageable);
+	}
+
+	@Override public Page<TaskItem> findAllReviewPending(Pageable pageable) {
+		return repository.findAllByStatus(TaskItemStatus.REVIEW_PENDING, pageable);
 	}
 
 	private Optional<TaskItem> modify(Criteria criteria, Update update) {

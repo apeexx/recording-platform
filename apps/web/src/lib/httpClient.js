@@ -108,6 +108,9 @@ export async function httpRequest(url, options = {}) {
 
   if (!response.ok) {
     const error = toApiError(response, payload)
+    if (csrfProtectedMutation && error.code === 'CSRF_TOKEN_INVALID' && options.csrfRetryAttempted !== true) {
+      return httpRequest(url, { ...options, csrfRetryAttempted: true })
+    }
     if (error.code === 'SESSION_REPLACED' && !sessionReplacementNotified) {
       sessionReplacementNotified = true
       csrfState = null

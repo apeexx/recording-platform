@@ -11,6 +11,7 @@ import com.recording.platform.task.store.ReviewClaimMutation;
 import com.recording.platform.task.store.ReviewDecisionMutation;
 import com.recording.platform.task.store.ReviewAssignMutation;
 import com.recording.platform.task.store.AdminReviewApproveMutation;
+import com.recording.platform.task.store.AdminReviewDecisionMutation;
 import com.recording.platform.task.store.ReviewReleaseMutation;
 import com.recording.platform.task.store.TaskItemStore;
 import com.recording.platform.task.store.TaskVersionStore;
@@ -56,7 +57,9 @@ public class ReviewService {
 
 	public Page<TaskItem> pool(Pageable pageable, PlatformPrincipal actor) {
 		requireReviewAccess(actor);
-		return items.findReviewPool(pageable);
+		return actor.role() == UserRole.ADMIN
+			? items.findAllReviewPending(pageable)
+			: items.findReviewPool(pageable);
 	}
 
 	public List<TaskItem> claimBatch(int count, String operationId, PlatformPrincipal actor) {
@@ -165,7 +168,7 @@ public class ReviewService {
 	public TaskItem approve(
 		String itemId, String operationId, long expectedRevision, String text, PlatformPrincipal actor
 	) {
-		TaskItem item = requireAssigned(itemId, expectedRevision, actor);
+		TaskItem item = requireDecisionItem(itemId, expectedRevision, actor);
 		TaskVersion version = requireVersion(item.getTaskVersionId());
 		String normalizedText = trimToNull(text);
 		TaskItemResult current = item.getCurrentResult();
@@ -180,7 +183,7 @@ public class ReviewService {
 		String itemId, String operationId, long expectedRevision,
 		List<String> reasons, String note, PlatformPrincipal actor
 	) {
-		TaskItem item = requireAssigned(itemId, expectedRevision, actor);
+		TaskItem item = requireDecisionItem(itemId, expectedRevision, actor);
 		TaskVersion version = requireVersion(item.getTaskVersionId());
 		List<String> normalizedReasons = reasons == null ? List.of() : reasons.stream()
 			.map(this::trimToNull).filter(java.util.Objects::nonNull).distinct().toList();
@@ -202,11 +205,32 @@ public class ReviewService {
 		TaskItem item, String operationId, PlatformPrincipal actor, TaskItemStatus target,
 		TaskItemResult result, String conclusion
 	) {
+		if (actor.role() == UserRole.ADMIN) {
+			AdminReviewDecisionMutation mutation = new AdminReviewDecisionMutation(
+				item.getId(), actor.userId(), actorName(actor), item.getRevision(),
+				requiredOperationId(operationId), target, result, conclusion,
+				latestSubmissionOperationId(item), Instant.now(clock)
+			);
+			return items.adminDecideReviewIfCurrent(mutation).orElseThrow(this::stale);
+		}
 		ReviewDecisionMutation mutation = new ReviewDecisionMutation(
 			item.getId(), actor.userId(), actorName(actor), item.getReviewAssignmentId(), item.getRevision(),
 			requiredOperationId(operationId), target, result, conclusion, latestSubmissionOperationId(item), Instant.now(clock)
 		);
 		return items.decideReviewIfCurrent(mutation).orElseThrow(this::stale);
+	}
+
+	private TaskItem requireDecisionItem(String itemId, long expectedRevision, PlatformPrincipal actor) {
+		requireReviewAccess(actor);
+		TaskItem item = requireItem(itemId);
+		if (item.getStatus() != TaskItemStatus.REVIEW_PENDING || item.getRevision() != expectedRevision) {
+			throw stale();
+		}
+		if (actor.role() == UserRole.REVIEWER
+			&& (!actor.userId().equals(item.getReviewerId()) || item.getReviewAssignmentId() == null)) {
+			throw stale();
+		}
+		return item;
 	}
 
 	private TaskItem requireAssigned(String itemId, long expectedRevision, PlatformPrincipal actor) {

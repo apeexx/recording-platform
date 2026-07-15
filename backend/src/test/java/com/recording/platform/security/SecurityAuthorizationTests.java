@@ -141,7 +141,7 @@ class SecurityAuthorizationTests {
 	void unsafeAdminRequestsRequireTheReadableCookieCsrfToken() throws Exception {
 		mockMvc.perform(post("/api/admin/probe").with(user("admin").roles("ADMIN")))
 			.andExpect(status().isForbidden())
-			.andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+			.andExpect(jsonPath("$.code").value("CSRF_TOKEN_INVALID"));
 
 		MvcResult tokenResponse = mockMvc.perform(get("/api/auth/web/csrf")
 				.with(user("admin").roles("ADMIN")))

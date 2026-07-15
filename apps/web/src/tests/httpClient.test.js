@@ -84,6 +84,23 @@ describe('httpClient', () => {
     }))
   })
 
+  it('refreshes csrf and retries one time when the server reports an expired token', async () => {
+    fetch
+      .mockResolvedValueOnce(response(200, { headerName: 'X-XSRF-TOKEN', token: 'csrf-expired' }))
+      .mockResolvedValueOnce(response(403, { code: 'CSRF_TOKEN_INVALID', message: '安全令牌已失效' }))
+      .mockResolvedValueOnce(response(200, { headerName: 'X-XSRF-TOKEN', token: 'csrf-fresh' }))
+      .mockResolvedValueOnce(response(200, { status: 'RECORDING_PENDING' }))
+
+    const result = await httpRequest('/api/reviews/item-1/reject', {
+      method: 'POST', json: { operationId: 'reject-1', expectedRevision: 2 }
+    })
+
+    expect(result.status).toBe('RECORDING_PENDING')
+    expect(fetch).toHaveBeenNthCalledWith(4, '/api/reviews/item-1/reject', expect.objectContaining({
+      headers: expect.objectContaining({ 'X-XSRF-TOKEN': 'csrf-fresh' })
+    }))
+  })
+
   it('does not set multipart content type and preserves structured api errors', async () => {
     fetch
       .mockResolvedValueOnce(response(200, { headerName: 'X-XSRF-TOKEN', token: 'csrf-token' }))

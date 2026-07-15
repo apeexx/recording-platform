@@ -149,7 +149,7 @@ class TaskApiSecurityIntegrationTests {
 				.with(authentication(authentication))
 				.header("Idempotency-Key", "start-2"))
 			.andExpect(status().isForbidden())
-			.andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+			.andExpect(jsonPath("$.code").value("CSRF_TOKEN_INVALID"));
 	}
 
 	@Test

@@ -21,8 +21,10 @@ public interface TaskItemStore {
 	default Optional<TaskItem> releaseReviewIfCurrent(ReviewReleaseMutation mutation) { return Optional.empty(); }
 	default Optional<TaskItem> decideReviewIfCurrent(ReviewDecisionMutation mutation) { return Optional.empty(); }
 	default Page<TaskItem> findReviewPool(Pageable pageable) { return Page.empty(pageable); }
+	default Page<TaskItem> findAllReviewPending(Pageable pageable) { return Page.empty(pageable); }
 	default Optional<TaskItem> assignReviewIfCurrent(ReviewAssignMutation mutation) { return Optional.empty(); }
 	default Optional<TaskItem> adminApproveReviewIfCurrent(AdminReviewApproveMutation mutation) { return Optional.empty(); }
+	default Optional<TaskItem> adminDecideReviewIfCurrent(AdminReviewDecisionMutation mutation) { return Optional.empty(); }
 	default Optional<TaskItem> adminTransitionIfCurrent(AdminItemTransitionMutation mutation) { return Optional.empty(); }
 	default Optional<TaskItem> adminDiscardIfCurrent(AdminItemTransitionMutation mutation) { return Optional.empty(); }
 	default Optional<TaskItem> adminRestoreIfCurrent(AdminItemTransitionMutation mutation) { return Optional.empty(); }

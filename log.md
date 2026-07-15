@@ -639,3 +639,24 @@
   - `backend\\mvnw.cmd clean test`：215/215 通过，0 failures、0 errors、0 skipped，`BUILD SUCCESS`。
   - `git diff --check` 通过；变更文件敏感扫描未发现真实 Authorization、Bearer Token、API Key、AppSecret 或带凭证 MongoDB URI。
   - 本轮未启用 `RECORDING_PATH_MIGRATION_ENABLED`，未修改真实 MongoDB 数据或录音文件；未执行微信真机验收和付费 MiniMax 调用。
+
+## 2026-07-15 15:10 修复管理员单条审核权限与 CSRF 误报
+
+- 时间：2026-07-15 15:10
+- commit ID：待提交后补记
+- 修改内容：
+  - 修复 Spring Security 允许 ADMIN 访问审核接口、但 ReviewService 二次门禁仅接受 REVIEWER 的权限规则冲突；管理员现在可直接单条通过或驳回任意待审核条目，仍使用 revision、提交 operationId 和原子条件更新。
+  - 保持审核员必须领取并只能处理本人审核占用；管理员审核池隐藏领取、批量领取和释放审核按钮，审核员不再看到无法直接处理的未领取“审核”入口。
+  - 管理员审核池查询全部待审核条目（含已分配给审核员的条目），审核员池仍只查询未占用条目；审核员手工进入非本人占用工作台时不展示通过、驳回或释放按钮。
+  - CSRF 缺失或失效改为返回 `CSRF_TOKEN_INVALID`，真实角色越权继续返回 `ACCESS_DENIED`；Web 请求层仅对 CSRF 失效刷新令牌并自动重试一次。
+  - 管理员驳回仍回到原采集员的待录制状态，清除审核占用并追加“审核环节驳回到采集环节”操作记录。
+- TDD 记录：
+  - 修复前管理员单条通过抛出 `ACCESS_DENIED`，管理员驳回无法进入原子状态校验；页面角色入口断言失败。
+  - CSRF 分类和单次重试测试在修复前分别返回 `ACCESS_DENIED` 和直接抛错，证明错误分类及恢复逻辑缺失。
+- 验证结果：
+  - `backend\\mvnw.cmd "-Dtest=ReviewServiceTests,SecurityAuthorizationTests" test`：25/25 通过。
+  - `npx vitest run src/tests/httpClient.test.js src/tests/reviewPages.test.js`：8/8 通过。
+  - `backend\\mvnw.cmd test -q`：218/218 通过，0 failures、0 errors、0 skipped。
+  - `npm test`：Web Node 测试 9/9、Vitest 23/23 通过；`npm run build` 成功。
+  - `scripts\\start-dev.cmd` 重启后，`GET /api/health/ready` 返回 `overall`、`mongo`、`storage` 全部 `UP`。
+  - 真实管理员在 Web 审核工作台驳回 `I000004` 返回 HTTP 200；状态由 `REVIEW_PENDING` 变为 `RECORDING_PENDING`，revision 由 2 变为 3，原采集员、assignmentId、录音结果和提交历史保留，审核占用清空，操作记录写入管理员及驳回原因。
