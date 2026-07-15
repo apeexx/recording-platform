@@ -620,3 +620,22 @@
   - `scripts\\start-dev.cmd` 启动后，`GET /api/health/ready` 返回 `overall`、`mongo`、`storage` 全部 `UP`；8080 与 5173 均正常监听。
   - `backend/storage/recordings/` 下存在 `TEST_TEXT_RECORDING/I000002.mp3`、`TEST_TEXT_RECORDING/I000003.mp3`；旧嵌套 `recordings/` 目录不存在，`current.*` 文件计数为 0。
   - 未执行微信真机返修、同条目重录覆盖和释放清理；这些交互项保留人工验收。未调用付费 MiniMax。
+
+## 2026-07-15 14:10 加固一次性录音路径迁移一致性
+
+- 时间：2026-07-15 14:10
+- commit ID：待提交后补记
+- 修改内容：
+  - 将迁移器调整为全路径、全 MongoDB 快照预检后统一提交；任一路径提交失败时，按逆序补偿此前已完成的文档和文件操作。
+  - 正向替换按 `_id + 旧版本 + 精确旧路径` CAS 并推进版本；回滚按 `_id + 新版本 + 精确新路径` CAS 再推进版本，避免静默覆盖并发写入。
+  - MongoDB 回滚 CAS 冲突或异常时保留新文件，并在旧路径缺失时复制补回，确保不确定状态下新旧引用都保持可读。
+  - 补充多路径后段失败、全量快照先于首个 mutation、回滚冲突/异常、陈旧写入和重复媒体资产等回归测试。
+  - README、长期规则和实施清单同步补充默认关闭、停写备份、单实例执行、二次零迁移复检、关闭开关与失败恢复手册；本轮未执行真实迁移。
+- TDD 记录：
+  - 首轮新增测试运行 15 项，出现 6 个预期失败，覆盖后续路径失败未全局恢复、CAS 不严格、版本未推进以及回滚失败误删新文件。
+  - 补充缺失媒体资产快照测试后运行 16 项，出现 1 个预期失败；增加全量资产快照校验后 16/16 通过。
+- 验证结果：
+  - `backend\\mvnw.cmd "-Dtest=RecordingPathMigrationServiceTests,RecordingMediaStorageTests,MediaAccessAndRangeTests,RecordingPlatformBackendApplicationTests" test`：27/27 通过，0 failures、0 errors、0 skipped，`BUILD SUCCESS`。
+  - `backend\\mvnw.cmd clean test`：215/215 通过，0 failures、0 errors、0 skipped，`BUILD SUCCESS`。
+  - `git diff --check` 通过；变更文件敏感扫描未发现真实 Authorization、Bearer Token、API Key、AppSecret 或带凭证 MongoDB URI。
+  - 本轮未启用 `RECORDING_PATH_MIGRATION_ENABLED`，未修改真实 MongoDB 数据或录音文件；未执行微信真机验收和付费 MiniMax 调用。

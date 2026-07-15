@@ -16,6 +16,7 @@ import com.mongodb.client.result.UpdateResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
+import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.List;
 import org.bson.Document;
@@ -29,6 +30,8 @@ import org.springframework.data.mongodb.core.query.Query;
 class RecordingPathMigrationServiceTests {
 	private static final String OLD_PATH = "recordings/TASK-001/I000001/current.mp3";
 	private static final String TARGET_PATH = "TASK-001/I000001.mp3";
+	private static final String SECOND_OLD_PATH = "recordings/TASK-002/I000002/current.mp3";
+	private static final String SECOND_TARGET_PATH = "TASK-002/I000002.mp3";
 
 	@TempDir
 	Path tempDir;
@@ -122,7 +125,100 @@ class RecordingPathMigrationServiceTests {
 	}
 
 	@Test
-	void everyConditionalReplaceUsesTheDocumentIdAndOriginalVersion() throws Exception {
+	void staticFailureOnLaterPathLeavesEveryPathAndMongoUnchanged() throws Exception {
+		MongoTemplate mongo = mongoWithLegacyPaths(OLD_PATH, SECOND_OLD_PATH);
+		RecordingPathMigrationService service = service(mongo);
+		byte[] first = "first source".getBytes();
+		byte[] second = "second-source".getBytes();
+		write(OLD_PATH, first);
+		write(SECOND_OLD_PATH, second);
+		write(SECOND_TARGET_PATH, "second-target".getBytes());
+
+		assertThatThrownBy(service::migrate)
+			.isInstanceOf(IllegalStateException.class)
+			.hasMessageContaining("conflict");
+
+		assertThat(storage().resolve(OLD_PATH)).hasBinaryContent(first);
+		assertThat(storage().resolve(TARGET_PATH)).doesNotExist();
+		assertThat(storage().resolve(SECOND_OLD_PATH)).hasBinaryContent(second);
+		verify(mongo, never()).replace(any(Query.class), any(Document.class), any(String.class));
+	}
+
+	@Test
+	void everyPathSnapshotIsLoadedBeforeTheFirstMutation() throws Exception {
+		MongoTemplate mongo = mongoWithLegacyPaths(OLD_PATH, SECOND_OLD_PATH);
+		RecordingPathMigrationService service = service(mongo);
+		write(OLD_PATH, "first preflight".getBytes());
+		write(SECOND_OLD_PATH, "second preflight".getBytes());
+
+		assertThat(service.migrate()).isEqualTo(new RecordingPathMigrationResult(2, 0));
+
+		InOrder order = inOrder(mongo);
+		order.verify(mongo).find(
+			argThat(query -> queryContains(query, SECOND_OLD_PATH)),
+			eq(Document.class),
+			eq("media_assets")
+		);
+		order.verify(mongo).replace(
+			argThat(query -> queryHasId(query, "media-1")),
+			any(Document.class),
+			any(String.class)
+		);
+	}
+
+	@Test
+	void missingEntryAssetSnapshotFailsPreflightWithoutMovingTheFile() throws Exception {
+		MongoTemplate mongo = mock(MongoTemplate.class);
+		Document entry = legacyMedia("media-1");
+		when(mongo.find(any(Query.class), eq(Document.class), eq("media_assets")))
+			.thenReturn(List.of(entry), List.of());
+		when(mongo.find(any(Query.class), eq(Document.class), eq("task_items"))).thenReturn(List.of());
+		when(mongo.find(any(Query.class), eq(Document.class), eq("media_cleanup_jobs"))).thenReturn(List.of());
+		when(mongo.find(any(Query.class), eq(Document.class), eq("idempotency_records"))).thenReturn(List.of());
+		RecordingPathMigrationService service = service(mongo);
+		byte[] audio = "snapshot disappeared".getBytes();
+		write(OLD_PATH, audio);
+
+		assertThatThrownBy(service::migrate)
+			.isInstanceOf(IllegalStateException.class)
+			.hasMessageContaining("preflight");
+
+		assertThat(storage().resolve(OLD_PATH)).hasBinaryContent(audio);
+		assertThat(storage().resolve(TARGET_PATH)).doesNotExist();
+		verify(mongo, never()).replace(any(Query.class), any(Document.class), any(String.class));
+	}
+
+	@Test
+	void laterPathCommitFailureGloballyRestoresEarlierPath() throws Exception {
+		MongoTemplate mongo = mongoWithLegacyPaths(OLD_PATH, SECOND_OLD_PATH);
+		when(mongo.replace(
+			argThat(query -> queryHasId(query, "media-2")),
+			any(Document.class),
+			eq("media_assets")
+		)).thenReturn(UpdateResult.acknowledged(0, 0L, null));
+		RecordingPathMigrationService service = service(mongo);
+		byte[] first = "first committed".getBytes();
+		byte[] second = "second rejected".getBytes();
+		write(OLD_PATH, first);
+		write(SECOND_OLD_PATH, second);
+
+		assertThatThrownBy(service::migrate)
+			.isInstanceOf(IllegalStateException.class)
+			.hasMessageContaining("document conflict");
+
+		assertThat(storage().resolve(OLD_PATH)).hasBinaryContent(first);
+		assertThat(storage().resolve(TARGET_PATH)).doesNotExist();
+		assertThat(storage().resolve(SECOND_OLD_PATH)).hasBinaryContent(second);
+		assertThat(storage().resolve(SECOND_TARGET_PATH)).doesNotExist();
+		verify(mongo, times(2)).replace(
+			argThat(query -> queryHasId(query, "media-1")),
+			any(Document.class),
+			eq("media_assets")
+		);
+	}
+
+	@Test
+	void forwardCasMatchesOldVersionAndPathThenAdvancesVersion() throws Exception {
 		MongoTemplate mongo = mongoWithLegacyDocuments();
 		RecordingPathMigrationService service = service(mongo);
 		write(OLD_PATH, "query conditions".getBytes());
@@ -137,9 +233,10 @@ class RecordingPathMigrationServiceTests {
 		for (int index = 0; index < queries.getAllValues().size(); index++) {
 			Document query = queries.getAllValues().get(index).getQueryObject();
 			Document replacement = replacements.getAllValues().get(index);
-			assertThat(query).containsOnlyKeys("_id", "version");
-			assertThat(query.get("_id")).isEqualTo(replacement.get("_id"));
-			assertThat(query.get("version")).isEqualTo(4L);
+			assertThat(query.toJson()).contains(replacement.get("_id").toString());
+			assertThat(query.toJson()).contains("\"version\": 4");
+			assertThat(query.toJson()).contains(OLD_PATH);
+			assertThat(replacement.get("version")).isEqualTo(5L);
 		}
 	}
 
@@ -159,28 +256,74 @@ class RecordingPathMigrationServiceTests {
 		ArgumentCaptor<Document> taskRollback = ArgumentCaptor.forClass(Document.class);
 		ArgumentCaptor<Document> mediaRollback = ArgumentCaptor.forClass(Document.class);
 		InOrder order = inOrder(mongo);
-		order.verify(mongo).replace(argThat(this::usesIdAndVersion), any(Document.class), eq("media_assets"));
-		order.verify(mongo).replace(argThat(this::usesIdAndVersion), any(Document.class), eq("task_items"));
+		order.verify(mongo).replace(argThat(query -> usesVersionAndPath(query, 4L, OLD_PATH)), any(Document.class), eq("media_assets"));
+		order.verify(mongo).replace(argThat(query -> usesVersionAndPath(query, 4L, OLD_PATH)), any(Document.class), eq("task_items"));
 		order.verify(mongo).replace(
-			argThat(this::usesIdAndVersion), any(Document.class), eq("media_cleanup_jobs")
+			argThat(query -> usesVersionAndPath(query, 4L, OLD_PATH)), any(Document.class), eq("media_cleanup_jobs")
 		);
 		order.verify(mongo).replace(
-			argThat(this::usesIdAndVersion), any(Document.class), eq("idempotency_records")
+			argThat(query -> usesVersionAndPath(query, 4L, OLD_PATH)), any(Document.class), eq("idempotency_records")
 		);
 		order.verify(mongo).replace(
-			argThat(this::usesIdAndVersion), cleanupRollback.capture(), eq("media_cleanup_jobs")
+			argThat(query -> usesVersionAndPath(query, 5L, TARGET_PATH)), cleanupRollback.capture(), eq("media_cleanup_jobs")
 		);
 		order.verify(mongo).replace(
-			argThat(this::usesIdAndVersion), taskRollback.capture(), eq("task_items")
+			argThat(query -> usesVersionAndPath(query, 5L, TARGET_PATH)), taskRollback.capture(), eq("task_items")
 		);
 		order.verify(mongo).replace(
-			argThat(this::usesIdAndVersion), mediaRollback.capture(), eq("media_assets")
+			argThat(query -> usesVersionAndPath(query, 5L, TARGET_PATH)), mediaRollback.capture(), eq("media_assets")
 		);
+		assertThat(cleanupRollback.getValue().get("version")).isEqualTo(6L);
+		assertThat(taskRollback.getValue().get("version")).isEqualTo(6L);
+		assertThat(mediaRollback.getValue().get("version")).isEqualTo(6L);
 		assertThat(cleanupRollback.getValue().getList("relativePaths", String.class)).contains(OLD_PATH);
 		assertThat(taskRollback.getValue().get("currentResult").toString()).contains(OLD_PATH);
 		assertThat(mediaRollback.getValue().getString("relativePath")).isEqualTo(OLD_PATH);
 		assertThat(storage().resolve(OLD_PATH)).exists();
 		assertThat(storage().resolve(TARGET_PATH)).doesNotExist();
+	}
+
+	@Test
+	void rollbackCasConflictPreservesNewFileAndCopiesBackOldFile() throws Exception {
+		MongoTemplate mongo = mongoWithLegacyDocuments();
+		when(mongo.replace(any(Query.class), any(Document.class), eq("media_assets")))
+			.thenReturn(
+				UpdateResult.acknowledged(1, 1L, null),
+				UpdateResult.acknowledged(0, 0L, null)
+			);
+		when(mongo.replace(any(Query.class), any(Document.class), eq("task_items")))
+			.thenReturn(UpdateResult.acknowledged(0, 0L, null));
+		RecordingPathMigrationService service = service(mongo);
+		byte[] audio = "rollback cas conflict".getBytes();
+		write(OLD_PATH, audio);
+
+		assertThatThrownBy(service::migrate)
+			.isInstanceOf(IllegalStateException.class)
+			.hasMessageContaining("document conflict");
+
+		assertThat(storage().resolve(OLD_PATH)).hasBinaryContent(audio);
+		assertThat(storage().resolve(TARGET_PATH)).hasBinaryContent(audio);
+	}
+
+	@Test
+	void rollbackExceptionPreservesBothReadableFilePaths() throws Exception {
+		MongoTemplate mongo = mongoWithLegacyDocuments();
+		when(mongo.replace(any(Query.class), any(Document.class), eq("media_assets")))
+			.thenReturn(UpdateResult.acknowledged(1, 1L, null))
+			.thenThrow(new IllegalStateException("rollback unavailable"));
+		when(mongo.replace(any(Query.class), any(Document.class), eq("task_items")))
+			.thenReturn(UpdateResult.acknowledged(0, 0L, null));
+		RecordingPathMigrationService service = service(mongo);
+		byte[] audio = "rollback exception".getBytes();
+		write(OLD_PATH, audio);
+
+		assertThatThrownBy(service::migrate)
+			.isInstanceOf(IllegalStateException.class)
+			.hasMessageContaining("document conflict")
+			.satisfies(failure -> assertThat(failure.getSuppressed()).isNotEmpty());
+
+		assertThat(storage().resolve(OLD_PATH)).hasBinaryContent(audio);
+		assertThat(storage().resolve(TARGET_PATH)).hasBinaryContent(audio);
 	}
 
 	@Test
@@ -297,6 +440,29 @@ class RecordingPathMigrationServiceTests {
 		return mongo;
 	}
 
+	private MongoTemplate mongoWithLegacyPaths(String... oldPaths) {
+		MongoTemplate mongo = mock(MongoTemplate.class);
+		List<Document> media = new ArrayList<>();
+		for (int index = 0; index < oldPaths.length; index++) {
+			media.add(versioned("media-" + (index + 1))
+				.append("kind", "RECORDING")
+				.append("relativePath", oldPaths[index]));
+		}
+		when(mongo.find(any(Query.class), eq(Document.class), any(String.class)))
+			.thenAnswer(invocation -> {
+				String collection = invocation.getArgument(2, String.class);
+				if (!collection.equals("media_assets")) return List.of();
+				Query query = invocation.getArgument(0, Query.class);
+				for (int index = 0; index < oldPaths.length; index++) {
+					if (queryContains(query, oldPaths[index])) return List.of(media.get(index));
+				}
+				return media;
+			});
+		when(mongo.replace(any(Query.class), any(Document.class), any(String.class)))
+			.thenReturn(UpdateResult.acknowledged(1, 1L, null));
+		return mongo;
+	}
+
 	private Document legacyMedia(String id) {
 		return versioned(id)
 			.append("kind", "RECORDING")
@@ -308,11 +474,18 @@ class RecordingPathMigrationServiceTests {
 		return new Document("_id", id).append("version", 4L);
 	}
 
-	private boolean usesIdAndVersion(Query query) {
+	private boolean usesVersionAndPath(Query query, long version, String path) {
 		return query != null
-			&& query.getQueryObject().keySet().equals(java.util.Set.of("_id", "version"))
-			&& query.getQueryObject().get("_id") != null
-			&& query.getQueryObject().get("version").equals(4L);
+			&& query.getQueryObject().toJson().contains("\"version\": " + version)
+			&& queryContains(query, path);
+	}
+
+	private boolean queryContains(Query query, String value) {
+		return query != null && query.getQueryObject().toJson().contains(value);
+	}
+
+	private boolean queryHasId(Query query, String id) {
+		return queryContains(query, id);
 	}
 
 	private void write(String relativePath, byte[] bytes) throws Exception {

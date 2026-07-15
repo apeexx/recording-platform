@@ -18,6 +18,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.bson.Document;
 import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.BasicQuery;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.stereotype.Service;
@@ -44,30 +45,23 @@ public class RecordingPathMigrationService {
 	}
 
 	public RecordingPathMigrationResult migrate() {
-		Query legacyRecordings = Query.query(
-			Criteria.where("kind").is("RECORDING").and("relativePath").regex(LEGACY)
-		);
-		List<Document> assets = mongo.find(legacyRecordings, Document.class, "media_assets");
-		Map<String, List<Object>> mediaIdsByPath = new LinkedHashMap<>();
-		for (Document asset : assets) {
-			String oldPath = asset.getString("relativePath");
-			targetPath(oldPath);
-			mediaIdsByPath.computeIfAbsent(oldPath, ignored -> new ArrayList<>()).add(asset.get("_id"));
+		MigrationPlan plan = preflight();
+		List<FilePlan> movedFiles = new ArrayList<>();
+		List<DocumentChange> writtenDocuments = new ArrayList<>();
+		try {
+			prepareFiles(plan.files(), movedFiles);
+			writeDocuments(plan.changes(), writtenDocuments);
+			deleteDeduplicatedSources(plan.files());
+			return new RecordingPathMigrationResult(
+				(int) plan.files().stream().filter(file -> !file.deduplicate()).count(),
+				(int) plan.files().stream().filter(FilePlan::deduplicate).count()
+			);
+		} catch (Exception failure) {
+			boolean documentsRestored = rollbackDocuments(writtenDocuments, failure);
+			recoverFiles(plan.files(), movedFiles, documentsRestored, failure);
+			if (failure instanceof RuntimeException runtime) throw runtime;
+			throw new IllegalStateException("recording path migration failed", failure);
 		}
-		int migrated = 0;
-		int deduplicated = 0;
-		for (Map.Entry<String, List<Object>> grouped : mediaIdsByPath.entrySet()) {
-			MigrationEntry entry = inspect(grouped.getValue(), grouped.getKey());
-			boolean targetExists = Files.exists(storage.resolve(entry.newPath()));
-			if (targetExists) {
-				assertSameContent(entry);
-			}
-			List<DocumentChange> changes = loadChanges(entry.oldPath(), entry.newPath());
-			apply(entry, changes, targetExists);
-			if (targetExists) deduplicated++;
-			else migrated++;
-		}
-		return new RecordingPathMigrationResult(migrated, deduplicated);
 	}
 
 	String targetPath(String oldPath) {
@@ -78,131 +72,247 @@ public class RecordingPathMigrationService {
 		return matcher.group(1) + "/" + matcher.group(2) + "." + matcher.group(3);
 	}
 
-	private MigrationEntry inspect(List<Object> mediaIds, String oldPath) {
+	private MigrationPlan preflight() {
+		Query legacyRecordings = Query.query(
+			Criteria.where("kind").is("RECORDING").and("relativePath").regex(LEGACY)
+		);
+		List<Document> assets = mongo.find(legacyRecordings, Document.class, "media_assets");
+		Map<String, List<Object>> mediaIdsByPath = new LinkedHashMap<>();
+		for (Document asset : assets) {
+			String oldPath = asset.getString("relativePath");
+			targetPath(oldPath);
+			mediaIdsByPath.computeIfAbsent(oldPath, ignored -> new ArrayList<>()).add(asset.get("_id"));
+		}
+
+		List<FilePlan> files = new ArrayList<>();
+		for (Map.Entry<String, List<Object>> grouped : mediaIdsByPath.entrySet()) {
+			files.add(inspect(grouped.getValue(), grouped.getKey()));
+		}
+		List<DocumentChange> changes = loadChanges(files);
+		validateEntryAssets(files, changes);
+		return new MigrationPlan(List.copyOf(files), changes);
+	}
+
+	private void validateEntryAssets(List<FilePlan> files, List<DocumentChange> changes) {
+		for (FilePlan file : files) {
+			for (Object mediaId : file.mediaIds()) {
+				boolean planned = mediaId != null && changes.stream().anyMatch(change ->
+					change.collection().equals("media_assets")
+						&& change.id().equals(mediaId)
+						&& change.mappings().contains(new PathMapping(file.oldPath(), file.newPath()))
+				);
+				if (!planned) {
+					throw new IllegalStateException("migration media document changed during preflight");
+				}
+			}
+		}
+	}
+
+	private FilePlan inspect(List<Object> mediaIds, String oldPath) {
 		String newPath = targetPath(oldPath);
 		Path source = storage.resolve(oldPath);
 		if (!Files.isRegularFile(source)) {
 			throw new IllegalStateException("legacy recording file is missing");
 		}
 		try {
-			return new MigrationEntry(List.copyOf(mediaIds), oldPath, newPath, Files.size(source), sha256(source));
+			long sizeBytes = Files.size(source);
+			String hash = sha256(source);
+			Path target = storage.resolve(newPath);
+			boolean deduplicate = Files.exists(target);
+			if (deduplicate && (Files.size(target) != sizeBytes || !sha256(target).equals(hash))) {
+				throw new IllegalStateException("recording path migration conflict");
+			}
+			return new FilePlan(
+				List.copyOf(mediaIds), oldPath, newPath, sizeBytes, hash, deduplicate
+			);
 		} catch (IOException exception) {
 			throw new IllegalStateException("legacy recording file cannot be inspected", exception);
 		}
 	}
 
-	private void assertSameContent(MigrationEntry entry) {
-		Path target = storage.resolve(entry.newPath());
-		try {
-			if (Files.size(target) != entry.sizeBytes() || !sha256(target).equals(entry.sha256())) {
-				throw new IllegalStateException("recording path migration conflict");
-			}
-		} catch (IOException exception) {
-			throw new IllegalStateException("recording path migration target cannot be inspected", exception);
-		}
-	}
-
-	private List<DocumentChange> loadChanges(String oldPath, String newPath) {
-		List<DocumentChange> changes = new ArrayList<>();
-		for (String collection : COLLECTIONS) {
-			for (Document found : mongo.find(referenceQuery(collection, oldPath), Document.class, collection)) {
-				Document original = copyDocument(found);
-				Object id = original.get("_id");
-				Object version = original.get("version");
-				if (id == null || version == null) {
-					throw new IllegalStateException("migration document has no id or version");
-				}
-				Document replacement = copyDocument(original);
-				boolean changed = replaceSpecifiedFields(collection, replacement, oldPath, newPath);
-				if (changed) {
-					changes.add(new DocumentChange(collection, id, version, original, replacement));
+	private List<DocumentChange> loadChanges(List<FilePlan> files) {
+		Map<DocumentKey, MutableDocumentChange> changes = new LinkedHashMap<>();
+		for (FilePlan file : files) {
+			PathMapping mapping = new PathMapping(file.oldPath(), file.newPath());
+			for (String collection : COLLECTIONS) {
+				Query query = referenceQuery(collection, file.oldPath());
+				for (Document found : mongo.find(query, Document.class, collection)) {
+					mergeChange(changes, collection, found, mapping);
 				}
 			}
 		}
-		return changes;
-	}
-
-	private Query referenceQuery(String collection, String oldPath) {
-		return switch (collection) {
-			case "media_assets" -> Query.query(Criteria.where("relativePath").is(oldPath));
-			case "task_items" -> Query.query(new Criteria().orOperator(
-				Criteria.where("currentResult.audio.relativePath").is(oldPath),
-				Criteria.where("operations.resultSnapshot.audio.relativePath").is(oldPath)
+		List<DocumentChange> result = new ArrayList<>();
+		for (MutableDocumentChange change : changes.values()) {
+			if (change.mappings.isEmpty()) continue;
+			Document replacement = copyDocument(change.replacement);
+			replacement.put("version", change.originalVersion + 1);
+			Document rollback = copyDocument(change.original);
+			rollback.put("version", change.originalVersion + 2);
+			result.add(new DocumentChange(
+				change.collection,
+				change.id,
+				change.originalVersion,
+				copyDocument(change.original),
+				replacement,
+				rollback,
+				List.copyOf(change.mappings)
 			));
-			case "media_cleanup_jobs" -> Query.query(Criteria.where("relativePaths").is(oldPath));
-			case "idempotency_records" -> Query.query(
-				Criteria.where("responseJson").regex(Pattern.compile(Pattern.quote(oldPath)))
-			);
-			default -> throw new IllegalArgumentException("unsupported migration collection");
-		};
+		}
+		return List.copyOf(result);
 	}
 
-	private void apply(MigrationEntry entry, List<DocumentChange> changes, boolean deduplicate) {
-		Path source = storage.resolve(entry.oldPath());
-		Path target = storage.resolve(entry.newPath());
-		boolean moved = false;
-		List<DocumentChange> written = new ArrayList<>();
-		try {
-			if (!deduplicate) {
-				move(source, target);
-				moved = true;
-			}
-			for (DocumentChange change : changes) {
-				UpdateResult result = mongo.replace(
-					versionQuery(change),
+	private void mergeChange(
+		Map<DocumentKey, MutableDocumentChange> changes,
+		String collection,
+		Document found,
+		PathMapping mapping
+	) {
+		Document snapshot = copyDocument(found);
+		Object id = snapshot.get("_id");
+		Object versionValue = snapshot.get("version");
+		if (id == null || !(versionValue instanceof Number version)) {
+			throw new IllegalStateException("migration document has no id or version");
+		}
+		DocumentKey key = new DocumentKey(collection, id);
+		MutableDocumentChange change = changes.get(key);
+		if (change == null) {
+			change = new MutableDocumentChange(
+				collection,
+				id,
+				version.longValue(),
+				copyDocument(snapshot),
+				copyDocument(snapshot)
+			);
+			changes.put(key, change);
+		} else if (change.originalVersion != version.longValue() || !change.original.equals(snapshot)) {
+			throw new IllegalStateException("migration document changed during preflight");
+		}
+		if (replaceSpecifiedFields(collection, change.replacement, mapping.oldPath(), mapping.newPath())
+			&& !change.mappings.contains(mapping)) {
+			change.mappings.add(mapping);
+		}
+	}
+
+	private void prepareFiles(List<FilePlan> files, List<FilePlan> movedFiles) throws IOException {
+		for (FilePlan file : files) {
+			if (file.deduplicate()) continue;
+			move(storage.resolve(file.oldPath()), storage.resolve(file.newPath()));
+			movedFiles.add(file);
+		}
+	}
+
+	private void writeDocuments(List<DocumentChange> changes, List<DocumentChange> writtenDocuments) {
+		for (DocumentChange change : changes) {
+			UpdateResult result;
+			try {
+				result = mongo.replace(
+					casQuery(change, false),
 					copyDocument(change.replacement()),
 					change.collection()
 				);
-				if (!result.wasAcknowledged() || result.getMatchedCount() != 1) {
-					throw new IllegalStateException("recording path migration document conflict");
-				}
-				written.add(change);
+			} catch (RuntimeException uncertainFailure) {
+				writtenDocuments.add(change);
+				throw new IllegalStateException("recording path migration document write failed", uncertainFailure);
 			}
-			if (deduplicate) {
-				Files.delete(source);
+			if (!result.wasAcknowledged() || result.getMatchedCount() != 1) {
+				throw new IllegalStateException("recording path migration document conflict");
 			}
-		} catch (Exception failure) {
-			rollback(written, moved, source, target, failure);
-			if (failure instanceof RuntimeException runtime) throw runtime;
-			throw new IllegalStateException("recording path migration failed", failure);
+			writtenDocuments.add(change);
 		}
 	}
 
-	private void rollback(
-		List<DocumentChange> written,
-		boolean moved,
-		Path source,
-		Path target,
-		Exception failure
-	) {
-		for (int index = written.size() - 1; index >= 0; index--) {
-			DocumentChange change = written.get(index);
+	private void deleteDeduplicatedSources(List<FilePlan> files) throws IOException {
+		for (FilePlan file : files) {
+			if (file.deduplicate()) Files.delete(storage.resolve(file.oldPath()));
+		}
+	}
+
+	private boolean rollbackDocuments(List<DocumentChange> writtenDocuments, Exception failure) {
+		boolean restoredAll = true;
+		for (int index = writtenDocuments.size() - 1; index >= 0; index--) {
+			DocumentChange change = writtenDocuments.get(index);
 			try {
 				UpdateResult restored = mongo.replace(
-					versionQuery(change),
-					copyDocument(change.original()),
+					casQuery(change, true),
+					copyDocument(change.rollback()),
 					change.collection()
 				);
 				if (!restored.wasAcknowledged() || restored.getMatchedCount() != 1) {
+					restoredAll = false;
 					failure.addSuppressed(new IllegalStateException("migration document rollback conflict"));
 				}
 			} catch (RuntimeException rollbackFailure) {
+				restoredAll = false;
 				failure.addSuppressed(rollbackFailure);
 			}
 		}
-		if (moved) {
-			try {
-				move(target, source);
-			} catch (IOException rollbackFailure) {
-				failure.addSuppressed(rollbackFailure);
+		return restoredAll;
+	}
+
+	private void recoverFiles(
+		List<FilePlan> files,
+		List<FilePlan> movedFiles,
+		boolean documentsRestored,
+		Exception failure
+	) {
+		for (int index = files.size() - 1; index >= 0; index--) {
+			FilePlan file = files.get(index);
+			Path source = storage.resolve(file.oldPath());
+			Path target = storage.resolve(file.newPath());
+			if (file.deduplicate()) {
+				ensureOldCopy(source, target, failure);
+				continue;
 			}
+			if (!movedFiles.contains(file) || !Files.exists(target) || Files.exists(source)) continue;
+			if (documentsRestored) {
+				try {
+					move(target, source);
+					continue;
+				} catch (IOException moveFailure) {
+					failure.addSuppressed(moveFailure);
+				}
+			}
+			ensureOldCopy(source, target, failure);
 		}
 	}
 
-	private Query versionQuery(DocumentChange change) {
-		return Query.query(
-			Criteria.where("_id").is(change.id()).and("version").is(change.version())
-		);
+	private void ensureOldCopy(Path source, Path target, Exception failure) {
+		if (Files.exists(source) || !Files.exists(target)) return;
+		try {
+			Files.createDirectories(source.getParent());
+			Files.copy(target, source);
+		} catch (IOException copyFailure) {
+			failure.addSuppressed(copyFailure);
+		}
+	}
+
+	private Query casQuery(DocumentChange change, boolean rollback) {
+		long version = rollback ? change.originalVersion() + 1 : change.originalVersion();
+		List<Document> conditions = new ArrayList<>();
+		conditions.add(new Document("_id", change.id()));
+		conditions.add(new Document("version", version));
+		for (PathMapping mapping : change.mappings()) {
+			String expectedPath = rollback ? mapping.newPath() : mapping.oldPath();
+			conditions.add(referenceQuery(change.collection(), expectedPath).getQueryObject());
+		}
+		return new BasicQuery(new Document("$and", conditions));
+	}
+
+	private Query referenceQuery(String collection, String path) {
+		return switch (collection) {
+			case "media_assets" -> Query.query(Criteria.where("relativePath").is(path));
+			case "task_items" -> Query.query(new Criteria().orOperator(
+				Criteria.where("currentResult.audio.relativePath").is(path),
+				Criteria.where("operations.resultSnapshot.audio.relativePath").is(path)
+			));
+			case "media_cleanup_jobs" -> Query.query(Criteria.where("relativePaths").is(path));
+			case "idempotency_records" -> Query.query(
+				Criteria.where("responseJson").regex(
+					Pattern.compile(Pattern.quote("\"" + path + "\""))
+				)
+			);
+			default -> throw new IllegalArgumentException("unsupported migration collection");
+		};
 	}
 
 	private void move(Path source, Path target) throws IOException {
@@ -323,21 +433,56 @@ public class RecordingPathMigrationService {
 		return value;
 	}
 
-	private record MigrationEntry(
+	private record MigrationPlan(List<FilePlan> files, List<DocumentChange> changes) {
+	}
+
+	private record FilePlan(
 		List<Object> mediaIds,
 		String oldPath,
 		String newPath,
 		long sizeBytes,
-		String sha256
+		String sha256,
+		boolean deduplicate
 	) {
+	}
+
+	private record PathMapping(String oldPath, String newPath) {
+	}
+
+	private record DocumentKey(String collection, Object id) {
+	}
+
+	private static final class MutableDocumentChange {
+		private final String collection;
+		private final Object id;
+		private final long originalVersion;
+		private final Document original;
+		private final Document replacement;
+		private final List<PathMapping> mappings = new ArrayList<>();
+
+		private MutableDocumentChange(
+			String collection,
+			Object id,
+			long originalVersion,
+			Document original,
+			Document replacement
+		) {
+			this.collection = collection;
+			this.id = id;
+			this.originalVersion = originalVersion;
+			this.original = original;
+			this.replacement = replacement;
+		}
 	}
 
 	private record DocumentChange(
 		String collection,
 		Object id,
-		Object version,
+		long originalVersion,
 		Document original,
-		Document replacement
+		Document replacement,
+		Document rollback,
+		List<PathMapping> mappings
 	) {
 	}
 }

@@ -82,6 +82,7 @@ MINIMAX_API_BASE_URL=https://api.minimaxi.com
 VOICE_GENERATION_STORAGE_DIR=backend/storage/voice-generation
 MONGODB_URI=mongodb://localhost:27017/recording_platform
 RECORDING_STORAGE_DIR=backend/storage/recordings
+RECORDING_PATH_MIGRATION_ENABLED=false
 REMOTE_MEDIA_ALLOW_HTTP=false
 REMOTE_MEDIA_TIMEOUT_SECONDS=15
 REMOTE_MEDIA_MAX_REDIRECTS=3
@@ -157,6 +158,22 @@ POST /api/admin/users/{userId}/disable
 - 录音文件：`RECORDING_STORAGE_DIR` 的相对值按仓库根目录解析，目录下只使用相对媒体路径；当前录音固定为 `{taskCode}/{itemCode}.wav|mp3`。上传先进入 `temp/`，完成扩展名、魔数、100MB、单声道、采样率和时长校验后原子替换，失败恢复旧文件。待删除的旧稳定文件会先移动到 `temp/backups/` 唯一路径，避免后续重录复用同一路径时误删新文件；`GET /api/media/{mediaId}` 鉴权读取并支持单 Range，完整文件和 Range 响应都使用分块流式输出，避免将最大 100MB 媒体整体载入内存。
 - 导入固定列为 `externalItemId`、`referenceText`、`referenceAudioUrl`、`referenceVideoUrl`，支持 `.csv` 和 `.xlsx`、部分成功、失败行重试及幂等。单文件最多 50000 个数据行；每 100 行持久化一次进度，行错误摘要最多保存 1000 条，完整失败行号单独保留用于重试。初始导入与过期 PROCESSING 恢复使用 `FULL` 模式幂等重放完整源文件，只有用户显式重试使用 `FAILED_ROWS`；worker 的心跳、进度和完成状态均以 `leaseOwner` 条件原子更新，旧 worker 失去租约后不能覆盖最终状态。部分成功时先生成只含失败行的 worker 唯一重试 CSV，只有 fenced 完成写入成功后才切换文件并清理旧源，成功行签名 URL 不再落盘。
 - 远程参考媒体生产默认只允许 HTTPS；每次重定向重新执行协议、主机和地址策略，禁止本机、环回、私网、链路本地与多播地址，并将校验后的地址绑定到实际连接。开发环境只有显式设置 `REMOTE_MEDIA_ALLOW_HTTP=true` 才允许 HTTP，仍不允许私网目标。音频上限 100MB、视频上限 500MB。
+
+## 一次性旧录音路径迁移
+
+`RECORDING_PATH_MIGRATION_ENABLED` 默认必须为 `false`。它只用于把旧的 `recordings/{taskCode}/{itemCode}/current.wav|mp3` 一次性迁移为 `{taskCode}/{itemCode}.wav|mp3`，不是常规启动开关；本节命令仅为运维手册，本轮不会再次执行真实迁移。
+
+执行前必须停止全部后端实例和其他会写入录音、`media_assets`、`task_items`、`media_cleanup_jobs`、`idempotency_records` 的进程，并同时备份这四个 MongoDB 集合与完整 `RECORDING_STORAGE_DIR`。确认 MongoDB 与文件备份都可恢复后，才允许以单实例启动迁移：
+
+```powershell
+cd C:\Projects\recording-platform\backend
+$env:RECORDING_PATH_MIGRATION_ENABLED='true'
+.\mvnw.cmd spring-boot:run
+```
+
+迁移器会先完成全部路径和文档预检，再移动文件并使用版本与精确路径 CAS 更新 MongoDB；成功后进程自动退出，日志只记录脱敏计数。保持业务停写，再运行同一命令一次，必须看到 `migrated=0`、`deduplicated=0`。随后立即执行 `Remove-Item Env:RECORDING_PATH_MIGRATION_ENABLED`（或显式设为 `false`），再按正常方式启动服务。
+
+如果迁移失败，不得恢复业务写入。先核对新旧文件是否都存在及 SHA-256 是否一致，再检查上述四个集合的路径和版本。迁移器会尝试全局逆向补偿；如果 MongoDB 回滚结果不确定，会保留新文件并补回旧路径，避免任何仍指向新路径的文档失去可读文件。此时不得单独删除新文件；无法人工确认一致性时，应把 MongoDB 集合和录音目录作为同一恢复单元一并从备份还原。
 
 ## 人工审核与状态管理
 
