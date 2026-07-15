@@ -557,3 +557,18 @@
   - 路由回归测试在修复前明确收到 `/admin/tasks` 重定向；替换为真实页面后定向测试 5/5 通过。
   - Web 完整测试通过：Node 9/9、Vitest 21/21；`npm run build` 成功生成采集权限入口页产物。
   - 管理员真实登录页面验收通过：侧边栏进入采集权限任务入口后可选择测试任务，并在任务权限页看到小程序提交的 `PENDING` 申请及通过、驳回操作。
+
+## 2026-07-15 修复审核音频 Range 播放
+
+- 时间：2026-07-15
+- commit ID：待提交后补记
+- 修改内容：
+  - 真机提交的标准 MP3 已成功入库，但审核页原生播放器请求 `Range: bytes=0-` 时，Spring MVC 无法为 `ResourceRegion` 与预设 `audio/mpeg` 找到消息转换器，统一错误处理后表现为 500 `INTERNAL_ERROR` 和 `0:00 / 0:00`。
+  - 媒体接口改为明确的 `StreamingResponseBody` 类型；完整文件和单 Range 均按固定缓冲区流式复制，继续返回既有 200/206、`Content-Type`、`Content-Length`、`Content-Range` 与 `Accept-Ranges`，不整体加载最大 100MB 文件。
+  - 保持媒体鉴权、路径校验、文件存在性校验、多段/非法 Range 416 规则、数据库记录和当前录音文件不变。
+  - 新增真实 Spring MVC HTTP 回归测试，覆盖 MP3 的 `Range: bytes=0-` 响应状态、头和字节内容；未记录 Cookie、Bearer Token 或真实会话值。
+- 验证结果：
+  - 回归测试在修复前稳定复现 `expected 206, actual 500`，内部异常为 `HttpMessageNotWritableException`；修复后媒体定向测试 3/3 通过。
+  - `backend\\mvnw.cmd test`：196/196 通过，0 failures、0 errors、0 skipped，`BUILD SUCCESS`。
+  - `apps/web` 下 `npm test -- --run`：Node 9/9、Vitest 21/21 通过；`npm run build` 通过。
+  - 重启后端并刷新审核工作台后，真实浏览器播放器可加载并播放真机提交的 MP3，人工听音确认录音内容正常。

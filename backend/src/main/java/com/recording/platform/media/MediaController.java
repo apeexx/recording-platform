@@ -2,10 +2,12 @@ package com.recording.platform.media;
 
 import com.recording.platform.api.ApiException;
 import com.recording.platform.security.PlatformPrincipal;
+import java.io.EOFException;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.file.Files;
 import java.util.List;
-import org.springframework.core.io.FileSystemResource;
-import org.springframework.core.io.Resource;
-import org.springframework.core.io.support.ResourceRegion;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpRange;
@@ -18,6 +20,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 @RestController
 @RequestMapping("/api/media")
@@ -29,29 +32,46 @@ public class MediaController {
 	}
 
 	@GetMapping("/{mediaId}")
-	public ResponseEntity<?> read(
+	public ResponseEntity<StreamingResponseBody> read(
 		@PathVariable String mediaId,
 		@RequestHeader(value = HttpHeaders.RANGE, required = false) String rangeHeader,
 		@AuthenticationPrincipal PlatformPrincipal actor
 	) {
 		ReadableMedia readable = access.open(mediaId, actor);
-		Resource resource = new FileSystemResource(readable.path());
 		HttpHeaders headers = baseHeaders(readable.contentType());
 		if (rangeHeader == null || rangeHeader.isBlank()) {
 			headers.setContentLength(readable.length());
-			return new ResponseEntity<>(resource, headers, HttpStatus.OK);
+			StreamingResponseBody body = output -> streamRange(readable, 0, readable.length(), output);
+			return new ResponseEntity<>(body, headers, HttpStatus.OK);
 		}
 		try {
 			List<HttpRange> ranges = HttpRange.parseRanges(rangeHeader);
 			if (ranges.size() != 1) throw invalidRange();
-			ResourceRegion region = ranges.get(0).toResourceRegion(resource);
-			if (region.getPosition() >= readable.length() || region.getCount() < 1) throw invalidRange();
-			long end = region.getPosition() + region.getCount() - 1;
-			headers.set(HttpHeaders.CONTENT_RANGE, "bytes " + region.getPosition() + "-" + end + "/" + readable.length());
-			headers.setContentLength(region.getCount());
-			return new ResponseEntity<>(region, headers, HttpStatus.PARTIAL_CONTENT);
+			HttpRange range = ranges.get(0);
+			long start = range.getRangeStart(readable.length());
+			long end = range.getRangeEnd(readable.length());
+			long count = end - start + 1;
+			if (start >= readable.length() || count < 1) throw invalidRange();
+			headers.set(HttpHeaders.CONTENT_RANGE, "bytes " + start + "-" + end + "/" + readable.length());
+			headers.setContentLength(count);
+			StreamingResponseBody body = output -> streamRange(readable, start, count, output);
+			return new ResponseEntity<>(body, headers, HttpStatus.PARTIAL_CONTENT);
 		} catch (IllegalArgumentException exception) {
 			throw invalidRange();
+		}
+	}
+
+	private void streamRange(ReadableMedia readable, long start, long count, OutputStream output) throws IOException {
+		try (InputStream input = Files.newInputStream(readable.path())) {
+			input.skipNBytes(start);
+			byte[] buffer = new byte[8192];
+			long remaining = count;
+			while (remaining > 0) {
+				int read = input.read(buffer, 0, (int) Math.min(buffer.length, remaining));
+				if (read < 0) throw new EOFException("media file changed while streaming");
+				output.write(buffer, 0, read);
+				remaining -= read;
+			}
 		}
 	}
 
