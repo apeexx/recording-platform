@@ -48,11 +48,16 @@ public class RecordingPathMigrationService {
 			Criteria.where("kind").is("RECORDING").and("relativePath").regex(LEGACY)
 		);
 		List<Document> assets = mongo.find(legacyRecordings, Document.class, "media_assets");
-		int migrated = 0;
-		int deduplicated = 0;
+		Map<String, List<Object>> mediaIdsByPath = new LinkedHashMap<>();
 		for (Document asset : assets) {
 			String oldPath = asset.getString("relativePath");
-			MigrationEntry entry = inspect(asset.get("_id"), oldPath);
+			targetPath(oldPath);
+			mediaIdsByPath.computeIfAbsent(oldPath, ignored -> new ArrayList<>()).add(asset.get("_id"));
+		}
+		int migrated = 0;
+		int deduplicated = 0;
+		for (Map.Entry<String, List<Object>> grouped : mediaIdsByPath.entrySet()) {
+			MigrationEntry entry = inspect(grouped.getValue(), grouped.getKey());
 			boolean targetExists = Files.exists(storage.resolve(entry.newPath()));
 			if (targetExists) {
 				assertSameContent(entry);
@@ -73,14 +78,14 @@ public class RecordingPathMigrationService {
 		return matcher.group(1) + "/" + matcher.group(2) + "." + matcher.group(3);
 	}
 
-	private MigrationEntry inspect(Object mediaId, String oldPath) {
+	private MigrationEntry inspect(List<Object> mediaIds, String oldPath) {
 		String newPath = targetPath(oldPath);
 		Path source = storage.resolve(oldPath);
 		if (!Files.isRegularFile(source)) {
 			throw new IllegalStateException("legacy recording file is missing");
 		}
 		try {
-			return new MigrationEntry(mediaId, oldPath, newPath, Files.size(source), sha256(source));
+			return new MigrationEntry(List.copyOf(mediaIds), oldPath, newPath, Files.size(source), sha256(source));
 		} catch (IOException exception) {
 			throw new IllegalStateException("legacy recording file cannot be inspected", exception);
 		}
@@ -108,9 +113,7 @@ public class RecordingPathMigrationService {
 					throw new IllegalStateException("migration document has no id or version");
 				}
 				Document replacement = copyDocument(original);
-				boolean changed = collection.equals("idempotency_records")
-					? replaceResponseJson(replacement, oldPath, newPath)
-					: replaceExactStrings(replacement, oldPath, newPath);
+				boolean changed = replaceSpecifiedFields(collection, replacement, oldPath, newPath);
 				if (changed) {
 					changes.add(new DocumentChange(collection, id, version, original, replacement));
 				}
@@ -234,34 +237,67 @@ public class RecordingPathMigrationService {
 		return true;
 	}
 
-	private boolean replaceExactStrings(Object value, String oldPath, String newPath) {
+	private boolean replaceSpecifiedFields(
+		String collection,
+		Document document,
+		String oldPath,
+		String newPath
+	) {
+		return switch (collection) {
+			case "media_assets" -> replaceMapValue(document, "relativePath", oldPath, newPath);
+			case "task_items" -> replaceTaskItemPaths(document, oldPath, newPath);
+			case "media_cleanup_jobs" -> replaceListValues(
+				document.get("relativePaths"), oldPath, newPath
+			);
+			case "idempotency_records" -> replaceResponseJson(document, oldPath, newPath);
+			default -> throw new IllegalArgumentException("unsupported migration collection");
+		};
+	}
+
+	private boolean replaceTaskItemPaths(Document document, String oldPath, String newPath) {
 		boolean changed = false;
-		if (value instanceof Map<?, ?> map) {
-			for (Map.Entry<?, ?> entry : map.entrySet()) {
-				Object child = entry.getValue();
-				if (oldPath.equals(child)) {
-					@SuppressWarnings("unchecked")
-					Map<Object, Object> mutable = (Map<Object, Object>) map;
-					mutable.put(entry.getKey(), newPath);
-					changed = true;
-				} else {
-					changed |= replaceExactStrings(child, oldPath, newPath);
-				}
-			}
-		} else if (value instanceof List<?> list) {
-			@SuppressWarnings("unchecked")
-			List<Object> mutable = (List<Object>) list;
-			for (int index = 0; index < mutable.size(); index++) {
-				Object child = mutable.get(index);
-				if (oldPath.equals(child)) {
-					mutable.set(index, newPath);
-					changed = true;
-				} else {
-					changed |= replaceExactStrings(child, oldPath, newPath);
+		changed |= replaceResultAudioPath(document.get("currentResult"), oldPath, newPath);
+		Object operations = document.get("operations");
+		if (operations instanceof List<?> list) {
+			for (Object operation : list) {
+				if (operation instanceof Map<?, ?> operationMap) {
+					changed |= replaceResultAudioPath(
+						operationMap.get("resultSnapshot"), oldPath, newPath
+					);
 				}
 			}
 		}
 		return changed;
+	}
+
+	private boolean replaceResultAudioPath(Object result, String oldPath, String newPath) {
+		if (!(result instanceof Map<?, ?> resultMap)) return false;
+		Object audio = resultMap.get("audio");
+		if (!(audio instanceof Map<?, ?> audioMap)) return false;
+		return replaceMapValue(audioMap, "relativePath", oldPath, newPath);
+	}
+
+	private boolean replaceListValues(Object value, String oldPath, String newPath) {
+		boolean changed = false;
+		if (value instanceof List<?> list) {
+			@SuppressWarnings("unchecked")
+			List<Object> mutable = (List<Object>) list;
+			for (int index = 0; index < mutable.size(); index++) {
+				if (oldPath.equals(mutable.get(index))) {
+					mutable.set(index, newPath);
+					changed = true;
+				}
+			}
+		}
+		return changed;
+	}
+
+	private boolean replaceMapValue(Map<?, ?> map, String key, String oldPath, String newPath) {
+		if (!oldPath.equals(map.get(key))) return false;
+		@SuppressWarnings("unchecked")
+		Map<Object, Object> mutable = (Map<Object, Object>) map;
+		mutable.put(key, newPath);
+		return true;
 	}
 
 	private Document copyDocument(Document source) {
@@ -287,7 +323,13 @@ public class RecordingPathMigrationService {
 		return value;
 	}
 
-	private record MigrationEntry(Object mediaId, String oldPath, String newPath, long sizeBytes, String sha256) {
+	private record MigrationEntry(
+		List<Object> mediaIds,
+		String oldPath,
+		String newPath,
+		long sizeBytes,
+		String sha256
+	) {
 	}
 
 	private record DocumentChange(
