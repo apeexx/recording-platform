@@ -660,3 +660,27 @@
   - `npm test`：Web Node 测试 9/9、Vitest 23/23 通过；`npm run build` 成功。
   - `scripts\\start-dev.cmd` 重启后，`GET /api/health/ready` 返回 `overall`、`mongo`、`storage` 全部 `UP`。
   - 真实管理员在 Web 审核工作台驳回 `I000004` 返回 HTTP 200；状态由 `REVIEW_PENDING` 变为 `RECORDING_PENDING`，revision 由 2 变为 3，原采集员、assignmentId、录音结果和提交历史保留，审核占用清空，操作记录写入管理员及驳回原因。
+
+## 2026-07-15 18:10 完成本地采集审核闭环人工验收
+
+- 时间：2026-07-15 18:10
+- commit ID：见本次 Git 提交
+- 验收环境：
+  - 本机 MongoDB、Spring Boot 后端、Vite Web、Chrome/Edge、微信开发者工具及微信真机。
+  - 使用个人测试 AppID 和脱敏测试数据；未记录 Cookie、Bearer Token、OpenID、AppSecret 或真实密码。
+- 真实业务验收：
+  - 后台登录、会话接管、首次改密和 ADMIN/REVIEWER 角色菜单通过；审核员不能看到管理员任务、用户或语音生成入口。
+  - 完成平台、任务版本、池数据、权限申请审批、领取、MP3 录音试听与上传、文字单独提交、返修重录、采集员释放、软废弃与恢复。
+  - 同条目返修后录音稳定路径保持 `{taskCode}/{itemCode}.mp3`，新录音覆盖旧文件且审核页可播放；采集员释放后条目回到 `AVAILABLE`，当前结果与稳定文件清理，历史提交和操作记录保留。
+  - 管理员直接驳回后原采集员继续返修；独立 REVIEWER 账号完成首次改密、领取审核、释放审核、再次领取、补充普通话文本并审核通过。
+  - 审核释放后条目仍为 `REVIEW_PENDING`，审核归属清空，采集音频和提交记录不删除；审核通过后音频与补充文字同时保留并进入 `COMPLETED`。
+- 统计核对：
+  - 审核员通过 `I000003` 前的任务、采集员和小程序个人统计快照一致：累计提交 5、累计时长 12 秒、当前有效完成 1、当前有效时长 0 秒、释放 2、废弃 1；当时的当前有效结果为纯文字，因此有效音频时长为 0 秒。
+  - 审核员统计与操作一致：领取 2、释放 1、通过 1、驳回 0、平均处理 18 秒。
+- 自动化复验：
+  - `backend\\mvnw.cmd test`：218/218 通过，0 failures、0 errors、0 skipped，`BUILD SUCCESS`。
+  - `apps/web` 下 `npm test -- --run`：Node 9/9、Vitest 23/23 通过；`npm run build` 成功。
+  - 启动脚本测试 7/7、小程序测试 10/10 通过；`git diff --check` 与文档敏感信息扫描通过。
+- 未执行项：
+  - 未执行付费 MiniMax 调用。
+  - 本次为开发环境与个人测试 AppID 验收；正式上线仍需公司小程序账号、HTTPS 合法域名、生产 MongoDB、生产存储备份和监控验收。
