@@ -572,3 +572,20 @@
   - `backend\\mvnw.cmd test`：196/196 通过，0 failures、0 errors、0 skipped，`BUILD SUCCESS`。
   - `apps/web` 下 `npm test -- --run`：Node 9/9、Vitest 21/21 通过；`npm run build` 通过。
   - 重启后端并刷新审核工作台后，真实浏览器播放器可加载并播放真机提交的 MP3，人工听音确认录音内容正常。
+
+## 2026-07-15 规范本地录音存储目录
+
+- 时间：2026-07-15
+- commit ID：待提交后补记
+- 修改内容：
+  - 定位到启动脚本按仓库根目录检查 `RECORDING_STORAGE_DIR`，而后端按 `backend/` 工作目录解析同一相对值，导致实际生成 `backend/backend/storage/recordings`。
+  - 新增公共存储路径解析器，相对路径固定按仓库根目录解析；录音存储、导入临时文件和就绪检查统一复用该规则，绝对路径保持不变。
+  - 停止后端后对重复目录中的现有录音执行逐文件 SHA-256 冲突检查；目标无冲突后移动 1 个文件，迁移前后哈希一致，并删除已经为空的重复目录。
+  - MongoDB 中的媒体相对路径、media ID、任务状态和提交历史均未修改；真实录音和 `.env` 未加入 Git。
+- 验证结果：
+  - 新增测试先因缺少 `StoragePathResolver` 产生预期编译失败；最小实现后路径及存储相关定向测试 19/19 通过。
+  - `backend\\mvnw.cmd test`：199/199 通过，0 failures、0 errors、0 skipped，`BUILD SUCCESS`。
+  - 启动脚本测试 7/7、小程序测试 10/10、Web Node 测试 9/9、Vitest 21/21 通过，Web 构建成功。
+  - 使用 `scripts\\start-dev.cmd` 重启后，8080/5173 正常监听；就绪接口返回 `overall`、`mongo`、`storage` 全部 `UP`，目标目录保留 1 个历史录音文件且 `backend/backend` 未重新生成。
+  - 迁移后在真实浏览器审核工作台播放 I000002，时长显示正常且人工听音确认内容正常。
+  - 微信真机领取并提交 I000003 后进入 `REVIEW_PENDING`；落盘文件大小与接口元数据一致，只写入规范目录，`backend/backend` 未重新生成，审核工作台显示约 3 秒且人工听音确认正常。

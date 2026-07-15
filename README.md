@@ -94,6 +94,8 @@ MINIPROGRAM_SESSION_DAYS=30
 WEB_SESSION_COOKIE_SECURE=false
 ```
 
+`RECORDING_STORAGE_DIR` 使用相对路径时固定以仓库根目录为基准，因此上述开发配置始终对应根目录下的 `backend/storage/recordings/`，不会随 Spring Boot 从 `backend/` 或仓库根目录启动而改变。绝对路径仍按原值使用。
+
 其中 `MINIMAX_API_KEY` 需要按你的本地环境自行填写，不能提交到 Git。
 
 如果已经填写 `MINIMAX_API_KEY` 但 MiniMax 返回 `2049 invalid api key`，优先检查 `MINIMAX_API_BASE_URL` 是否和账号所在开放平台一致。国内开放平台账号使用 `https://api.minimaxi.com`，国际开放平台账号可改为 `https://api.minimax.io`。
@@ -152,7 +154,7 @@ POST /api/admin/users/{userId}/disable
 - 授权：`/api/tasks/{taskId}/grants` 与 `/access-requests` 管理直接授权、申请、原子批准/驳回和撤销。撤销只阻止新领取，不影响已领取条目的提交或释放；批准申请重放不会复活后来已撤销的授权。
 - 数据池：ADMIN 使用 `POST /api/tasks/{taskId}/items` 单条添加并传 `Idempotency-Key`，或通过 `/api/import-jobs` 异步导入。COLLECTOR 使用 `POST /api/tasks/{taskId}/items/start` 原子领取或继续全系统唯一的当前条目。
 - 提交与返修：`POST /api/task-items/{itemId}/submit` 接收 multipart 的 `operationId`、`assignmentId`、`expectedRevision`、可选文字和录音；重复 operationId 返回首次结果，过期修订返回 `409 STALE_STATE`。驳回保留原采集员，释放清除当前结果但保留提交和操作历史。提交或释放成功后，旧文件备份和旧媒体元数据由持久化清理任务处理；即时清理失败不改变首次业务结果，同 operationId 重放和应用启动恢复都会继续重试。
-- 录音文件：`RECORDING_STORAGE_DIR` 下只使用相对路径；当前录音固定为 `recordings/{taskCode}/{itemCode}/current.wav|mp3`。上传先进入 `temp/`，完成扩展名、魔数、100MB、单声道、采样率和时长校验后原子替换，失败恢复旧文件。待删除的 current 会先移动到 `temp/backups/` 唯一路径，避免后续重录复用稳定路径时误删新文件；`GET /api/media/{mediaId}` 鉴权读取并支持单 Range，完整文件和 Range 响应都使用分块流式输出，避免将最大 100MB 媒体整体载入内存。
+- 录音文件：`RECORDING_STORAGE_DIR` 的相对值按仓库根目录解析，目录下只使用相对媒体路径；当前录音固定为 `recordings/{taskCode}/{itemCode}/current.wav|mp3`。上传先进入 `temp/`，完成扩展名、魔数、100MB、单声道、采样率和时长校验后原子替换，失败恢复旧文件。待删除的 current 会先移动到 `temp/backups/` 唯一路径，避免后续重录复用稳定路径时误删新文件；`GET /api/media/{mediaId}` 鉴权读取并支持单 Range，完整文件和 Range 响应都使用分块流式输出，避免将最大 100MB 媒体整体载入内存。
 - 导入固定列为 `externalItemId`、`referenceText`、`referenceAudioUrl`、`referenceVideoUrl`，支持 `.csv` 和 `.xlsx`、部分成功、失败行重试及幂等。单文件最多 50000 个数据行；每 100 行持久化一次进度，行错误摘要最多保存 1000 条，完整失败行号单独保留用于重试。初始导入与过期 PROCESSING 恢复使用 `FULL` 模式幂等重放完整源文件，只有用户显式重试使用 `FAILED_ROWS`；worker 的心跳、进度和完成状态均以 `leaseOwner` 条件原子更新，旧 worker 失去租约后不能覆盖最终状态。部分成功时先生成只含失败行的 worker 唯一重试 CSV，只有 fenced 完成写入成功后才切换文件并清理旧源，成功行签名 URL 不再落盘。
 - 远程参考媒体生产默认只允许 HTTPS；每次重定向重新执行协议、主机和地址策略，禁止本机、环回、私网、链路本地与多播地址，并将校验后的地址绑定到实际连接。开发环境只有显式设置 `REMOTE_MEDIA_ALLOW_HTTP=true` 才允许 HTTP，仍不允许私网目标。音频上限 100MB、视频上限 500MB。
 

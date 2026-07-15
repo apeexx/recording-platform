@@ -27,7 +27,7 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-dev.ps1 -Help
 脚本启动前会先执行两项脱敏前置检查：
 
 - 从当前进程环境或根目录 `.env` 读取 `MONGODB_URI`，默认检查 `localhost:27017` 的 TCP 可达性。
-- 从同样位置读取 `RECORDING_STORAGE_DIR`，使用临时探针文件检查录音目录是否可写。
+- 从同样位置读取 `RECORDING_STORAGE_DIR`，相对值按仓库根目录解析，并使用临时探针文件检查录音目录是否可写；后端录音、导入和就绪检查使用相同的仓库根目录语义。
 
 检查失败时脚本在结束旧 Web/后端进程和启动新窗口之前退出。脚本不打印 MongoDB URI、用户名或密码，不安装/启动/停止 MongoDB，也不会结束 `27017` 端口上的任何进程。TCP 检查只能证明端点可达，账号权限和数据库命令仍由后端就绪接口校验。
 

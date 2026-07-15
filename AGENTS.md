@@ -192,6 +192,8 @@ MINIPROGRAM_SESSION_DAYS（默认 30）
 WEB_SESSION_COOKIE_SECURE（默认 false，生产 HTTPS 应设 true）
 ```
 
+`RECORDING_STORAGE_DIR` 为相对路径时必须按仓库根目录解析，默认 `backend/storage/recordings`；不得按 Spring Boot 的 `backend/` 工作目录再次拼接 `backend`。绝对路径保持原值。启动前置检查、录音存储、导入临时文件和就绪检查必须使用同一目录语义。
+
 根目录 `.env.example` 只能提供空值或安全默认值。Web 会话 Cookie 必须为 HttpOnly、SameSite=Lax；CSRF 使用可读的 `XSRF-TOKEN` Cookie 与 `X-XSRF-TOKEN` 请求头，已登录 Web 用户通过 `GET /api/auth/web/csrf` 获取 token，首次登录待改密账号也必须允许访问该端点。服务端和 MongoDB 只保存会话令牌哈希。微信登录必须由后端用临时 code 调用 `jscode2session`，不得信任客户端直接提交的 OpenID。
 
 ## 6.5 任务池、媒体与导入规则

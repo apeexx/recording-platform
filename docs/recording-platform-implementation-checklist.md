@@ -408,3 +408,13 @@
 - [x] `README.md`、`AGENTS.md`、模块 README 和 `log.md` 与真实代码一致。
 - [x] 全量测试、Web build、敏感扫描和 `git diff --check` 通过。
 - [x] 明确记录未执行的真实 Mongo、微信真机和付费 MiniMax 联调。
+
+---
+
+## 2026-07-15 本地录音目录规范化
+
+- [x] 新增公共存储路径解析器，相对 `RECORDING_STORAGE_DIR` 固定按仓库根目录解析。
+- [x] 录音存储、导入临时文件和就绪检查统一使用同一路径语义。
+- [x] 通过 SHA-256 冲突检查，将重复目录中的现有录音无覆盖迁移到 `backend/storage/recordings/`。
+- [x] 迁移完成后删除空的 `backend/backend/`，MongoDB 相对媒体路径保持不变。
+- [x] 重启服务后复验历史录音播放，并提交一条新录音确认重复目录不再生成。
