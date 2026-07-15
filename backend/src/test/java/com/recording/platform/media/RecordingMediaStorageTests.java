@@ -30,8 +30,10 @@ class RecordingMediaStorageTests {
 
 		PreparedRecording prepared = storage.prepare(upload, version, "TASK-001", "I000001");
 		assertThat(prepared.recording().relativePath())
-			.isEqualTo("recordings/TASK-001/I000001/current.wav")
+			.isEqualTo("TASK-001/I000001.wav")
 			.doesNotContain(tempDir.toString());
+		assertThat(storage.resolve(prepared.recording().relativePath()))
+			.isEqualTo(tempDir.resolve("TASK-001/I000001.wav"));
 		assertThat(prepared.recording().sampleRate()).isEqualTo(16000);
 		assertThat(prepared.recording().channels()).isEqualTo(1);
 		assertThat(prepared.recording().durationMillis()).isBetween(1999L, 2001L);
@@ -39,6 +41,7 @@ class RecordingMediaStorageTests {
 		RecordingReplacement replacement = storage.activate(prepared, null);
 		replacement.complete();
 		assertThat(storage.resolve(prepared.recording().relativePath())).exists();
+		assertThat(tempDir.resolve("recordings/TASK-001/I000001/current.wav")).doesNotExist();
 	}
 
 	@Test
@@ -121,7 +124,7 @@ class RecordingMediaStorageTests {
 			version, "TASK-001", "I000001"
 		);
 
-		assertThat(first.recording().relativePath()).isEqualTo("recordings/TASK-001/I000001/current.wav");
+		assertThat(first.recording().relativePath()).isEqualTo("TASK-001/I000001.wav");
 		assertThat(second.recording().relativePath()).isEqualTo(first.recording().relativePath());
 		RecordingReplacement firstReplacement = storage.activate(first, previous.recording().relativePath());
 		firstReplacement.complete();

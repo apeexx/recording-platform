@@ -45,7 +45,7 @@ class MediaAccessAndRangeTests {
 
 	@Test
 	void collectorCanReadOwnedPendingMediaAfterGrantRevocationButUnrelatedCollectorCannot() throws Exception {
-		Path path = tempDir.resolve("recordings/TASK-001/I000001/current.wav");
+		Path path = tempDir.resolve("TASK-001/I000001.wav");
 		Files.createDirectories(path.getParent());
 		Files.writeString(path, "0123456789");
 		MediaAssetStore assets = org.mockito.Mockito.mock(MediaAssetStore.class);
@@ -56,7 +56,7 @@ class MediaAccessAndRangeTests {
 		asset.setTaskId("task-1");
 		asset.setItemId("item-1");
 		asset.setKind(MediaKind.RECORDING);
-		asset.setRelativePath("recordings/TASK-001/I000001/current.wav");
+		asset.setRelativePath("TASK-001/I000001.wav");
 		asset.setContentType("audio/wav");
 		asset.setSizeBytes(10);
 		when(assets.findById("media-1")).thenReturn(Optional.of(asset));
@@ -127,7 +127,7 @@ class MediaAccessAndRangeTests {
 		byte[] mp3Bytes = new byte[] {
 			(byte) 0xff, (byte) 0xf3, 0x68, (byte) 0xc4, 0x00, 0x01, 0x02, 0x03
 		};
-		Path path = tempDir.resolve("recordings/TASK-001/I000001/current.mp3");
+		Path path = tempDir.resolve("TASK-001/I000001.mp3");
 		Files.createDirectories(path.getParent());
 		Files.write(path, mp3Bytes);
 		MediaAccessService access = org.mockito.Mockito.mock(MediaAccessService.class);

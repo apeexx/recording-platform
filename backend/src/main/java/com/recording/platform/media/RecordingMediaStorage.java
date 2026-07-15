@@ -63,7 +63,7 @@ public class RecordingMediaStorage {
 			}
 			AudioMetadata metadata = inspector.inspect(temporary, upload.getOriginalFilename());
 			validateAgainstVersion(metadata, version);
-			String relative = "recordings/" + safeTaskCode + "/" + safeItemCode + "/current." + extension;
+			String relative = safeTaskCode + "/" + safeItemCode + "." + extension;
 			SubmittedRecording recording = new SubmittedRecording(
 				UUID.randomUUID().toString(),
 				relative,
