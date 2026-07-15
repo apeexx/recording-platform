@@ -1,5 +1,6 @@
 package com.recording.platform.health;
 
+import com.recording.platform.config.StoragePathResolver;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.UUID;
@@ -18,7 +19,7 @@ public class ReadinessService {
 		@Value("${recording.storage-dir:backend/storage/recordings}") String storageRoot
 	) {
 		this.mongo = mongo;
-		this.storageRoot = Path.of(storageRoot).toAbsolutePath().normalize();
+		this.storageRoot = StoragePathResolver.resolve(storageRoot);
 	}
 
 	public Readiness check() {

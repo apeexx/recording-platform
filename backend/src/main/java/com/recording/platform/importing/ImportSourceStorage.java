@@ -1,6 +1,7 @@
 package com.recording.platform.importing;
 
 import com.recording.platform.api.ApiException;
+import com.recording.platform.config.StoragePathResolver;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
@@ -29,7 +30,7 @@ public class ImportSourceStorage {
 
 	@Autowired
 	public ImportSourceStorage(@Value("${recording.storage-dir:backend/storage/recording-data}") String root) {
-		this(Path.of(root));
+		this(StoragePathResolver.resolve(root));
 	}
 
 	public ImportSourceStorage(Path root) { this.root = root.toAbsolutePath().normalize(); }

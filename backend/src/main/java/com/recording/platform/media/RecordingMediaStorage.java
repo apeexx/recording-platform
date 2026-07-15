@@ -1,6 +1,7 @@
 package com.recording.platform.media;
 
 import com.recording.platform.api.ApiException;
+import com.recording.platform.config.StoragePathResolver;
 import com.recording.platform.task.model.RecordingFormat;
 import com.recording.platform.task.model.SubmittedRecording;
 import com.recording.platform.task.model.TaskVersion;
@@ -26,7 +27,7 @@ public class RecordingMediaStorage {
 
 	@Autowired
 	public RecordingMediaStorage(@Value("${recording.storage-dir:backend/storage/recording-data}") String root) {
-		this(Path.of(root));
+		this(StoragePathResolver.resolve(root));
 	}
 
 	public RecordingMediaStorage(Path root) {
