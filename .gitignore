@@ -57,3 +57,6 @@ apps/miniprogram/config/private.js
 *.bak
 backend-tmp/
 backend-tmp.zip
+
+# Local process documents
+.superpowers/

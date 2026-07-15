@@ -109,6 +109,8 @@ scripts/README.md
 
 如果某个文档不存在，必须在最终输出中说明，不要编造内容，不要因此重建项目。
 
+设计、计划、brainstorm 和其他过程文档统一放在仓库根目录 `.superpowers/`，不得放入 `docs/`；`.superpowers/` 为本地资料并保持 Git 忽略。
+
 ## 6. 默认技术栈
 
 - Web 前端：Vite + Vue3 + JavaScript

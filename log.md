@@ -589,3 +589,18 @@
   - 使用 `scripts\\start-dev.cmd` 重启后，8080/5173 正常监听；就绪接口返回 `overall`、`mongo`、`storage` 全部 `UP`，目标目录保留 1 个历史录音文件且 `backend/backend` 未重新生成。
   - 迁移后在真实浏览器审核工作台播放 I000002，时长显示正常且人工听音确认内容正常。
   - 微信真机领取并提交 I000003 后进入 `REVIEW_PENDING`；落盘文件大小与接口元数据一致，只写入规范目录，`backend/backend` 未重新生成，审核工作台显示约 3 秒且人工听音确认正常。
+
+## 2026-07-15 13:45 扁平化录音路径并合并过程目录
+
+- 时间：2026-07-15 13:45
+- commit ID：待提交后补记
+- 修改内容：
+  - 当前录音稳定相对路径由 `recordings/{taskCode}/{itemCode}/current.wav|mp3` 扁平化为 `{taskCode}/{itemCode}.wav|mp3`，保留既有原子替换、备份清理、媒体鉴权和任务状态逻辑。
+  - 增加默认关闭、仅显式启用的一次性旧路径迁移器，并完成本机 2 个历史录音文件及 MongoDB 旧路径引用迁移；迁移前后文件大小和 SHA-256 一致，第二次幂等复检迁移计数为 0。
+  - 将 `docs/superpowers` 下 3 个计划和 3 个设计文件按相对路径、SHA-256 无冲突迁入根目录 `.superpowers/plans`、`.superpowers/specs`，保留 `.superpowers/sdd` 全部现有内容，并删除已为空的源目录。
+  - 将 `.superpowers/` 加入 Git 忽略，并在 `AGENTS.md` 增加过程文档统一放置的长期规则；未修改 README、业务代码、接口、数据库结构或依赖。
+- 验证结果：
+  - 历史迁移首轮 `migrated=2`、`deduplicated=0`，第二轮 `migrated=0`、`deduplicated=0`；旧录音目录和迁移环境开关均不存在。
+  - `backend\\mvnw.cmd test`：209/209 通过，0 failures、0 errors、0 skipped，`BUILD SUCCESS`。
+  - 过程文档迁移冲突计数为 0，6 个目标文件 SHA-256 与源文件一致，`.superpowers/sdd` 基线 22 个文件保持完整。
+  - 本轮目录整理不重复执行浏览器或真机验收；最近一次真实验收已确认迁移前录音可播放及新录音可提交，本次最终全链路验收由后续整合任务执行。
