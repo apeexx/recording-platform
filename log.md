@@ -604,3 +604,19 @@
   - `backend\\mvnw.cmd test`：209/209 通过，0 failures、0 errors、0 skipped，`BUILD SUCCESS`。
   - 过程文档迁移冲突计数为 0，6 个目标文件 SHA-256 与源文件一致，`.superpowers/sdd` 基线 22 个文件保持完整。
   - 本轮目录整理不重复执行浏览器或真机验收；最近一次真实验收已确认迁移前录音可播放及新录音可提交，本次最终全链路验收由后续整合任务执行。
+
+## 2026-07-15 13:53 完成录音路径扁平化整合验收
+
+- 时间：2026-07-15 13:53
+- commit ID：待提交后补记
+- 修改内容：
+  - 将 README、长期执行规则和实施清单中的当前录音路径统一更新为 `{taskCode}/{itemCode}.wav|mp3`，并同步旧稳定文件的隔离清理语义。
+  - 在实施清单记录扁平化路径、一次性迁移、过程目录合并及本轮自动化验收状态；`.superpowers/` 继续仅作为本地忽略资料，不恢复 `docs/superpowers`。
+  - 使用一键启动脚本恢复后端和 Web 开发服务，核对历史录音已位于新路径，旧嵌套目录、`current.*` 文件和重复 `backend/backend` 目录均不存在。
+- 验证结果：
+  - `backend\\mvnw.cmd test`：209/209 通过，0 failures、0 errors、0 skipped，`BUILD SUCCESS`。
+  - 启动脚本测试 7/7、小程序测试 10/10、Web Node 测试 9/9、Vitest 21/21 通过；`npm run build` 成功。
+  - `git diff --check` 通过；差异敏感扫描未发现 Bearer Token、API Key、AppSecret 或带凭证 MongoDB URI。
+  - `scripts\\start-dev.cmd` 启动后，`GET /api/health/ready` 返回 `overall`、`mongo`、`storage` 全部 `UP`；8080 与 5173 均正常监听。
+  - `backend/storage/recordings/` 下存在 `TEST_TEXT_RECORDING/I000002.mp3`、`TEST_TEXT_RECORDING/I000003.mp3`；旧嵌套 `recordings/` 目录不存在，`current.*` 文件计数为 0。
+  - 未执行微信真机返修、同条目重录覆盖和释放清理；这些交互项保留人工验收。未调用付费 MiniMax。

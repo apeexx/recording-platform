@@ -14,7 +14,7 @@
 - 首期不实现真实 AI 转写、AI 审核或甲方平台自动取数；AI 只保留后端结构，Web/小程序不展示可执行入口。
 - 个人微信 AppID 只用于可清理测试环境；仓库不保存真实 AppID、AppSecret、Mongo 密码、API Key、签名 URL 或个人截图。
 - MongoDB 由本机或服务器独立提供；仓库不添加 Docker Compose。
-- 录音最终路径固定为 `recordings/{taskCode}/{itemCode}/current.wav|mp3`；旧音频不保留，历史元数据保留。
+- 录音最终路径固定为 `{taskCode}/{itemCode}.wav|mp3`；旧音频不保留，历史元数据保留。
 - 数据库时间统一保存 UTC `Instant`；前端展示为 `Asia/Shanghai`。
 - `docs/daily-maintenance-log.md` 不属于本任务，禁止修改。
 - `backend/HELP.md` 当前缺失，禁止为了本任务补造。
@@ -418,3 +418,13 @@
 - [x] 通过 SHA-256 冲突检查，将重复目录中的现有录音无覆盖迁移到 `backend/storage/recordings/`。
 - [x] 迁移完成后删除空的 `backend/backend/`，MongoDB 相对媒体路径保持不变。
 - [x] 重启服务后复验历史录音播放，并提交一条新录音确认重复目录不再生成。
+
+---
+
+## 2026-07-15 录音路径扁平化与过程目录合并
+
+- [x] 当前录音稳定相对路径统一为 `{taskCode}/{itemCode}.wav|mp3`，保留临时写入、原子替换、备份清理和媒体鉴权边界。
+- [x] 增加默认关闭、仅显式启用的一次性旧路径迁移器；本机完成 2 个历史录音文件及 MongoDB 相对路径迁移，第二轮幂等复检迁移计数为 0。
+- [x] 将原 `docs/superpowers` 过程资料无冲突合并到本地 `.superpowers/`，并保持 `.superpowers/` Git 忽略；正式文档不再引用该旧目录作为工作位置。
+- [x] 完成后端、启动脚本、小程序、Web 自动化测试与 Web 构建，并执行差异及敏感信息检查。
+- [ ] 微信真机返修、同条目重录覆盖与释放清理保留人工验收，不以自动化结果替代。

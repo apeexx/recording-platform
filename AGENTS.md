@@ -206,7 +206,7 @@ WEB_SESSION_COOKIE_SECURE（默认 false，生产 HTTPS 应设 true）
 
 Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idempotency-Key`。通用幂等记录按 `(actorUserId, action, operationKey)` 唯一，先持久化 IN_PROGRESS 声明，成功后保存 COMPLETED 响应快照；重复请求返回首次结果，跨实例仍在处理的重复请求返回 `409 OPERATION_IN_PROGRESS`，不得重复执行底层 mutation。
 
-当前录音固定保存到 `RECORDING_STORAGE_DIR/recordings/{taskCode}/{itemCode}/current.wav|mp3`。上传必须先写 `temp/`，校验扩展名、魔数、100MB、格式、单声道、任务采样率和时长，再原子替换；同一条目的替换流程按本地条目锁串行化，失败恢复旧文件。提交或释放成功后的旧 current 必须先隔离到 `temp/backups/` 唯一路径，并以 `media_cleanup_jobs` 持久化旧路径和 media ID；即时清理失败由同 operationId 重放和应用启动恢复重试，不得回滚已成功的 Mongo 状态，也不得把备份暴露为媒体路径。Mongo 只保存相对路径和元数据。采集员只能读取本人条目和录音；ACTIVE grant 只额外开放任务信息与参考媒体；ADMIN/REVIEWER 按审核权限读取。
+当前录音固定保存到 `RECORDING_STORAGE_DIR/{taskCode}/{itemCode}.wav|mp3`。上传必须先写 `temp/`，校验扩展名、魔数、100MB、格式、单声道、任务采样率和时长，再原子替换；同一条目的替换流程按本地条目锁串行化，失败恢复旧文件。提交或释放成功后的旧稳定文件必须先隔离到 `temp/backups/` 唯一路径，并以 `media_cleanup_jobs` 持久化旧路径和 media ID；即时清理失败由同 operationId 重放和应用启动恢复重试，不得回滚已成功的 Mongo 状态，也不得把备份暴露为媒体路径。Mongo 只保存相对路径和元数据。采集员只能读取本人条目和录音；ACTIVE grant 只额外开放任务信息与参考媒体；ADMIN/REVIEWER 按审核权限读取。
 
 远程参考媒体生产默认只允许 HTTPS。策略必须阻止 localhost、环回、私网、链路本地、多播和危险重定向，并把校验后的公共 IP 绑定到实际 Socket；HTTPS 仍使用原 hostname 做 SNI、证书主机校验和 Host 请求头。`REMOTE_MEDIA_ALLOW_HTTP=true` 仅供显式开发联调，仍不允许私网目标。音频上限 100MB，视频上限 500MB；成功后不得保存完整签名 URL，只能保存 hostname、状态和脱敏错误摘要。
 
