@@ -1,5 +1,18 @@
 # AI 修改日志
 
+## 2026-07-16 增加批量导入部分失败测试数据
+
+- 时间：2026-07-16
+- commit ID：待提交后补记
+- 修改内容：
+  - 新增 `docs/test-data/task-items-import-partial-failure.csv`，混合 2 条有效新数据、2 条已存在外部编号和 1 条无参考源数据。
+  - 预期首次导入状态为 `PARTIAL_SUCCESS`，成功 2 行、失败 3 行；失败码分别覆盖 `EXTERNAL_ITEM_EXISTS` 和 `ITEM_REFERENCE_REQUIRED`。
+  - README 补充样例用途、预期计数和失败行重试仍会失败的边界，避免把重试误解为自动修复源数据。
+- 验证结果：
+  - 使用 Artifact Tool 回读并渲染检查 6 行 4 列数据，固定表头、中文内容和空列位置正确。
+  - 对照后端任务条目创建与导入状态逻辑，确认有成功且有失败时状态为 `PARTIAL_SUCCESS`；重复外部编号与无参考源分别映射到预期错误码。
+  - `backend\\mvnw.cmd "-Dtest=ImportFileParserTests,TaskItemCreationServiceTests,ImportJobServiceTests" test`：15/15 通过，0 failures、0 errors、0 skipped，`BUILD SUCCESS`。
+
 ## 2026-07-15 生成任务批量导入 CSV 测试数据
 
 - 时间：2026-07-15
