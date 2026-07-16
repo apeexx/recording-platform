@@ -128,7 +128,7 @@ public class MongoTaskItemStore implements TaskItemStore {
 			.append("content", "领取审核任务")
 			.append("occurredAt", mutation.occurredAt())
 			.append("resultStatus", TaskItemStatus.REVIEW_PENDING)
-			.append("resultRevision", new Document("$add", List.of("$revision", 1)))
+			.append("resultRevision", "$revision")
 			.append("resultAssignmentId", "$assignmentId")
 			.append("resultSnapshot", "$currentResult");
 		AggregationExpression appendOperation = (context) -> new Document("$concatArrays", List.of(

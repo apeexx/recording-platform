@@ -12,6 +12,7 @@ import com.recording.platform.task.model.TaskItemStatus;
 import com.recording.platform.task.store.ClaimMutation;
 import com.recording.platform.task.store.ReleaseMutation;
 import com.recording.platform.task.store.RejectMutation;
+import com.recording.platform.task.store.ReviewClaimMutation;
 import com.recording.platform.task.store.SubmitMutation;
 import java.time.Instant;
 import java.util.List;
@@ -59,6 +60,44 @@ class MongoTaskItemStoreTests {
 		assertThat(setStage(stages, "revision").get("revision").toString()).contains("$add", "$revision", "1");
 		assertThat(setStage(stages, "operations").get("operations").toString())
 			.contains("$concatArrays", "resultRevision=$revision", "assignment-1");
+	}
+
+	@Test
+	void reviewClaimOperationUsesTheAlreadyIncrementedRevision() {
+		SpringDataTaskItemRepository repository = org.mockito.Mockito.mock(SpringDataTaskItemRepository.class);
+		MongoTemplate mongoTemplate = org.mockito.Mockito.mock(MongoTemplate.class);
+		MongoTaskItemStore store = new MongoTaskItemStore(repository, mongoTemplate);
+		when(mongoTemplate.findAndModify(
+			any(Query.class),
+			any(UpdateDefinition.class),
+			any(FindAndModifyOptions.class),
+			eq(TaskItem.class)
+		)).thenReturn(new TaskItem());
+
+		store.claimReview(new ReviewClaimMutation(
+			"reviewer-1",
+			"审核员",
+			"review-assignment-1",
+			"review-claim-1",
+			Instant.parse("2026-07-16T12:00:00Z")
+		));
+
+		ArgumentCaptor<UpdateDefinition> updateCaptor = ArgumentCaptor.forClass(UpdateDefinition.class);
+		org.mockito.Mockito.verify(mongoTemplate).findAndModify(
+			any(Query.class),
+			updateCaptor.capture(),
+			any(FindAndModifyOptions.class),
+			eq(TaskItem.class)
+		);
+		AggregationUpdate update = (AggregationUpdate) updateCaptor.getValue();
+		List<Document> stages = update.getPipeline().getOperations().stream()
+			.map((operation) -> operation.toDocument(Aggregation.DEFAULT_CONTEXT))
+			.toList();
+
+		assertThat(setStage(stages, "revision").get("revision").toString()).contains("$add", "$revision", "1");
+		assertThat(setStage(stages, "operations").get("operations").toString())
+			.contains("resultRevision=$revision")
+			.doesNotContain("resultRevision=Document{{$add=[$revision, 1]}}");
 	}
 
 	@Test

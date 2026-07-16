@@ -184,6 +184,7 @@ $env:RECORDING_PATH_MIGRATION_ENABLED='true'
 - ADMIN 可单条或批量调整状态、释放、软废弃和恢复；普通状态调整不能进入待领取，返回池只能使用释放。
 - 未启用的审核或 AI 阶段不可进入；废弃保留归属、当前结果、文件和历史，恢复回废弃前状态。
 - 所有写接口使用 operationId、持久化幂等快照及 revision/CAS；批量操作逐条返回成功或冲突结果。
+- 审核领取在同一次原子更新中递增 revision；接口返回的条目 revision 与追加操作记录的 resultRevision 使用同一更新后修订号。
 
 ## 操作记录与统计
 
