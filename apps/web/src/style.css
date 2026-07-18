@@ -69,3 +69,12 @@ button {
 .muted-text {
   color: var(--muted-foreground);
 }
+
+.app-toast-host { position: fixed; top: 24px; right: 24px; z-index: 3000; display: grid; gap: 10px; width: min(360px, calc(100vw - 32px)); }
+.app-toast { display: flex; align-items: center; gap: 10px; padding: 13px 15px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); color: var(--foreground); box-shadow: 0 14px 42px rgba(15,23,42,.16); text-align: left; cursor: pointer; }
+.app-toast > span { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--primary); color: var(--primary-foreground); font-weight: 800; }
+.app-toast.is-error > span { background: var(--destructive); }
+.confirm-modal-backdrop { position: fixed; inset: 0; z-index: 2900; display: grid; place-items: center; padding: 24px; background: rgba(15,23,42,.48); backdrop-filter: blur(4px); }
+.confirm-modal { width: min(440px, 100%); padding: 26px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); box-shadow: 0 24px 70px rgba(15,23,42,.22); }
+.confirm-modal h2 { margin: 0 0 10px; }.confirm-modal p { color: var(--muted-foreground); line-height: 1.7; }.confirm-modal > div { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; }
+.operation-back { margin: 24px 32px 0; }

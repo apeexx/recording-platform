@@ -5,6 +5,7 @@ import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import java.util.List;
+import java.util.Collection;
 
 public interface TaskItemStore {
 	TaskItem save(TaskItem item);
@@ -18,6 +19,10 @@ public interface TaskItemStore {
 	Optional<TaskItem> findCurrentByCollector(String collectorId);
 	Optional<TaskItem> claimAvailable(ClaimMutation mutation);
 	default Optional<TaskItem> claimReview(ReviewClaimMutation mutation) { return Optional.empty(); }
+	default long countReviewPendingByTaskId(String taskId) { return 0; }
+	default Page<TaskItem> findReviewPoolByTaskId(String taskId, boolean includeAssigned, String reviewerId, Pageable pageable) {
+		return Page.empty(pageable);
+	}
 	default Optional<TaskItem> releaseReviewIfCurrent(ReviewReleaseMutation mutation) { return Optional.empty(); }
 	default Optional<TaskItem> decideReviewIfCurrent(ReviewDecisionMutation mutation) { return Optional.empty(); }
 	default Page<TaskItem> findReviewPool(Pageable pageable) { return Page.empty(pageable); }
@@ -32,5 +37,9 @@ public interface TaskItemStore {
 	Optional<TaskItem> rejectIfCurrent(RejectMutation mutation);
 	Optional<TaskItem> releaseIfCurrent(ReleaseMutation mutation);
 	Page<TaskItem> findAllByTaskId(String taskId, Pageable pageable);
+	default Page<TaskItem> findAllByCollectorIdAndStatusIn(
+		String collectorId, String taskId,
+		Collection<com.recording.platform.task.model.TaskItemStatus> statuses, Pageable pageable
+	) { return Page.empty(pageable); }
 	default List<TaskItem> findForReport(String collectorId, String taskId) { return List.of(); }
 }

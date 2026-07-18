@@ -12,6 +12,5 @@ import com.recording.platform.task.model.TaskLifecycle;
 interface SpringDataTaskRepository extends MongoRepository<TaskRecord, String> {
 	Optional<TaskRecord> findByTaskCode(String taskCode);
 	List<TaskRecord> findAllByIdIn(Collection<String> ids);
-	boolean existsByPlatformId(String platformId);
 	Page<TaskRecord> findAllByLifecycleIn(Collection<TaskLifecycle> lifecycles, Pageable pageable);
 }

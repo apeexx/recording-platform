@@ -2,6 +2,7 @@
   "pages": [
     "pages/login/index",
     "pages/tasks/index",
+	"pages/work-list/index",
     "pages/work/index",
     "pages/profile/index"
   ],

@@ -37,8 +37,6 @@ public class MongoTaskStore implements TaskStore {
 		);
 	}
 	@Override public List<TaskRecord> findAllByIdIn(Collection<String> ids) { return repository.findAllByIdIn(ids); }
-	@Override public boolean existsByPlatformId(String platformId) { return repository.existsByPlatformId(platformId); }
-
 	@Override
 	public long nextItemSequence(String taskId) {
 		TaskRecord task = mongoTemplate.findAndModify(

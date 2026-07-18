@@ -1,10 +1,10 @@
 package com.recording.platform.task;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 
 import com.recording.platform.media.MediaAsset;
 import com.recording.platform.task.model.ImportJob;
-import com.recording.platform.task.model.PlatformRecord;
 import com.recording.platform.task.model.TaskAccessRequest;
 import com.recording.platform.task.model.TaskGrant;
 import com.recording.platform.task.model.TaskItem;
@@ -21,8 +21,6 @@ import org.springframework.data.mongodb.core.mapping.Document;
 class TaskDomainMappingTests {
 	@Test
 	void collectionsExposeTheRequiredUniqueBusinessKeys() throws Exception {
-		assertCollection(PlatformRecord.class, "platforms");
-		assertUniqueField(PlatformRecord.class, "code", false);
 		assertCollection(TaskRecord.class, "tasks");
 		assertUniqueField(TaskRecord.class, "taskCode", false);
 		assertCollection(TaskVersion.class, "task_versions");
@@ -37,6 +35,16 @@ class TaskDomainMappingTests {
 		assertThat(relativePath.unique())
 			.as("同一任务条目重新提交会复用 current 文件路径，媒体元数据不能把该路径设为唯一")
 			.isFalse();
+	}
+
+	@Test
+	void tasksUseGeneratedCodesWithoutPlatformAndExposeResultType() {
+		assertThat(Arrays.stream(TaskRecord.class.getDeclaredFields()).map(Field::getName))
+			.doesNotContain("platformId");
+		assertThat(Arrays.stream(TaskVersion.class.getDeclaredFields()).map(Field::getName))
+			.contains("resultType");
+		assertThatCode(() -> Class.forName("com.recording.platform.task.model.SequenceRecord"))
+			.doesNotThrowAnyException();
 	}
 
 	@Test

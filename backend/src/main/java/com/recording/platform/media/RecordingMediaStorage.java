@@ -34,6 +34,10 @@ public class RecordingMediaStorage {
 		this.root = root.toAbsolutePath().normalize();
 	}
 
+	public Path rootPath() {
+		return root;
+	}
+
 	public PreparedRecording prepare(
 		MultipartFile upload,
 		TaskVersion version,

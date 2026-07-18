@@ -23,7 +23,6 @@ import com.recording.platform.importing.TaskItemSubmissionService;
 import com.recording.platform.security.PlatformPrincipal;
 import com.recording.platform.task.model.ImportJob;
 import com.recording.platform.task.model.ImportJobStatus;
-import com.recording.platform.task.model.PlatformRecord;
 import com.recording.platform.task.model.TaskItem;
 import com.recording.platform.task.model.TaskItemStatus;
 import com.recording.platform.task.model.AccessRequestStatus;
@@ -33,7 +32,6 @@ import com.recording.platform.task.model.TaskRecord;
 import com.recording.platform.task.service.TaskAccessService;
 import com.recording.platform.task.service.TaskManagementService;
 import com.recording.platform.task.service.TaskQueryService;
-import com.recording.platform.task.service.PlatformService;
 import com.recording.platform.task.service.TaskItemActionResult;
 import com.recording.platform.task.service.TaskPoolService;
 import com.recording.platform.review.service.ReviewService;
@@ -72,8 +70,6 @@ class TaskApiSecurityIntegrationTests {
 	private MockMvc mockMvc;
 
 	@MockitoBean
-	private PlatformService platformService;
-	@MockitoBean
 	private TaskPoolService taskPoolService;
 	@MockitoBean
 	private TaskItemSubmissionService submissionService;
@@ -102,32 +98,6 @@ class TaskApiSecurityIntegrationTests {
 	void executeControllerIdempotencyMutations() {
 		lenient().when(idempotencyService.execute(any(), anyString(), anyString(), any(Class.class), any()))
 			.thenAnswer((invocation) -> ((Supplier<?>) invocation.getArgument(4)).get());
-	}
-
-	@Test
-	void platformWritesAreAdminOnlyAndUseTheCreatedContract() throws Exception {
-		PlatformRecord platform = new PlatformRecord();
-		platform.setId("platform-1");
-		platform.setCode("WECHAT");
-		platform.setName("微信采集");
-		platform.setActive(true);
-		when(platformService.create(any())).thenReturn(platform);
-
-		mockMvc.perform(post("/api/platforms")
-				.with(user("admin").roles("ADMIN"))
-				.with(csrf())
-				.header("Idempotency-Key", "platform-create-1")
-				.contentType("application/json")
-				.content("{\"code\":\"WECHAT\",\"name\":\"微信采集\"}"))
-			.andExpect(status().isCreated())
-			.andExpect(jsonPath("$.id").value("platform-1"));
-		mockMvc.perform(post("/api/platforms")
-				.with(user("collector").roles("COLLECTOR"))
-				.with(csrf())
-				.header("Idempotency-Key", "platform-create-2")
-				.contentType("application/json")
-				.content("{\"code\":\"WECHAT\",\"name\":\"微信采集\"}"))
-			.andExpect(status().isForbidden());
 	}
 
 	@Test
@@ -221,8 +191,8 @@ class TaskApiSecurityIntegrationTests {
 		when(taskManagementService.create(any())).thenReturn(task);
 		String body = """
 			{
-			  "taskCode":"TASK-001","platformId":"platform-1","name":"朗读任务",
-			  "version":{"referenceTypes":["TEXT"],"recordingFormat":"WAV","sampleRates":[16000]}
+			  "name":"朗读任务",
+			  "version":{"referenceTypes":["TEXT"],"resultType":"AUDIO","recordingFormat":"WAV","sampleRates":[16000],"channels":1,"minDurationMillis":1000,"maxDurationMillis":60000}
 			}
 			""";
 		mockMvc.perform(post("/api/tasks")
@@ -284,15 +254,15 @@ class TaskApiSecurityIntegrationTests {
 		TaskItem claimed = new TaskItem();
 		claimed.setId("item-review");
 		claimed.setStatus(TaskItemStatus.REVIEW_PENDING);
-		when(reviewService.claim(anyString(), any())).thenReturn(claimed);
+		when(reviewService.claim(anyString(), anyString(), any())).thenReturn(claimed);
 
-		mockMvc.perform(post("/api/reviews/claim")
+		mockMvc.perform(post("/api/reviews/tasks/task-1/claim")
 				.with(user("reviewer").roles("REVIEWER"))
 				.with(csrf())
 				.header("Idempotency-Key", "claim-review-1"))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.id").value("item-review"));
-		mockMvc.perform(post("/api/reviews/claim")
+		mockMvc.perform(post("/api/reviews/tasks/task-1/claim")
 				.with(user("collector").roles("COLLECTOR"))
 				.with(csrf())
 				.header("Idempotency-Key", "claim-review-2"))

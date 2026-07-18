@@ -37,6 +37,11 @@ public class MongoUserStore implements UserStore {
 	}
 
 	@Override
+	public List<UserAccount> findAllByIdIn(java.util.Collection<String> ids) {
+		return repository.findAllById(ids);
+	}
+
+	@Override
 	public Optional<UserAccount> findByUsername(String username) {
 		return repository.findByUsername(username);
 	}

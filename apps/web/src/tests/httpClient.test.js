@@ -54,14 +54,14 @@ describe('httpClient', () => {
       .mockResolvedValueOnce(response(200, { headerName: 'X-XSRF-TOKEN', token: 'csrf-new' }))
       .mockResolvedValueOnce(response(200, { success: true }))
 
-    await httpRequest('/api/platforms', { method: 'POST', json: { code: 'OLD' } })
+    await httpRequest('/api/tasks', { method: 'POST', json: { name: '旧请求' } })
     markWebSessionEstablished()
-    await httpRequest('/api/platforms', { method: 'POST', json: { code: 'NEW' } })
+    await httpRequest('/api/tasks', { method: 'POST', json: { name: '新请求' } })
 
     expect(fetch).toHaveBeenNthCalledWith(3, '/api/auth/web/csrf', expect.objectContaining({
       credentials: 'include'
     }))
-    expect(fetch).toHaveBeenNthCalledWith(4, '/api/platforms', expect.objectContaining({
+    expect(fetch).toHaveBeenNthCalledWith(4, '/api/tasks', expect.objectContaining({
       headers: expect.objectContaining({ 'X-XSRF-TOKEN': 'csrf-new' })
     }))
   })

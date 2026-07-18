@@ -100,14 +100,22 @@ public class TaskAccessService {
 		return grants.activate(taskId, userId, actor.userId(), Instant.now(clock));
 	}
 
-	public PageResponse<TaskGrant> listGrants(String taskId, int page, int size, PlatformPrincipal actor) {
+	public PageResponse<TaskGrantView> listGrants(String taskId, int page, int size, PlatformPrincipal actor) {
 		requireRole(actor, UserRole.ADMIN);
-		return PageResponse.from(grants.findAllByTaskId(taskId, page(page, size)));
+		var result = grants.findAllByTaskId(taskId, page(page, size));
+		var userMap = users.findAllByIdIn(result.getContent().stream().map(TaskGrant::getUserId).toList())
+			.stream().collect(java.util.stream.Collectors.toMap(UserAccount::getId, java.util.function.Function.identity()));
+		return new PageResponse<>(result.getContent().stream().map(grant -> TaskGrantView.from(grant, userMap.get(grant.getUserId()))).toList(),
+			result.getNumber(), result.getSize(), result.getTotalElements());
 	}
 
-	public PageResponse<TaskAccessRequest> listRequests(String taskId, int page, int size, PlatformPrincipal actor) {
+	public PageResponse<TaskAccessRequestView> listRequests(String taskId, int page, int size, PlatformPrincipal actor) {
 		requireRole(actor, UserRole.ADMIN);
-		return PageResponse.from(requests.findAllByTaskId(taskId, page(page, size)));
+		var result = requests.findAllByTaskIdAndStatus(taskId, AccessRequestStatus.PENDING, page(page, size));
+		var userMap = users.findAllByIdIn(result.getContent().stream().map(TaskAccessRequest::getUserId).toList())
+			.stream().collect(java.util.stream.Collectors.toMap(UserAccount::getId, java.util.function.Function.identity()));
+		return new PageResponse<>(result.getContent().stream().map(request -> TaskAccessRequestView.from(request, userMap.get(request.getUserId()))).toList(),
+			result.getNumber(), result.getSize(), result.getTotalElements());
 	}
 
 	public TaskAccessRequest reject(String requestId, String reason, PlatformPrincipal actor) {

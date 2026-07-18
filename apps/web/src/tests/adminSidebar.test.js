@@ -17,11 +17,10 @@ describe('adminSidebar', () => {
 
     assert.deepEqual(paths, [
       '/admin/dashboard',
-      '/admin/platforms',
       '/admin/tasks',
       '/admin/pool',
       '/admin/permissions',
-      '/admin/review/queue',
+	  '/admin/review',
       '/admin/reports/tasks',
       '/admin/reports/collectors',
       '/admin/reports/reviewers',
@@ -45,7 +44,7 @@ describe('adminSidebar', () => {
   it('finds the parent group key for child route paths', () => {
     assert.equal(typeof adminSidebarConfig.findAdminSidebarGroupKeyByPath, 'function')
     assert.equal(adminSidebarConfig.findAdminSidebarGroupKeyByPath('/admin/tasks'), 'tasks')
-    assert.equal(adminSidebarConfig.findAdminSidebarGroupKeyByPath('/admin/review/queue'), 'review')
+	assert.equal(adminSidebarConfig.findAdminSidebarGroupKeyByPath('/admin/review'), 'review')
     assert.equal(adminSidebarConfig.findAdminSidebarGroupKeyByPath('/admin/dashboard'), null)
   })
 })

@@ -37,8 +37,8 @@ public class ImportSourceStorage {
 
 	public StoredImportSource save(String jobId, MultipartFile file) {
 		String extension = extension(file.getOriginalFilename());
-		if (!extension.equals("csv") && !extension.equals("xlsx")) {
-			throw new ApiException(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "IMPORT_FILE_TYPE_UNSUPPORTED", "导入文件只支持 .csv 或 .xlsx");
+		if (!extension.equals("csv")) {
+			throw new ApiException(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "IMPORT_FILE_TYPE_UNSUPPORTED", "导入文件只支持 .csv");
 		}
 		Path target = resolve("temp/imports/" + safe(jobId) + "/source." + extension);
 		try {

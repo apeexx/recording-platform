@@ -21,6 +21,7 @@ import com.recording.platform.task.store.ReviewDecisionMutation;
 import com.recording.platform.task.store.TaskItemStore;
 import com.recording.platform.task.store.TaskVersionStore;
 import com.recording.platform.task.model.TaskVersion;
+import com.recording.platform.task.model.TaskResultType;
 import com.recording.platform.identity.model.UserAccount;
 import com.recording.platform.identity.model.UserStatus;
 import com.recording.platform.identity.store.UserStore;
@@ -52,7 +53,7 @@ class ReviewServiceTests {
 		when(items.claimReview(any())).thenReturn(Optional.of(claimed));
 		ReviewService service = new ReviewService(items, versions, CLOCK);
 
-		TaskItem result = service.claim("operation-1", reviewer());
+		TaskItem result = service.claim("task-1", "operation-1", reviewer());
 
 		assertThat(result.getReviewerId()).isEqualTo("reviewer-1");
 		assertThat(result.getReviewAssignmentId()).isNotBlank();
@@ -66,7 +67,7 @@ class ReviewServiceTests {
 		when(items.claimReview(any())).thenReturn(Optional.empty());
 		ReviewService service = new ReviewService(items, mock(TaskVersionStore.class), CLOCK);
 
-		assertThatThrownBy(() -> service.claim("operation-2", reviewer()))
+		assertThatThrownBy(() -> service.claim("task-1", "operation-2", reviewer()))
 			.isInstanceOfSatisfying(ApiException.class,
 				(error) -> assertThat(error.getCode()).isEqualTo("NO_REVIEW_ITEM"));
 	}
@@ -101,7 +102,7 @@ class ReviewServiceTests {
 		approved.setStatus(TaskItemStatus.COMPLETED);
 		approved.setReviewerId(null);
 		approved.setReviewAssignmentId(null);
-		approved.setCurrentResult(new TaskItemResult(null, "审核修订文本"));
+		approved.setCurrentResult(new TaskItemResult(recording(), "审核修订文本"));
 		when(items.decideReviewIfCurrent(any())).thenReturn(Optional.of(approved));
 		ReviewService service = new ReviewService(items, versions, CLOCK);
 
@@ -111,7 +112,31 @@ class ReviewServiceTests {
 
 		assertThat(result.getStatus()).isEqualTo(TaskItemStatus.COMPLETED);
 		assertThat(result.getCurrentResult().text()).isEqualTo("审核修订文本");
+		assertThat(result.getCurrentResult().audio()).isNotNull();
 		verify(items).decideReviewIfCurrent(any(ReviewDecisionMutation.class));
+	}
+
+	@Test
+	void audioResultCannotBeApprovedWithText() {
+		TaskItemStore items = mock(TaskItemStore.class);
+		TaskVersionStore versions = mock(TaskVersionStore.class);
+		TaskItem existing = assigned("item-audio", 3);
+		existing.setCurrentResult(new TaskItemResult(
+			new com.recording.platform.task.model.SubmittedRecording(
+				"media-1", "T000001/T000001-0000001.wav",
+				com.recording.platform.task.model.RecordingFormat.WAV, 3200L, 16000, 1, 1200L
+			), null
+		));
+		when(items.findById("item-audio")).thenReturn(Optional.of(existing));
+		TaskVersion version = reviewVersion();
+		version.setResultType(TaskResultType.AUDIO);
+		when(versions.findById("version-1")).thenReturn(Optional.of(version));
+		ReviewService service = new ReviewService(items, versions, CLOCK);
+
+		assertThatThrownBy(() -> service.approve(
+			"item-audio", "approve-audio", 3, "不应出现的文字", reviewer()
+		)).isInstanceOfSatisfying(ApiException.class,
+			(error) -> assertThat(error.getCode()).isEqualTo("TEXT_NOT_ALLOWED"));
 	}
 
 	@Test
@@ -122,7 +147,7 @@ class ReviewServiceTests {
 		when(items.findById("item-1")).thenReturn(Optional.of(existing));
 		when(versions.findById("version-1")).thenReturn(Optional.of(reviewVersion()));
 		TaskItem rejected = assigned("item-1", 8);
-		rejected.setStatus(TaskItemStatus.RECORDING_PENDING);
+		rejected.setStatus(TaskItemStatus.REWORK_PENDING);
 		rejected.setReviewerId(null);
 		rejected.setReviewAssignmentId(null);
 		when(items.decideReviewIfCurrent(any())).thenReturn(Optional.of(rejected));
@@ -132,7 +157,7 @@ class ReviewServiceTests {
 			"item-1", "operation-reject", 7, List.of("空音频", "内容不符"), "请重新录制", reviewer()
 		);
 
-		assertThat(result.getStatus()).isEqualTo(TaskItemStatus.RECORDING_PENDING);
+		assertThat(result.getStatus()).isEqualTo(TaskItemStatus.REWORK_PENDING);
 		assertThat(result.getCollectorId()).isEqualTo("collector-1");
 		assertThat(result.getAssignmentId()).isEqualTo("collector-assignment-1");
 	}
@@ -166,7 +191,7 @@ class ReviewServiceTests {
 		ReviewService service = new ReviewService(items, mock(TaskVersionStore.class), CLOCK);
 
 		assertThat(service.pool(page, reviewer()).getContent()).containsExactly(available);
-		assertThat(service.claimBatch(2, "batch-operation", reviewer())).containsExactly(first, second);
+		assertThat(service.claimBatch("task-1", 2, "batch-operation", reviewer())).containsExactly(first, second);
 	}
 
 	@Test
@@ -182,13 +207,39 @@ class ReviewServiceTests {
 	}
 
 	@Test
+	void reviewerTaskPoolIncludesOwnAssignmentsAndCollectorIdentity() {
+		TaskItemStore items = mock(TaskItemStore.class);
+		UserStore users = mock(UserStore.class);
+		PageRequest page = PageRequest.of(0, 20);
+		TaskItem own = assigned("item-own", 2);
+		own.setTaskId("task-1");
+		own.setItemCode("T000001-0000001");
+		when(items.findReviewPoolByTaskId("task-1", false, "reviewer-1", page))
+			.thenReturn(new PageImpl<>(List.of(own), page, 1));
+		UserAccount collector = new UserAccount();
+		collector.setId("collector-1");
+		collector.setInternalUserNo("U000001");
+		collector.setName("采集员一");
+		when(users.findAllByIdIn(List.of("collector-1"))).thenReturn(List.of(collector));
+		ReviewService service = new ReviewService(items, mock(TaskVersionStore.class), users, CLOCK);
+
+		var result = service.pool("task-1", page, reviewer());
+
+		assertThat(result.getContent()).singleElement().satisfies(view -> {
+			assertThat(view.collectorUserNo()).isEqualTo("U000001");
+			assertThat(view.collectorName()).isEqualTo("采集员一");
+		});
+		verify(items).findReviewPoolByTaskId("task-1", false, "reviewer-1", page);
+	}
+
+	@Test
 	void batchClaimReturnsAlreadyClaimedItemsWhenPoolRunsOut() {
 		TaskItemStore items = mock(TaskItemStore.class);
 		TaskItem first = assigned("item-1", 2);
 		when(items.claimReview(any())).thenReturn(Optional.of(first)).thenReturn(Optional.empty());
 		ReviewService service = new ReviewService(items, mock(TaskVersionStore.class), CLOCK);
 
-		assertThat(service.claimBatch(3, "batch-operation", reviewer())).containsExactly(first);
+		assertThat(service.claimBatch("task-1", 3, "batch-operation", reviewer())).containsExactly(first);
 	}
 
 	@Test
@@ -239,6 +290,8 @@ class ReviewServiceTests {
 		first.setTaskVersionId("version-1");
 		TaskItem second = pending("item-2", 5);
 		second.setTaskVersionId("version-1");
+		TaskVersionStore versions = mock(TaskVersionStore.class);
+		when(versions.findById("version-1")).thenReturn(Optional.of(reviewVersion()));
 		when(items.findById("item-1")).thenReturn(Optional.of(first));
 		when(items.findById("item-2")).thenReturn(Optional.of(second));
 		TaskItem completed = pending("item-1", 4);
@@ -246,7 +299,7 @@ class ReviewServiceTests {
 		when(items.adminApproveReviewIfCurrent(any()))
 			.thenReturn(Optional.of(completed))
 			.thenReturn(Optional.empty());
-		ReviewService service = new ReviewService(items, mock(TaskVersionStore.class), mock(UserStore.class), CLOCK);
+		ReviewService service = new ReviewService(items, versions, mock(UserStore.class), CLOCK);
 
 		List<BatchReviewResult> results = service.batchApprove(
 			"batch-approve",
@@ -325,7 +378,7 @@ class ReviewServiceTests {
 		item.setRevision(revision);
 		item.setCollectorId("collector-1");
 		item.setAssignmentId("collector-assignment-1");
-		item.setCurrentResult(new TaskItemResult(null, "普通话文本"));
+		item.setCurrentResult(new TaskItemResult(recording(), "普通话文本"));
 		return item;
 	}
 
@@ -341,9 +394,16 @@ class ReviewServiceTests {
 		TaskVersion version = new TaskVersion();
 		version.setId("version-1");
 		version.setHumanReviewEnabled(true);
-		version.setTextInputEnabled(true);
+		version.setResultType(com.recording.platform.task.model.TaskResultType.TEXT);
 		version.setRejectionReasons(List.of("空音频", "内容不符"));
 		return version;
+	}
+
+	private com.recording.platform.task.model.SubmittedRecording recording() {
+		return new com.recording.platform.task.model.SubmittedRecording(
+			"media-1", "T000001/T000001-0000001.wav",
+			com.recording.platform.task.model.RecordingFormat.WAV, 3200L, 16000, 1, 1200L
+		);
 	}
 
 	private PlatformPrincipal reviewer() {

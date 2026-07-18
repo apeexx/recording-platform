@@ -1,0 +1,5 @@
+const test = require('node:test')
+const assert = require('node:assert/strict')
+const { pcmRms, durationMillis } = require('../services/pcm.js')
+test('PCM 静音 RMS 为零并按样本计算时长',()=>{assert.equal(pcmRms(new Int16Array(160).buffer),0);assert.equal(durationMillis(16000,16000),1000)})
+test('PCM 音量被归一化到 0 到 1',()=>{const samples=Int16Array.from([32767,-32768,16384,-16384]);const rms=pcmRms(samples.buffer);assert.ok(rms>0.7&&rms<=1)})

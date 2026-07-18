@@ -6,7 +6,7 @@
     <view class="row"><view class="title task-title">{{item.name}}</view><view class="tag">{{item.permissionText}}</view></view>
     <view class="subtle">{{item.taskCode}} · {{item.lifecycleText}}</view>
     <view wx:if="{{item.description}}">{{item.description}}</view>
-    <button wx:if="{{item.permissionStatus==='ACTIVE'}}" class="button" data-id="{{item.id}}" loading="{{actingId===item.id}}" disabled="{{item.lifecycle!=='RUNNING'}}" bindtap="start">开始任务</button>
+	<view wx:if="{{item.permissionStatus==='ACTIVE'}}" class="grid"><button class="button secondary" data-id="{{item.id}}" bindtap="openWorkList">查看待办</button><button class="button" data-id="{{item.id}}" loading="{{actingId===item.id}}" disabled="{{item.lifecycle!=='RUNNING'}}" bindtap="start">领取新数据</button></view>
     <button wx:elif="{{item.permissionStatus==='PENDING'}}" class="button secondary" disabled>申请审批中</button>
     <button wx:else class="button secondary" data-id="{{item.id}}" loading="{{actingId===item.id}}" bindtap="requestAccess">申请采集权限</button>
   </view>

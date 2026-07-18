@@ -1,2 +1,2 @@
-<script setup>import{onMounted,ref}from'vue';import{useRoute}from'vue-router';import OperationLogsPage from'./OperationLogsPage.vue';const route=useRoute()</script>
-<template><OperationLogsPage :item-id="route.params.itemId"/></template>
+<script setup>import{useRoute,useRouter}from'vue-router';import OperationLogsPage from'./OperationLogsPage.vue';const route=useRoute(),router=useRouter();function back(){if(window.history.length>1)router.back();else router.push('/admin/tasks')}</script>
+<template><div><button class="button-secondary operation-back" @click="back">← 返回上一级</button><OperationLogsPage :item-id="route.params.itemId"/></div></template>

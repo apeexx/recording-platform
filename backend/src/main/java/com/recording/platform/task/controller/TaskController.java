@@ -6,6 +6,7 @@ import com.recording.platform.security.PlatformPrincipal;
 import com.recording.platform.task.model.RecordingFormat;
 import com.recording.platform.task.model.ReferenceType;
 import com.recording.platform.task.model.TaskRecord;
+import com.recording.platform.task.model.TaskResultType;
 import com.recording.platform.task.service.CreateTaskCommand;
 import com.recording.platform.task.service.TaskManagementService;
 import com.recording.platform.task.service.TaskQueryService;
@@ -53,7 +54,7 @@ public class TaskController {
 	) {
 		return idempotency.execute(authentication, "task:create", operationId, TaskRecord.class, () ->
 			management.create(new CreateTaskCommand(
-				request.taskCode(), request.platformId(), request.name(), request.description(), request.version().spec()
+				request.name(), request.description(), request.version().spec()
 			))
 		);
 	}
@@ -125,8 +126,6 @@ public class TaskController {
 	}
 
 	public record CreateTaskRequest(
-		@NotNull String taskCode,
-		@NotNull String platformId,
 		@NotNull String name,
 		String description,
 		@NotNull @Valid TaskVersionRequest version
@@ -134,11 +133,10 @@ public class TaskController {
 	public record UpdateTaskRequest(@NotNull String name, String description, @NotNull @Valid TaskVersionRequest version) { }
 	public record TaskVersionRequest(
 		@NotNull Set<ReferenceType> referenceTypes,
-		Boolean fixedRecording,
-		Boolean textInputEnabled,
+		@NotNull TaskResultType resultType,
 		Boolean humanReviewEnabled,
-		@NotNull RecordingFormat recordingFormat,
-		@NotNull Set<Integer> sampleRates,
+		RecordingFormat recordingFormat,
+		Set<Integer> sampleRates,
 		Integer channels,
 		Long minDurationMillis,
 		Long maxDurationMillis,
@@ -150,14 +148,13 @@ public class TaskController {
 		TaskVersionSpec spec() {
 			return new TaskVersionSpec(
 				referenceTypes,
-				Boolean.TRUE.equals(fixedRecording),
-				Boolean.TRUE.equals(textInputEnabled),
+				resultType,
 				humanReviewEnabled == null || humanReviewEnabled,
 				recordingFormat,
 				sampleRates,
-				channels == null ? 1 : channels,
-				minDurationMillis == null ? 1000 : minDurationMillis,
-				maxDurationMillis == null ? 600000 : maxDurationMillis,
+				channels,
+				minDurationMillis,
+				maxDurationMillis,
 				rejectionReasons == null ? List.of() : rejectionReasons,
 				Boolean.TRUE.equals(aiEnabled),
 				aiProvider,

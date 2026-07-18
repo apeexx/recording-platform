@@ -59,6 +59,7 @@ public class TaskItem {
 	private String referenceAudioMediaId;
 	private String referenceVideoMediaId;
 	private TaskItemResult currentResult;
+	private CurrentRejection currentRejection;
 	private List<SubmissionHistory> submissions = new ArrayList<>();
 	private List<OperationHistory> operations = new ArrayList<>();
 	private TaskItemStatus discardedPreviousStatus;

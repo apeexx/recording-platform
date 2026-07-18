@@ -2,15 +2,14 @@ export const adminSidebar = [
   { key: 'dashboard', title: '工作台', path: '/admin/dashboard', icon: 'dashboard', roles: ['ADMIN'] },
   {
     key: 'tasks', title: '任务管理', icon: 'task', roles: ['ADMIN'], children: [
-      { key: 'platforms', title: '平台管理', path: '/admin/platforms' },
-      { key: 'tasks', title: '任务与数据池', path: '/admin/tasks' },
+	  { key: 'tasks', title: '任务管理', path: '/admin/tasks' },
       { key: 'task-pool', title: '任务数据池', path: '/admin/pool' },
       { key: 'permissions', title: '采集权限', path: '/admin/permissions' }
     ]
   },
   {
     key: 'review', title: '录音审核', icon: 'review', roles: ['ADMIN', 'REVIEWER'], children: [
-      { key: 'review-queue', title: '审核池', path: '/admin/review/queue' }
+	  { key: 'review-queue', title: '审核任务', path: '/admin/review' }
     ]
   },
   {

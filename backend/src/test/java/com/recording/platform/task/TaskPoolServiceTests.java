@@ -21,6 +21,7 @@ import com.recording.platform.task.model.TaskItemResult;
 import com.recording.platform.task.model.TaskItemStatus;
 import com.recording.platform.task.model.TaskLifecycle;
 import com.recording.platform.task.model.TaskRecord;
+import com.recording.platform.task.model.TaskResultType;
 import com.recording.platform.task.model.TaskVersion;
 import com.recording.platform.task.service.SubmitTaskItemCommand;
 import com.recording.platform.task.service.TaskItemActionResult;
@@ -145,7 +146,9 @@ class TaskPoolServiceTests {
 		pending.setRevision(1);
 		items.save(pending);
 		when(versions.findById("version-1")).thenReturn(Optional.of(version(true, true)));
-		SubmitTaskItemCommand command = new SubmitTaskItemCommand("submit-private", "assignment-1", 1, "第一版", null);
+		SubmitTaskItemCommand command = new SubmitTaskItemCommand(
+			"submit-private", "assignment-1", 1, "第一版", recording()
+		);
 		service.submit("item-1", command, collector);
 
 		PlatformPrincipal otherCollector = principal(
@@ -159,6 +162,26 @@ class TaskPoolServiceTests {
 	}
 
 	@Test
+	void textResultRequiresRecordingAndTextTogether() {
+		TaskItem pending = item("task-1", "item-text", TaskItemStatus.RECORDING_PENDING);
+		pending.setCollectorId("collector-1");
+		pending.setAssignmentId("assignment-1");
+		pending.setRevision(1);
+		items.save(pending);
+		when(versions.findById("version-1")).thenReturn(Optional.of(version(true, true)));
+
+		assertThatThrownBy(() -> service.submit(
+			"item-text", new SubmitTaskItemCommand("text-only", "assignment-1", 1, "文本", null), collector
+		)).isInstanceOfSatisfying(ApiException.class,
+			error -> assertThat(error.getCode()).isEqualTo("AUDIO_REQUIRED"));
+
+		TaskItemActionResult result = service.submit(
+			"item-text", new SubmitTaskItemCommand("text-audio", "assignment-1", 1, "文本", recording()), collector
+		);
+		assertThat(result.status()).isEqualTo(TaskItemStatus.REVIEW_PENDING);
+	}
+
+	@Test
 	void rejectKeepsTheCollectorAndReleaseClearsCurrentDataButKeepsHistories() {
 		TaskItem pending = item("task-1", "item-1", TaskItemStatus.RECORDING_PENDING);
 		pending.setCollectorId("collector-1");
@@ -168,18 +191,18 @@ class TaskPoolServiceTests {
 		when(versions.findById("version-1")).thenReturn(Optional.of(version(true, true)));
 		TaskItemActionResult submitted = service.submit(
 			"item-1",
-			new SubmitTaskItemCommand("submit-1", "assignment-1", 1, "第一版", null),
+			new SubmitTaskItemCommand("submit-1", "assignment-1", 1, "第一版", recording()),
 			collector
 		);
 		PlatformPrincipal reviewer = principal("reviewer-1", "李审", UserRole.REVIEWER, SessionType.WEB);
 
 		TaskItemActionResult rejected = service.reject("item-1", "reject-1", submitted.revision(), "噪音过大", reviewer);
-		assertThat(rejected.status()).isEqualTo(TaskItemStatus.RECORDING_PENDING);
+		assertThat(rejected.status()).isEqualTo(TaskItemStatus.REWORK_PENDING);
 		assertThat(items.findById("item-1").orElseThrow().getCollectorId()).isEqualTo("collector-1");
 
 		TaskItemActionResult resubmitted = service.submit(
 			"item-1",
-			new SubmitTaskItemCommand("submit-2", "assignment-1", rejected.revision(), "第二版", null),
+			new SubmitTaskItemCommand("submit-2", "assignment-1", rejected.revision(), "第二版", recording()),
 			collector
 		);
 		TaskItemActionResult released = service.release(
@@ -212,7 +235,7 @@ class TaskPoolServiceTests {
 		TaskVersion version = new TaskVersion();
 		version.setId("version-1");
 		version.setReferenceTypes(Set.of(ReferenceType.TEXT));
-		version.setTextInputEnabled(textInput);
+		version.setResultType(textInput ? TaskResultType.TEXT : TaskResultType.AUDIO);
 		version.setHumanReviewEnabled(humanReview);
 		version.setRecordingFormat(RecordingFormat.WAV);
 		version.setSampleRates(Set.of(16000));
@@ -221,6 +244,13 @@ class TaskPoolServiceTests {
 		version.setMaxDurationMillis(600000);
 		version.setRejectionReasons(List.of("噪音过大"));
 		return version;
+	}
+
+	private SubmittedRecording recording() {
+		return new SubmittedRecording(
+			"media-text", "T000001/T000001-0000001.wav", RecordingFormat.WAV,
+			3200, 16000, 1, 2500
+		);
 	}
 
 	private TaskItem item(String taskId, String id, TaskItemStatus status) {
@@ -261,7 +291,11 @@ class TaskPoolServiceTests {
 		}
 		@Override public synchronized Optional<TaskItem> submitIfCurrent(SubmitMutation mutation) {
 			TaskItem item = data.get(mutation.itemId());
-			if (!matches(item, mutation.collectorId(), mutation.assignmentId(), mutation.expectedRevision(), TaskItemStatus.RECORDING_PENDING)) return Optional.empty();
+			if (item == null || (item.getStatus() != TaskItemStatus.RECORDING_PENDING
+				&& item.getStatus() != TaskItemStatus.REWORK_PENDING)
+				|| !mutation.collectorId().equals(item.getCollectorId())
+				|| !mutation.assignmentId().equals(item.getAssignmentId())
+				|| item.getRevision() != mutation.expectedRevision()) return Optional.empty();
 			item.setCurrentResult(mutation.result());
 			item.setStatus(mutation.targetStatus());
 			item.setRevision(item.getRevision() + 1);
@@ -272,7 +306,7 @@ class TaskPoolServiceTests {
 		@Override public synchronized Optional<TaskItem> rejectIfCurrent(RejectMutation mutation) {
 			TaskItem item = data.get(mutation.itemId());
 			if (item == null || item.getStatus() != TaskItemStatus.REVIEW_PENDING || item.getRevision() != mutation.expectedRevision()) return Optional.empty();
-			item.setStatus(TaskItemStatus.RECORDING_PENDING);
+			item.setStatus(TaskItemStatus.REWORK_PENDING);
 			item.setRevision(item.getRevision() + 1);
 			item.getSubmissions().get(item.getSubmissions().size() - 1).setReviewConclusion(mutation.reason());
 			item.getOperations().add(OperationHistory.rejection(mutation, item));
@@ -282,7 +316,8 @@ class TaskPoolServiceTests {
 			TaskItem item = data.get(mutation.itemId());
 			if (item == null || item.getRevision() != mutation.expectedRevision() || item.getStatus() == TaskItemStatus.AVAILABLE
 				|| item.getStatus() == TaskItemStatus.DISCARDED) return Optional.empty();
-			if (!mutation.admin() && (item.getStatus() != TaskItemStatus.RECORDING_PENDING
+			if (!mutation.admin() && ((item.getStatus() != TaskItemStatus.RECORDING_PENDING
+				&& item.getStatus() != TaskItemStatus.REWORK_PENDING)
 				|| !mutation.actorUserId().equals(item.getCollectorId()))) return Optional.empty();
 			item.setStatus(TaskItemStatus.AVAILABLE);
 			item.setCollectorId(null);

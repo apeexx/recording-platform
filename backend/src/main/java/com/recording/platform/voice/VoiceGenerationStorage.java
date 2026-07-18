@@ -10,7 +10,11 @@ public class VoiceGenerationStorage {
 	private final Path storageDir;
 
 	public VoiceGenerationStorage(Path storageDir) {
-		this.storageDir = storageDir;
+		this.storageDir = storageDir.toAbsolutePath().normalize();
+	}
+
+	public Path rootPath() {
+		return storageDir;
 	}
 
 	public Path save(String recordId, String format, byte[] audioBytes) {

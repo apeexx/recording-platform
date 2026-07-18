@@ -6,11 +6,14 @@ import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import java.time.Instant;
+import java.util.Collection;
+import java.util.List;
 
 public interface UserStore {
 	UserAccount save(UserAccount user);
 
 	Optional<UserAccount> findById(String id);
+	default List<UserAccount> findAllByIdIn(Collection<String> ids) { return List.of(); }
 
 	Optional<UserAccount> findByUsername(String username);
 

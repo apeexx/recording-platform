@@ -1,31 +1,26 @@
-<view class="page">
+<view class="page work-page">
   <view wx:if="{{loading}}" class="empty">正在加载作业…</view>
   <block wx:else>
     <view wx:if="{{error}}" class="error">{{error}}</view>
     <view class="card">
-      <view class="row"><view class="title work-title">数据 {{item.itemCode}}</view><view class="tag">{{statusText}}</view></view>
-      <view class="subtle">任务版本 v{{item.taskVersionNumber}}</view>
+      <view class="row">
+        <view><view class="title work-title">数据 {{item.itemCode}}</view><view class="subtle">任务版本 v{{item.taskVersionNumber}}</view></view>
+        <view class="row status-actions"><view class="tag">{{statusText}}</view><button class="trash-button" loading="{{releasing}}" bindtap="release">🗑</button></view>
+      </view>
+      <view wx:if="{{item.currentRejection}}" class="rejection-box"><text>驳回原因：</text><text wx:for="{{item.currentRejection.reasons}}" wx:key="*this">{{item}} </text><text>{{item.currentRejection.note}}</text></view>
       <view wx:if="{{item.referenceText}}" class="reference-text">{{item.referenceText}}</view>
-      <audio wx:if="{{referenceAudioPath}}" class="media" src="{{referenceAudioPath}}" controls></audio>
-      <video wx:if="{{referenceVideoPath}}" class="media" src="{{referenceVideoPath}}" controls></video>
+      <audio wx:if="{{referenceAudioPath}}" class="media" src="{{referenceAudioPath}}" controls/>
+      <video wx:if="{{referenceVideoPath}}" class="media" src="{{referenceVideoPath}}" controls/>
     </view>
-    <view class="card center">
-      <view class="timer">{{durationText}}</view>
-      <view class="subtle">{{recordStateText}}</view>
-      <button wx:if="{{recordState==='idle'||recordState==='stopped'}}" class="button" bindtap="startRecord">{{audioPath?'重新录制':'开始录音'}}</button>
-      <button wx:elif="{{recordState==='recording'}}" class="button secondary" bindtap="pauseRecord">暂停</button>
-      <button wx:elif="{{recordState==='paused'}}" class="button secondary" bindtap="resumeRecord">继续</button>
-      <button wx:if="{{recordState==='recording'||recordState==='paused'}}" class="button danger" bindtap="stopRecord">停止录音</button>
-      <audio wx:if="{{audioPath&&recordState==='stopped'}}" class="media" src="{{audioPath}}" controls></audio>
+    <view class="card recorder-card">
+      <button wx:if="{{recordState==='idle'||recordState==='error'}}" class="mic-button" bindtap="startRecord">🎙</button>
+      <view wx:if="{{recordState==='recording'||recordState==='paused'}}" class="wave"><view wx:for="{{levelBars}}" wx:key="index" class="wave-bar" style="height:{{recordState==='paused'?8:item}}rpx"/></view>
+      <view wx:if="{{recordState==='recording'}}" class="record-actions"><button class="control-button" bindtap="pauseRecord">Ⅱ<text>暂停</text></button><button class="stop-button" bindtap="stopRecord">■<text>结束</text></button></view>
+      <view wx:if="{{recordState==='paused'}}" class="record-actions"><button class="control-button" bindtap="resumeRecord">🎙<text>继续</text></button><button class="stop-button" bindtap="stopRecord">■<text>结束</text></button></view>
+      <view wx:if="{{recordState==='stopping'}}" class="subtle">正在生成音频…</view>
+      <view wx:if="{{audioPath&&recordState==='stopped'}}" class="recording-result"><view><strong>录制音频</strong><text>{{audioDurationText}}</text></view><audio class="media" src="{{audioPath}}" controls/><button class="button secondary" bindtap="startRecord">重新录制</button></view>
     </view>
-    <view wx:if="{{version.textInputEnabled}}" class="card">
-      <view>文字结果（可单独提交）</view>
-      <textarea class="textarea" maxlength="-1" placeholder="请输入普通话文本" value="{{text}}" bindinput="textInput"></textarea>
-    </view>
-    <view class="card">
-      <view class="row"><text>提交后自动下一条</text><switch checked="{{autoNext}}" bindchange="autoNextChange" color="#2563eb" /></view>
-      <button class="button" loading="{{submitting}}" disabled="{{submitting||recordState==='recording'||recordState==='paused'}}" bindtap="submit">提交作业</button>
-      <button class="button danger" loading="{{releasing}}" bindtap="release">释放回数据池</button>
-    </view>
+    <view wx:if="{{version.resultType==='TEXT'}}" class="card"><view>文本结果</view><textarea class="textarea" maxlength="-1" placeholder="请输入文本" value="{{text}}" bindinput="textInput"/></view>
+    <view class="card"><button class="button" loading="{{submitting}}" disabled="{{submitting||recordState==='recording'||recordState==='paused'||recordState==='stopping'}}" bindtap="submit">提交作业</button></view>
   </block>
 </view>

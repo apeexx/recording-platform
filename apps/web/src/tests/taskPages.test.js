@@ -1,20 +1,24 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('../lib/httpClient.js', () => ({ httpRequest: vi.fn() }))
 import { httpRequest } from '../lib/httpClient.js'
-import { platformApi } from '../lib/platformApi.js'
 import { taskApi } from '../lib/taskApi.js'
-import { flushPromises, mount } from '@vue/test-utils'
-import PlatformListPage from '../pages/admin/platforms/PlatformListPage.vue'
+import fs from 'node:fs'
+import path from 'node:path'
 
-describe('平台与任务页面 API', () => {
+describe('任务页面 API', () => {
   beforeEach(() => vi.clearAllMocks())
-  it('平台写操作携带幂等键', async () => {
-    httpRequest.mockResolvedValue({ id: 'p1' })
-    await platformApi.create({ code: 'DOUYIN', name: '抖音' }, 'op-1')
-    expect(httpRequest).toHaveBeenCalledWith('/api/platforms', {
-      method: 'POST', json: { code: 'DOUYIN', name: '抖音' }, idempotencyKey: 'op-1'
-    })
-  })
+	it('创建任务不发送平台或手填编号', async () => {
+	  httpRequest.mockResolvedValue({ id: 't1', taskCode: 'T000001' })
+	  const data = { name: '朗读任务', version: { referenceTypes: ['TEXT'], resultType: 'TEXT' } }
+	  await taskApi.create(data, 'op-1')
+	  expect(httpRequest).toHaveBeenCalledWith('/api/tasks', { method: 'POST', json: data, idempotencyKey: 'op-1' })
+	})
+	it('文本成果仍保留录音配置，关闭审核时隐藏驳回原因', () => {
+	  const source = fs.readFileSync(path.resolve('src/pages/admin/tasks/TaskEditorPage.vue'), 'utf8')
+	  expect(source).not.toContain("v-if=\"form.resultType==='AUDIO'\"")
+	  expect(source).toContain('v-if="form.humanReviewEnabled"')
+	  expect(source).toContain("rejectionReasons: form.humanReviewEnabled")
+	})
   it('任务状态和数据池请求使用后端真实路径', async () => {
     httpRequest.mockResolvedValue({})
     await taskApi.transition('t1', 'publish', 'op-2')
@@ -43,17 +47,4 @@ describe('平台与任务页面 API', () => {
     })
   })
 
-  it('平台页面呈现空状态和可重试失败态', async () => {
-    httpRequest.mockResolvedValueOnce({ items: [] })
-    const wrapper = mount(PlatformListPage)
-    await flushPromises()
-    expect(wrapper.text()).toContain('暂无数据')
-    wrapper.unmount()
-
-    httpRequest.mockRejectedValueOnce(new Error('平台加载失败'))
-    const failed = mount(PlatformListPage)
-    await flushPromises()
-    expect(failed.text()).toContain('平台加载失败')
-    expect(failed.text()).toContain('重试')
-  })
 })

@@ -96,7 +96,7 @@ public class MongoTaskItemStore implements TaskItemStore {
 	@Override
 	public Optional<TaskItem> submitIfCurrent(SubmitMutation mutation) {
 		Criteria criteria = Criteria.where("_id").is(mutation.itemId())
-			.and("status").is(TaskItemStatus.RECORDING_PENDING)
+			.and("status").in(TaskItemStatus.RECORDING_PENDING, TaskItemStatus.REWORK_PENDING)
 			.and("collectorId").is(mutation.collectorId())
 			.and("assignmentId").is(mutation.assignmentId())
 			.and("revision").is(mutation.expectedRevision())
@@ -112,12 +112,14 @@ public class MongoTaskItemStore implements TaskItemStore {
 			.inc("revision", 1L)
 			.push("submissions", SubmissionHistory.from(mutation))
 			.push("operations", OperationHistory.submission(mutation, snapshot));
+		update.unset("currentRejection");
 		return modify(criteria, update);
 	}
 
 	@Override
 	public Optional<TaskItem> claimReview(ReviewClaimMutation mutation) {
-		Query query = Query.query(Criteria.where("status").is(TaskItemStatus.REVIEW_PENDING)
+		Query query = Query.query(Criteria.where("taskId").is(mutation.taskId())
+			.and("status").is(TaskItemStatus.REVIEW_PENDING)
 			.and("reviewerId").exists(false));
 		query.with(Sort.by(Sort.Direction.ASC, "updatedAt", "sequence"));
 		Document operation = new Document()
@@ -196,6 +198,11 @@ public class MongoTaskItemStore implements TaskItemStore {
 				mutation.operationId(), type, mutation.reviewerId(), mutation.actorUsername(), content,
 				mutation.occurredAt(), snapshot
 			));
+		if (mutation.targetStatus() == TaskItemStatus.REWORK_PENDING) {
+			update.set("currentRejection", mutation.currentRejection());
+		} else {
+			update.unset("currentRejection");
+		}
 		if (mutation.reviewedSubmissionOperationId() != null) {
 			update.set("submissions.$.reviewConclusion", mutation.conclusion());
 		}
@@ -279,6 +286,11 @@ public class MongoTaskItemStore implements TaskItemStore {
 				mutation.operationId(), type, mutation.actorUserId(), mutation.actorUsername(), content,
 				mutation.occurredAt(), snapshot
 			));
+		if (mutation.targetStatus() == TaskItemStatus.REWORK_PENDING) {
+			update.set("currentRejection", mutation.currentRejection());
+		} else {
+			update.unset("currentRejection");
+		}
 		if (mutation.reviewedSubmissionOperationId() != null) {
 			update.set("submissions.$.reviewConclusion", mutation.conclusion());
 		}
@@ -354,11 +366,15 @@ public class MongoTaskItemStore implements TaskItemStore {
 		}
 		TaskItem snapshot = resultSnapshot(
 			mutation.itemId(), mutation.assignmentId(), mutation.expectedRevision() + 1,
-			TaskItemStatus.RECORDING_PENDING, mutation.currentResult()
+			TaskItemStatus.REWORK_PENDING, mutation.currentResult()
 		);
 		Update update = new Update()
-			.set("status", TaskItemStatus.RECORDING_PENDING)
+			.set("status", TaskItemStatus.REWORK_PENDING)
+			.set("currentRejection", new com.recording.platform.task.model.CurrentRejection(
+				List.of(mutation.reason()), null, mutation.occurredAt(), mutation.actorUserId(), mutation.actorUsername()
+			))
 			.unset("reviewerId")
+			.unset("reviewAssignmentId")
 			.set("updatedAt", mutation.occurredAt())
 			.inc("revision", 1L)
 			.push("operations", OperationHistory.rejection(mutation, snapshot));
@@ -376,7 +392,7 @@ public class MongoTaskItemStore implements TaskItemStore {
 		if (mutation.admin()) {
 			criteria = criteria.and("status").nin(TaskItemStatus.AVAILABLE, TaskItemStatus.DISCARDED);
 		} else {
-			criteria = criteria.and("status").is(TaskItemStatus.RECORDING_PENDING)
+			criteria = criteria.and("status").in(TaskItemStatus.RECORDING_PENDING, TaskItemStatus.REWORK_PENDING)
 				.and("collectorId").is(mutation.actorUserId());
 		}
 		TaskItem snapshot = resultSnapshot(
@@ -398,6 +414,16 @@ public class MongoTaskItemStore implements TaskItemStore {
 		return repository.findAllByTaskId(taskId, pageable);
 	}
 
+	@Override public Page<TaskItem> findAllByCollectorIdAndStatusIn(
+		String collectorId, String taskId, java.util.Collection<TaskItemStatus> statuses, Pageable pageable
+	) {
+		Criteria criteria = Criteria.where("collectorId").is(collectorId).and("status").in(statuses);
+		if (taskId != null && !taskId.isBlank()) criteria = criteria.and("taskId").is(taskId);
+		Query query = Query.query(criteria).with(pageable);
+		long total = mongoTemplate.count(Query.query(criteria), TaskItem.class);
+		return new org.springframework.data.domain.PageImpl<>(mongoTemplate.find(query, TaskItem.class), pageable, total);
+	}
+
 	@Override public List<TaskItem> findForReport(String collectorId, String taskId) {
 		Criteria criteria = new Criteria();
 		List<Criteria> filters = new java.util.ArrayList<>();
@@ -414,6 +440,27 @@ public class MongoTaskItemStore implements TaskItemStore {
 
 	@Override public Page<TaskItem> findAllReviewPending(Pageable pageable) {
 		return repository.findAllByStatus(TaskItemStatus.REVIEW_PENDING, pageable);
+	}
+
+	@Override public long countReviewPendingByTaskId(String taskId) {
+		return repository.countByTaskIdAndStatus(taskId, TaskItemStatus.REVIEW_PENDING);
+	}
+
+	@Override public Page<TaskItem> findReviewPoolByTaskId(
+		String taskId, boolean includeAssigned, String reviewerId, Pageable pageable
+	) {
+		if (includeAssigned) {
+			return repository.findAllByTaskIdAndStatus(taskId, TaskItemStatus.REVIEW_PENDING, pageable);
+		}
+		Criteria ownership = new Criteria().orOperator(
+			Criteria.where("reviewerId").exists(false), Criteria.where("reviewerId").is(null),
+			Criteria.where("reviewerId").is(reviewerId)
+		);
+		Query query = Query.query(Criteria.where("taskId").is(taskId)
+			.and("status").is(TaskItemStatus.REVIEW_PENDING)).addCriteria(ownership).with(pageable);
+		List<TaskItem> content = mongoTemplate.find(query, TaskItem.class);
+		long total = mongoTemplate.count(Query.of(query).limit(-1).skip(-1), TaskItem.class);
+		return new org.springframework.data.domain.PageImpl<>(content, pageable, total);
 	}
 
 	private Optional<TaskItem> modify(Criteria criteria, Update update) {

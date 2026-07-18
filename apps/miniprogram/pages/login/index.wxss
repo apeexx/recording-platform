@@ -1,1 +1,1 @@
-.login-card{margin-top:18vh;padding:48rpx 36rpx}
+.page{min-height:100vh;display:flex;align-items:center;padding-top:calc(40rpx + env(safe-area-inset-top));padding-bottom:calc(40rpx + env(safe-area-inset-bottom));background:radial-gradient(circle at top right,#f4d9c8 0,transparent 42%),#f7f1e8}.login-card{width:100%;margin:0;padding:52rpx 40rpx;border-color:#ead8c7;box-shadow:0 24rpx 70rpx rgba(100,65,42,.10)}

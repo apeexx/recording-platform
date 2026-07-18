@@ -88,7 +88,10 @@ public class TaskItemCreationService {
 		}
 		long sequence = tasks.nextItemSequence(taskId);
 		if (sequence < 1) throw new ApiException(HttpStatus.CONFLICT, "TASK_STATE_CHANGED", "任务状态已变化");
-		String itemCode = "I" + String.format(Locale.ROOT, "%06d", sequence);
+		if (sequence > 1_000_000) {
+			throw new ApiException(HttpStatus.CONFLICT, "ITEM_CODE_EXHAUSTED", "该任务的数据条目已达到 100 万上限");
+		}
+		String itemCode = task.getTaskCode() + "-" + String.format(Locale.ROOT, "%07d", sequence);
 		TaskItem item = new TaskItem();
 		item.setId(UUID.randomUUID().toString());
 		item.setTaskId(taskId);

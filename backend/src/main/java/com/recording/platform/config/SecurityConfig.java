@@ -81,7 +81,7 @@ public class SecurityConfig {
 				"/api/auth/web/takeover",
 				"/api/auth/miniprogram/login"
 			).permitAll()
-			.requestMatchers("/api/platforms/**", "/api/import-jobs/**").hasRole("ADMIN")
+			.requestMatchers("/api/import-jobs/**").hasRole("ADMIN")
 			.requestMatchers(HttpMethod.POST, "/api/reviews/claim", "/api/reviews/claim-batch", "/api/reviews/*/release")
 				.hasRole("REVIEWER")
 			.requestMatchers(HttpMethod.POST, "/api/reviews/assign", "/api/reviews/batch/approve")

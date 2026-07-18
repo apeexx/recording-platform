@@ -3,7 +3,6 @@ package com.recording.platform.idempotency;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.recording.platform.importing.ImportJobController;
-import com.recording.platform.task.controller.PlatformController;
 import com.recording.platform.task.controller.TaskAccessController;
 import com.recording.platform.task.controller.TaskController;
 import com.recording.platform.task.controller.TaskItemsController;
@@ -15,7 +14,6 @@ import org.springframework.web.bind.annotation.RequestHeader;
 class MutationIdempotencyContractTests {
 	@Test
 	void everyTaskTwoMutationWithoutBodyOperationIdRequiresIdempotencyKey() {
-		assertHeader(PlatformController.class, "create", "update", "delete");
 		assertHeader(TaskController.class, "create", "update", "publish", "pause", "resume", "end");
 		assertHeader(TaskAccessController.class, "request", "approve", "reject", "grant", "revoke");
 		assertHeader(TaskItemsController.class, "add", "start");

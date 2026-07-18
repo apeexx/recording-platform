@@ -3,6 +3,7 @@ package com.recording.platform.task.store;
 import com.recording.platform.task.model.TaskItemResult;
 import com.recording.platform.task.model.TaskItemStatus;
 import java.time.Instant;
+import com.recording.platform.task.model.CurrentRejection;
 
 public record AdminReviewDecisionMutation(
 	String itemId,
@@ -13,6 +14,7 @@ public record AdminReviewDecisionMutation(
 	TaskItemStatus targetStatus,
 	TaskItemResult result,
 	String conclusion,
+	CurrentRejection currentRejection,
 	String reviewedSubmissionOperationId,
 	Instant occurredAt
 ) { }

@@ -1,8 +1,7 @@
 <script setup>
 const entries = [
-  { title: '平台管理', path: '/admin/platforms', summary: '维护来源平台与任务分组' },
   { title: '任务与数据池', path: '/admin/tasks', summary: '创建任务、版本、导入和池数据' },
-  { title: '审核池', path: '/admin/review/queue', summary: '领取、分配和处理待审核数据' },
+  { title: '审核任务', path: '/admin/review', summary: '选择任务后处理待审核数据' },
   { title: '操作记录', path: '/admin/system/logs', summary: '查看东八区操作时间、操作人和内容' }
 ]
 </script>

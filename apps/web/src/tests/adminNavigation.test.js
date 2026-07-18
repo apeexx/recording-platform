@@ -12,12 +12,12 @@ describe('后台角色导航', () => {
     const adminPaths = paths(sidebarForRole('ADMIN'))
     const reviewerPaths = paths(sidebarForRole('REVIEWER'))
 
-    expect(adminPaths).toContain('/admin/platforms')
+		expect(adminPaths).not.toContain('/admin/platforms')
     expect(adminPaths).toContain('/admin/tasks')
     expect(adminPaths).toContain('/admin/pool')
     expect(adminPaths).toContain('/admin/voice-generation/workbench')
     expect(reviewerPaths).toEqual([
-      '/admin/review/queue', '/admin/reports/reviewers', '/admin/account'
+	  '/admin/review', '/admin/reports/reviewers', '/admin/account'
     ])
     expect(adminPaths).not.toContain('/admin/basic/language-types')
     expect(adminPaths).not.toContain('/admin/system/roles')
@@ -52,7 +52,7 @@ describe('后台角色导航', () => {
 
     session.user.value = { role: 'REVIEWER', firstPasswordChangeRequired: false }
     expect(await guard({ path: '/admin/tasks', meta: { requiresAuth: true, roles: ['ADMIN'] } }))
-      .toEqual('/admin/review/queue')
+	  .toEqual('/admin/review')
   })
 
   it('身份服务暂不可用时公开登录页仍可显示，受保护页回登录页', async () => {

@@ -11,6 +11,7 @@ import com.recording.platform.security.PlatformPrincipal;
 import com.recording.platform.task.model.TaskItem;
 import com.recording.platform.task.service.TaskItemQueryService;
 import com.recording.platform.task.store.TaskItemStore;
+import com.recording.platform.task.store.TaskStore;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
@@ -23,7 +24,7 @@ class TaskItemQueryServiceTests {
 		item.setTaskId("task-1");
 		item.setCollectorId("collector-1");
 		when(items.findById("item-1")).thenReturn(Optional.of(item));
-		TaskItemQueryService service = new TaskItemQueryService(items);
+		TaskItemQueryService service = new TaskItemQueryService(items, org.mockito.Mockito.mock(TaskStore.class));
 
 		PlatformPrincipal owner = principal("collector-1");
 		assertThat(service.get("item-1", owner)).isSameAs(item);

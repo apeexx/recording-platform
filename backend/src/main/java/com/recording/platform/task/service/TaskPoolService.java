@@ -11,6 +11,7 @@ import com.recording.platform.task.model.TaskItemResult;
 import com.recording.platform.task.model.TaskItemStatus;
 import com.recording.platform.task.model.TaskLifecycle;
 import com.recording.platform.task.model.TaskRecord;
+import com.recording.platform.task.model.TaskResultType;
 import com.recording.platform.task.model.TaskVersion;
 import com.recording.platform.task.store.ClaimMutation;
 import com.recording.platform.task.store.RejectMutation;
@@ -84,7 +85,7 @@ public class TaskPoolService {
 		TaskItem item = requireItem(itemId);
 		TaskItemActionResult replay = replay(item, command.operationId(), actor.userId());
 		if (replay != null) return replay;
-		if (item.getStatus() != TaskItemStatus.RECORDING_PENDING
+		if ((item.getStatus() != TaskItemStatus.RECORDING_PENDING && item.getStatus() != TaskItemStatus.REWORK_PENDING)
 			|| !actor.userId().equals(item.getCollectorId())
 			|| !safeEquals(command.assignmentId(), item.getAssignmentId())
 			|| command.expectedRevision() != item.getRevision()) {
@@ -163,7 +164,8 @@ public class TaskPoolService {
 			throw stale();
 		}
 		if (actor.role() == UserRole.COLLECTOR
-			&& (item.getStatus() != TaskItemStatus.RECORDING_PENDING || !actor.userId().equals(item.getCollectorId()))) {
+			&& ((item.getStatus() != TaskItemStatus.RECORDING_PENDING && item.getStatus() != TaskItemStatus.REWORK_PENDING)
+				|| !actor.userId().equals(item.getCollectorId()))) {
 			throw forbidden();
 		}
 		ReleaseMutation mutation = new ReleaseMutation(
@@ -202,13 +204,16 @@ public class TaskPoolService {
 	}
 
 	private void validateSubmission(TaskVersion version, String text, SubmittedRecording audio) {
-		if (!version.isTextInputEnabled() && audio == null) {
-			throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "AUDIO_REQUIRED", "该任务必须提交录音");
+		if (audio == null) {
+			throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "AUDIO_REQUIRED", "录音任务必须提交录音");
 		}
-		if (version.isTextInputEnabled() && audio == null && text == null) {
-			throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "RESULT_REQUIRED", "录音或文字至少提交一项");
+		if (version.getResultType() == TaskResultType.TEXT) {
+			if (text == null || text.isBlank()) {
+				throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "TEXT_REQUIRED", "文本成果任务必须同时提交文本");
+			}
+		} else if (text != null && !text.isBlank()) {
+			throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "TEXT_NOT_ALLOWED", "该任务只允许提交录音");
 		}
-		if (audio == null) return;
 		if (audio.format() != version.getRecordingFormat()) {
 			throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "INVALID_AUDIO_FORMAT", "录音格式不符合任务配置");
 		}

@@ -27,14 +27,13 @@ public class TaskVersion {
 	private String taskId;
 	private int versionNumber;
 	private Set<ReferenceType> referenceTypes = new LinkedHashSet<>();
-	private boolean fixedRecording;
-	private boolean textInputEnabled;
+	private TaskResultType resultType;
 	private boolean humanReviewEnabled = true;
 	private RecordingFormat recordingFormat;
 	private Set<Integer> sampleRates = new LinkedHashSet<>();
-	private int channels = 1;
-	private long minDurationMillis = 1000;
-	private long maxDurationMillis = 600000;
+	private int channels;
+	private long minDurationMillis;
+	private long maxDurationMillis;
 	private List<String> rejectionReasons = new ArrayList<>();
 	private boolean aiEnabled;
 	private String aiProvider;

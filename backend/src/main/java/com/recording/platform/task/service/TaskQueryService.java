@@ -60,7 +60,6 @@ public class TaskQueryService {
 	public record TaskView(
 		String id,
 		String taskCode,
-		String platformId,
 		String name,
 		String description,
 		com.recording.platform.task.model.TaskLifecycle lifecycle,
@@ -70,7 +69,7 @@ public class TaskQueryService {
 	) {
 		static TaskView from(TaskRecord task, String permissionStatus) {
 			return new TaskView(
-				task.getId(), task.getTaskCode(), task.getPlatformId(), task.getName(), task.getDescription(),
+				task.getId(), task.getTaskCode(), task.getName(), task.getDescription(),
 				task.getLifecycle(), task.getCurrentVersionId(), task.getCurrentVersionNumber(), permissionStatus
 			);
 		}

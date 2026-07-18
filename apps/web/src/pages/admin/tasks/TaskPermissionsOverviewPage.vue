@@ -4,6 +4,7 @@ import AsyncState from '../../../components/admin/AsyncState.vue'
 import PageActions from '../../../components/admin/PageActions.vue'
 import PaginationControls from '../../../components/admin/PaginationControls.vue'
 import { taskApi } from '../../../lib/taskApi.js'
+import { statusLabel } from '../../../lib/statusLabels.js'
 
 const rows = ref([])
 const page = ref(0)
@@ -63,7 +64,7 @@ onMounted(load)
                 <td>{{ row.taskCode }}</td>
                 <td>{{ row.name }}</td>
                 <td>v{{ row.currentVersionNumber }}</td>
-                <td>{{ row.lifecycle }}</td>
+                <td>{{ statusLabel('task', row.lifecycle) }}</td>
                 <td>
                   <router-link class="button-link" :to="`/admin/tasks/${row.id}/permissions`">
                     管理权限

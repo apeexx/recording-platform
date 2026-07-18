@@ -40,32 +40,40 @@ public class ReviewController {
 		this.idempotency = idempotency;
 	}
 
-	@PostMapping("/claim")
+	@PostMapping("/tasks/{taskId}/claim")
 	public TaskItem claim(
+		@PathVariable String taskId,
 		@RequestHeader("Idempotency-Key") String operationId,
 		@AuthenticationPrincipal PlatformPrincipal actor
 	) {
-		return execute("review:claim", operationId, TaskItem.class, () -> reviews.claim(operationId, actor));
+		return execute("review:claim:" + taskId, operationId, TaskItem.class, () -> reviews.claim(taskId, operationId, actor));
 	}
 
-	@GetMapping("/pool")
-	public PageResponse<TaskItem> pool(
+	@GetMapping("/tasks")
+	public List<com.recording.platform.review.service.ReviewTaskSummary> tasks(
+		@AuthenticationPrincipal PlatformPrincipal actor
+	) { return reviews.tasks(actor); }
+
+	@GetMapping("/tasks/{taskId}/pool")
+	public PageResponse<com.recording.platform.review.service.ReviewPoolItemView> pool(
+		@PathVariable String taskId,
 		@RequestParam(defaultValue = "0") int page,
 		@RequestParam(defaultValue = "20") int size,
 		@AuthenticationPrincipal PlatformPrincipal actor
 	) {
-		return PageResponse.from(reviews.pool(
+		return PageResponse.from(reviews.pool(taskId,
 			PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100)), actor
 		));
 	}
 
-	@PostMapping("/claim-batch")
+	@PostMapping("/tasks/{taskId}/claim-batch")
 	public List<TaskItem> claimBatch(
+		@PathVariable String taskId,
 		@Valid @RequestBody ClaimBatchRequest request,
 		@AuthenticationPrincipal PlatformPrincipal actor
 	) {
-		return execute("review:claim-batch", request.operationId(), new TypeReference<List<TaskItem>>() { },
-			() -> reviews.claimBatch(request.count(), request.operationId(), actor));
+		return execute("review:claim-batch:" + taskId, request.operationId(), new TypeReference<List<TaskItem>>() { },
+			() -> reviews.claimBatch(taskId, request.count(), request.operationId(), actor));
 	}
 
 	@PostMapping("/assign")

@@ -75,6 +75,7 @@ class MongoTaskItemStoreTests {
 		)).thenReturn(new TaskItem());
 
 		store.claimReview(new ReviewClaimMutation(
+			"task-1",
 			"reviewer-1",
 			"审核员",
 			"review-assignment-1",
@@ -121,8 +122,10 @@ class MongoTaskItemStoreTests {
 			.containsEntry("_id", "item-1")
 			.containsEntry("collectorId", "collector-1")
 			.containsEntry("assignmentId", "assignment-1")
-			.containsEntry("revision", 7L)
-			.containsEntry("status", TaskItemStatus.RECORDING_PENDING);
+			.containsEntry("revision", 7L);
+		assertThat((Document) query.getValue().getQueryObject().get("status"))
+			.extracting("$in")
+			.isEqualTo(List.of(TaskItemStatus.RECORDING_PENDING, TaskItemStatus.REWORK_PENDING));
 		assertThat(query.getValue().getQueryObject()).containsKey("operations.operationId");
 		assertThat((Document) query.getValue().getQueryObject().get("operations.operationId"))
 			.containsEntry("$ne", "submit-1");
@@ -148,8 +151,10 @@ class MongoTaskItemStoreTests {
 		assertThat(query.getValue().getQueryObject())
 			.containsEntry("_id", "item-1")
 			.containsEntry("collectorId", "collector-1")
-			.containsEntry("revision", 7L)
-			.containsEntry("status", TaskItemStatus.RECORDING_PENDING);
+			.containsEntry("revision", 7L);
+		assertThat((Document) query.getValue().getQueryObject().get("status"))
+			.extracting("$in")
+			.isEqualTo(List.of(TaskItemStatus.RECORDING_PENDING, TaskItemStatus.REWORK_PENDING));
 	}
 
 	@Test
@@ -174,7 +179,7 @@ class MongoTaskItemStoreTests {
 		assertThat(push.get("operations")).isInstanceOfSatisfying(OperationHistory.class, (operation) -> {
 			assertThat(operation.getResultAssignmentId()).isEqualTo("assignment-1");
 			assertThat(operation.getResultSnapshot()).isSameAs(currentResult);
-			assertThat(operation.getResultStatus()).isEqualTo(TaskItemStatus.RECORDING_PENDING);
+			assertThat(operation.getResultStatus()).isEqualTo(TaskItemStatus.REWORK_PENDING);
 		});
 	}
 

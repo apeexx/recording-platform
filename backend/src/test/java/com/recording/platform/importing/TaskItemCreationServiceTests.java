@@ -57,7 +57,7 @@ class TaskItemCreationServiceTests {
 		assets = org.mockito.Mockito.mock(MediaAssetStore.class);
 		TaskRecord task = new TaskRecord();
 		task.setId("task-1");
-		task.setTaskCode("TASK-001");
+		task.setTaskCode("T000001");
 		task.setLifecycle(TaskLifecycle.RUNNING);
 		task.setCurrentVersionId("version-2");
 		task.setCurrentVersionNumber(2);
@@ -94,10 +94,10 @@ class TaskItemCreationServiceTests {
 		MediaAsset audio = asset("audio-1", MediaKind.REFERENCE_AUDIO);
 		MediaAsset video = asset("video-1", MediaKind.REFERENCE_VIDEO);
 		when(downloader.download(
-			URI.create("https://cdn.example.com/a.wav"), RemoteMediaType.AUDIO, "task-1", "I000001"
+			URI.create("https://cdn.example.com/a.wav"), RemoteMediaType.AUDIO, "task-1", "T000001-0000001"
 		)).thenReturn(audio);
 		when(downloader.download(
-			URI.create("https://cdn.example.com/v.mp4"), RemoteMediaType.VIDEO, "task-1", "I000001"
+			URI.create("https://cdn.example.com/v.mp4"), RemoteMediaType.VIDEO, "task-1", "T000001-0000001"
 		)).thenReturn(video);
 
 		TaskItem created = service.add(
@@ -112,7 +112,7 @@ class TaskItemCreationServiceTests {
 		assertThat(created.getTaskVersionId()).isEqualTo("version-2");
 		assertThat(created.getTaskVersionNumber()).isEqualTo(2);
 		assertThat(created.getSequence()).isEqualTo(1);
-		assertThat(created.getItemCode()).isEqualTo("I000001");
+		assertThat(created.getItemCode()).isEqualTo("T000001-0000001");
 		assertThat(created.getReferenceAudioMediaId()).isEqualTo("audio-1");
 		assertThat(created.getReferenceVideoMediaId()).isEqualTo("video-1");
 		assertThat(created.getStatus()).isEqualTo(TaskItemStatus.AVAILABLE);
@@ -127,18 +127,30 @@ class TaskItemCreationServiceTests {
 	}
 
 	@Test
+	void itemSequenceStopsAtOneMillion() {
+		when(tasks.nextItemSequence("task-1")).thenReturn(1_000_001L);
+
+		assertThatThrownBy(() -> service.add(
+			"task-1", new AddTaskItemCommand(null, "请朗读", null, null), "add-overflow", admin
+		)).isInstanceOfSatisfying(ApiException.class, (exception) -> {
+			assertThat(exception.getStatus().value()).isEqualTo(409);
+			assertThat(exception.getCode()).isEqualTo("ITEM_CODE_EXHAUSTED");
+		});
+	}
+
+	@Test
 	void videoDownloadFailureRemovesTheSavedAudioFileAndMetadata() {
 		useCleanupAwareDownloader();
 		MediaAsset audio = asset("audio-1", MediaKind.REFERENCE_AUDIO);
 		doReturn(audio).when(downloader).download(
-			URI.create("https://cdn.example.com/a.wav"), RemoteMediaType.AUDIO, "task-1", "I000001"
+			URI.create("https://cdn.example.com/a.wav"), RemoteMediaType.AUDIO, "task-1", "T000001-0000001"
 		);
 		doThrow(new ApiException(
 			org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY,
 			"REMOTE_MEDIA_DOWNLOAD_FAILED",
 			"视频下载失败"
 		)).when(downloader).download(
-			URI.create("https://cdn.example.com/v.mp4"), RemoteMediaType.VIDEO, "task-1", "I000001"
+			URI.create("https://cdn.example.com/v.mp4"), RemoteMediaType.VIDEO, "task-1", "T000001-0000001"
 		);
 
 		assertThatThrownBy(() -> service.add(
@@ -160,10 +172,10 @@ class TaskItemCreationServiceTests {
 		MediaAsset audio = asset("audio-1", MediaKind.REFERENCE_AUDIO);
 		MediaAsset video = asset("video-1", MediaKind.REFERENCE_VIDEO);
 		doReturn(audio).when(downloader).download(
-			URI.create("https://cdn.example.com/a.wav"), RemoteMediaType.AUDIO, "task-1", "I000001"
+			URI.create("https://cdn.example.com/a.wav"), RemoteMediaType.AUDIO, "task-1", "T000001-0000001"
 		);
 		doReturn(video).when(downloader).download(
-			URI.create("https://cdn.example.com/v.mp4"), RemoteMediaType.VIDEO, "task-1", "I000001"
+			URI.create("https://cdn.example.com/v.mp4"), RemoteMediaType.VIDEO, "task-1", "T000001-0000001"
 		);
 		doThrow(new IllegalStateException("simulated item save failure")).when(items).save(any());
 
@@ -185,14 +197,14 @@ class TaskItemCreationServiceTests {
 		useCleanupAwareDownloader();
 		MediaAsset audio = asset("audio-1", MediaKind.REFERENCE_AUDIO);
 		doReturn(audio).when(downloader).download(
-			URI.create("https://cdn.example.com/a.wav"), RemoteMediaType.AUDIO, "task-1", "I000001"
+			URI.create("https://cdn.example.com/a.wav"), RemoteMediaType.AUDIO, "task-1", "T000001-0000001"
 		);
 		doThrow(new ApiException(
 			org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY,
 			"REMOTE_MEDIA_DOWNLOAD_FAILED",
 			"视频下载失败"
 		)).when(downloader).download(
-			URI.create("https://cdn.example.com/v.mp4"), RemoteMediaType.VIDEO, "task-1", "I000001"
+			URI.create("https://cdn.example.com/v.mp4"), RemoteMediaType.VIDEO, "task-1", "T000001-0000001"
 		);
 		doThrow(new IllegalStateException("simulated file cleanup failure"))
 			.when(cleanupStorage).delete(audio.getRelativePath());
@@ -238,7 +250,7 @@ class TaskItemCreationServiceTests {
 		MediaAsset asset = new MediaAsset();
 		asset.setId(id);
 		asset.setKind(kind);
-		asset.setRelativePath("references/task-1/I000001/" + id);
+		asset.setRelativePath("references/task-1/T000001-0000001/" + id);
 		return asset;
 	}
 }

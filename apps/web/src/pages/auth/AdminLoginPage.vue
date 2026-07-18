@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAdminSession } from '../../composables/useAdminSession.js'
 import { homeForRole } from '../../router/guards.js'
+import ConfirmModal from '../../components/feedback/ConfirmModal.vue'
 
 const router = useRouter()
 const session = useAdminSession()
@@ -10,6 +11,7 @@ const username = ref('')
 const password = ref('')
 const errorMessage = ref('')
 const takeoverToken = ref('')
+const takeoverBusy = ref(false)
 
 async function finishLogin(user) {
   await router.replace(user.firstPasswordChangeRequired ? '/first-password' : homeForRole(user.role))
@@ -32,11 +34,14 @@ async function submit() {
 
 async function confirmTakeover() {
   errorMessage.value = ''
+  takeoverBusy.value = true
   try {
     await finishLogin(await session.takeover(takeoverToken.value))
   } catch (error) {
     takeoverToken.value = ''
     errorMessage.value = error.message || '接管登录失败，请重新登录。'
+  } finally {
+    takeoverBusy.value = false
   }
 }
 </script>
@@ -53,11 +58,7 @@ async function confirmTakeover() {
         <p v-if="errorMessage" class="auth-error" role="alert">{{ errorMessage }}</p>
         <button class="auth-primary" type="submit" :disabled="session.loading.value">{{ session.loading.value ? '登录中…' : '登录' }}</button>
       </form>
-      <div v-if="takeoverToken" class="auth-takeover">
-        <strong>是否强制登录？</strong>
-        <p>确认后，原设备会在下一次请求时返回登录页。</p>
-        <div><button type="button" class="auth-secondary" @click="takeoverToken = ''">取消</button><button type="button" class="auth-primary" @click="confirmTakeover">确认登录</button></div>
-      </div>
     </section>
+    <ConfirmModal :open="!!takeoverToken" title="是否强制登录？" message="确认后，原设备会在下一次请求时退出登录。" :busy="takeoverBusy" confirm-text="确认登录" @cancel="takeoverToken = ''" @confirm="confirmTakeover" />
   </main>
 </template>

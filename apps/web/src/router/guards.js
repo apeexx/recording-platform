@@ -1,5 +1,5 @@
 export function homeForRole(role) {
-  return role === 'REVIEWER' ? '/admin/review/queue' : '/admin/dashboard'
+  return role === 'REVIEWER' ? '/admin/review' : '/admin/dashboard'
 }
 
 export function createAdminRouteGuard(session) {

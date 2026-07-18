@@ -1,13 +1,13 @@
 package com.recording.platform.task.service;
 
 import com.recording.platform.api.ApiException;
-import com.recording.platform.task.model.PlatformRecord;
 import com.recording.platform.task.model.RecordingFormat;
 import com.recording.platform.task.model.ReferenceType;
 import com.recording.platform.task.model.TaskLifecycle;
 import com.recording.platform.task.model.TaskRecord;
+import com.recording.platform.task.model.TaskResultType;
 import com.recording.platform.task.model.TaskVersion;
-import com.recording.platform.task.store.PlatformStore;
+import com.recording.platform.task.store.SequenceStore;
 import com.recording.platform.task.store.TaskStore;
 import com.recording.platform.task.store.TaskVersionStore;
 import java.time.Clock;
@@ -15,7 +15,6 @@ import java.time.Instant;
 import java.util.LinkedHashSet;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.Set;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -26,13 +25,13 @@ import org.slf4j.LoggerFactory;
 public class TaskManagementService {
 	private static final Logger LOGGER = LoggerFactory.getLogger(TaskManagementService.class);
 	private static final Set<Integer> SUPPORTED_SAMPLE_RATES = Set.of(8000, 16000, 24000, 32000, 44100, 48000);
-	private final PlatformStore platforms;
+	private final SequenceStore sequences;
 	private final TaskStore tasks;
 	private final TaskVersionStore versions;
 	private final Clock clock;
 
-	public TaskManagementService(PlatformStore platforms, TaskStore tasks, TaskVersionStore versions, Clock clock) {
-		this.platforms = platforms;
+	public TaskManagementService(SequenceStore sequences, TaskStore tasks, TaskVersionStore versions, Clock clock) {
+		this.sequences = sequences;
 		this.tasks = tasks;
 		this.versions = versions;
 		this.clock = clock;
@@ -40,26 +39,14 @@ public class TaskManagementService {
 
 	public TaskRecord create(CreateTaskCommand command) {
 		validateVersion(command.version());
-		PlatformRecord platform = platforms.findById(command.platformId())
-			.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "PLATFORM_NOT_FOUND", "平台不存在"));
-		if (!platform.isActive()) {
-			throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "PLATFORM_INACTIVE", "平台已停用");
+		long taskSequence = sequences.next("task");
+		if (taskSequence < 1 || taskSequence > 999999) {
+			throw new ApiException(HttpStatus.CONFLICT, "TASK_CODE_EXHAUSTED", "任务编号已达到上限");
 		}
-		String taskCode = required(command.taskCode(), "INVALID_TASK_CODE", "任务编码不能为空").toUpperCase(Locale.ROOT);
-		if (!taskCode.matches("[A-Z0-9_-]{1,128}")) {
-			throw new ApiException(
-				HttpStatus.UNPROCESSABLE_ENTITY,
-				"INVALID_TASK_CODE",
-				"任务编码只能包含字母、数字、下划线或连字符，长度为 1 到 128"
-			);
-		}
-		if (tasks.findByTaskCode(taskCode).isPresent()) {
-			throw new ApiException(HttpStatus.CONFLICT, "TASK_CODE_EXISTS", "任务编码已存在");
-		}
+		String taskCode = "T%06d".formatted(taskSequence);
 		Instant now = Instant.now(clock);
 		TaskRecord task = new TaskRecord();
 		task.setTaskCode(taskCode);
-		task.setPlatformId(platform.getId());
 		task.setName(required(command.name(), "INVALID_TASK_NAME", "任务名称不能为空"));
 		task.setDescription(trimToNull(command.description()));
 		task.setLifecycle(TaskLifecycle.DRAFT);
@@ -232,15 +219,15 @@ public class TaskManagementService {
 		version.setTaskId(taskId);
 		version.setVersionNumber(number);
 		version.setReferenceTypes(new LinkedHashSet<>(spec.referenceTypes()));
-		version.setFixedRecording(spec.fixedRecording());
-		version.setTextInputEnabled(spec.textInputEnabled());
+		version.setResultType(spec.resultType());
 		version.setHumanReviewEnabled(spec.humanReviewEnabled());
 		version.setRecordingFormat(spec.recordingFormat());
-		version.setSampleRates(new LinkedHashSet<>(spec.sampleRates()));
+		version.setSampleRates(spec.sampleRates() == null ? new LinkedHashSet<>() : new LinkedHashSet<>(spec.sampleRates()));
 		version.setChannels(spec.channels());
 		version.setMinDurationMillis(spec.minDurationMillis());
 		version.setMaxDurationMillis(spec.maxDurationMillis());
-		version.setRejectionReasons(spec.rejectionReasons() == null ? List.of() : List.copyOf(spec.rejectionReasons()));
+		version.setRejectionReasons(!spec.humanReviewEnabled() || spec.rejectionReasons() == null
+			? List.of() : List.copyOf(spec.rejectionReasons()));
 		version.setAiEnabled(false);
 		version.setAiProvider(trimToNull(spec.aiProvider()));
 		version.setAiModel(trimToNull(spec.aiModel()));
@@ -262,17 +249,21 @@ public class TaskManagementService {
 		if (spec.aiEnabled()) {
 			throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "AI_NOT_SUPPORTED", "首期不支持启用 AI 审核");
 		}
+		if (spec.resultType() == null) {
+			throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "RESULT_TYPE_REQUIRED", "请选择最终提交文本或音频");
+		}
 		if (spec.recordingFormat() == null) {
 			throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "INVALID_RECORDING_FORMAT", "录音格式只能是 WAV 或 MP3");
 		}
-		if (spec.channels() != 1) {
+		if (!Integer.valueOf(1).equals(spec.channels())) {
 			throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "INVALID_CHANNELS", "录音声道固定为 1");
 		}
 		if (spec.sampleRates() == null || spec.sampleRates().isEmpty()
 			|| !SUPPORTED_SAMPLE_RATES.containsAll(spec.sampleRates())) {
 			throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "INVALID_SAMPLE_RATE", "采样率不受微信录音端支持");
 		}
-		if (spec.minDurationMillis() < 1 || spec.maxDurationMillis() < spec.minDurationMillis()) {
+		if (spec.minDurationMillis() == null || spec.maxDurationMillis() == null
+			|| spec.minDurationMillis() < 1 || spec.maxDurationMillis() < spec.minDurationMillis()) {
 			throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "INVALID_DURATION_RANGE", "录音时长范围不合法");
 		}
 	}
@@ -334,8 +325,7 @@ public class TaskManagementService {
 		copy.setTaskId(source.getTaskId());
 		copy.setVersionNumber(source.getVersionNumber());
 		copy.setReferenceTypes(new LinkedHashSet<>(source.getReferenceTypes()));
-		copy.setFixedRecording(source.isFixedRecording());
-		copy.setTextInputEnabled(source.isTextInputEnabled());
+		copy.setResultType(source.getResultType());
 		copy.setHumanReviewEnabled(source.isHumanReviewEnabled());
 		copy.setRecordingFormat(source.getRecordingFormat());
 		copy.setSampleRates(new LinkedHashSet<>(source.getSampleRates()));

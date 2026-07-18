@@ -1,0 +1,10 @@
+{
+  "private": true,
+  "scripts": {
+    "vendor:lamejs": "node scripts/vendor-lamejs.mjs",
+    "test": "node --test tests/*.test.js"
+  },
+  "dependencies": {
+    "@breezystack/lamejs": "1.2.7"
+  }
+}

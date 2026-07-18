@@ -19,6 +19,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import com.recording.platform.api.PageResponse;
+import com.recording.platform.task.service.CollectorTaskItemView;
+import com.recording.platform.task.service.CollectorWorkKind;
 import org.springframework.web.multipart.MultipartFile;
 
 @RestController
@@ -37,6 +40,17 @@ public class TaskItemController {
 	@GetMapping("/{itemId}")
 	public TaskItem get(@PathVariable String itemId, @AuthenticationPrincipal PlatformPrincipal actor) {
 		return queries.get(itemId, actor);
+	}
+
+	@GetMapping("/mine")
+	public PageResponse<CollectorTaskItemView> mine(
+		@RequestParam(required = false) String taskId,
+		@RequestParam(defaultValue = "ALL") CollectorWorkKind kind,
+		@RequestParam(defaultValue = "0") int page,
+		@RequestParam(defaultValue = "20") int size,
+		@AuthenticationPrincipal PlatformPrincipal actor
+	) {
+		return queries.mine(taskId, kind, page, size, actor);
 	}
 
 	@PostMapping(value = "/{itemId}/submit", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

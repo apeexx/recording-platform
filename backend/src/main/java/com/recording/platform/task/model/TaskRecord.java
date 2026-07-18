@@ -18,8 +18,6 @@ public class TaskRecord {
 	private Long version;
 	@Indexed(unique = true)
 	private String taskCode;
-	@Indexed
-	private String platformId;
 	private String name;
 	private String description;
 	private TaskLifecycle lifecycle;

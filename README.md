@@ -60,9 +60,9 @@ Web 端已建立基础主题变量，变量文件位于 `apps/web/src/styles/the
 
 ## Web 管理端导航壳
 
-Web 管理端已建立 Vue Router 导航壳。未登录访问后台会进入 `/login`；ADMIN 默认进入 `/admin/dashboard`，REVIEWER 默认进入 `/admin/review/queue`。首次登录待改密账号只能访问 `/first-password`，改密后清除会话并要求重新登录。
+Web 管理端已建立 Vue Router 导航壳。未登录访问后台会进入 `/login`；ADMIN 默认进入 `/admin/dashboard`，REVIEWER 默认进入 `/admin/review` 并先选择任务。首次登录待改密账号只能访问 `/first-password`，改密后清除会话并要求重新登录。
 
-侧边栏菜单统一配置在 `apps/web/src/config/adminSidebar.js`，路由统一位于 `apps/web/src/router/`。菜单按 ADMIN/REVIEWER 动态过滤，未业务化的旧静态原型不再暴露在生产导航和路由。`apps/web/src/lib/httpClient.js` 统一处理 Cookie、CSRF、JSON/multipart、幂等头、结构化错误和会话接管下线；CSRF 失效时只刷新令牌并自动重试一次，真实角色越权不会重试。平台、任务、数据池、授权、审核、用户、记录和统计页面均通过该请求层接入真实接口。
+侧边栏菜单统一配置在 `apps/web/src/config/adminSidebar.js`，路由统一位于 `apps/web/src/router/`。菜单按 ADMIN/REVIEWER 动态过滤，未业务化的旧静态原型不再暴露在生产导航和路由。`apps/web/src/lib/httpClient.js` 统一处理 Cookie、CSRF、JSON/multipart、幂等头、结构化错误和会话接管下线；CSRF 失效时只刷新令牌并自动重试一次，真实角色越权不会重试。任务、数据池、授权、审核、用户、记录和统计页面均通过该请求层接入真实接口。
 
 “语音生成”模块位于 `apps/web/src/pages/admin/voice-generation/`，当前已接入后端真实接口，支持 0 元试听、付费克隆、日常合成、声音配置和生成记录。
 
@@ -127,9 +127,9 @@ Windows PowerShell 本地联调可使用一键启动脚本：
 - 同一后台账号只允许一个活动 Web 会话。重复登录返回 `409 ACCOUNT_IN_USE` 和短时一次性 `takeoverToken`；确认接管后旧会话返回 `401 SESSION_REPLACED`。
 - 小程序只向后端提交 `wx.login` 临时 `code`。后端使用 `WECHAT_APP_ID`、`WECHAT_APP_SECRET` 调用微信 `jscode2session`，不接受客户端直接提交 OpenID；兼容微信以 `text/plain` 返回 JSON 内容的实际响应，且不保存或输出 `session_key`；小程序 Bearer token 默认 30 天。
 - `/api/voice-generation/**` 与 `/api/admin/**` 仅 `ADMIN` 可访问；除 Web/微信登录与接管接口外，其余 `/api/**` 默认要求认证。
-- `/api/platforms/**`、任务管理、授权管理、任务条目管理和导入仅 `ADMIN` 可写；`COLLECTOR` 通过小程序 Bearer token 申请权限、领取、提交和释放本人条目；`REVIEWER`/`ADMIN` 可驳回待审结果。
+- 任务管理、授权管理、任务条目管理和导入仅 `ADMIN` 可写；`COLLECTOR` 通过小程序 Bearer token 申请权限、领取、提交和释放本人条目；`REVIEWER`/`ADMIN` 可驳回待审结果。
 - Web Cookie 写请求必须携带 CSRF token。只有不含 `REC_WEB_SESSION` Cookie 的小程序 Bearer 采集写请求豁免 CSRF，夹带 Bearer 头不能绕过 Web CSRF。缺失或失效返回 `403 CSRF_TOKEN_INVALID`，Web 请求层刷新 token 后仅重试一次；真实角色越权仍返回 `403 ACCESS_DENIED`。
-- Task 2 所有写接口必须提供幂等标识：平台、任务、授权、领取和导入入口使用 `Idempotency-Key`；提交、释放、驳回使用请求中的 `operationId`。通用幂等记录按操作者、操作类型和幂等键唯一，重复请求返回首次完成结果；相同请求仍在处理时返回 `409 OPERATION_IN_PROGRESS`。
+- Task 2 所有写接口必须提供幂等标识：任务、授权、领取和导入入口使用 `Idempotency-Key`；提交、释放、驳回使用请求中的 `operationId`。通用幂等记录按操作者、操作类型和幂等键唯一，重复请求返回首次完成结果；相同请求仍在处理时返回 `409 OPERATION_IN_PROGRESS`。
 - 所有响应回传 `X-Request-Id`；统一错误结构为 `{ code, message, requestId, details? }`，未预期异常不返回内部堆栈、数据库消息或敏感 payload。
 - 缺字段、未知字段、类型错误和 malformed JSON 等请求结构问题返回 400，不支持的 `Content-Type` 返回 415；字段结构有效但新密码少于 8 个字符或 UTF-8 超过 72 字节、非法姓名或非法后台角色等业务值问题返回 422。
 
@@ -151,15 +151,19 @@ POST /api/admin/users/{userId}/disable
 
 ## 任务池、录音媒体与导入
 
-- 平台和任务：`/api/platforms` 提供 ADMIN CRUD，仍被任务引用的平台返回 `409 PLATFORM_IN_USE`，禁止删除后形成悬空引用；`/api/tasks` 提供创建、结构编辑、发布、暂停、恢复、结束和分页查询。任务编码限制为字母、数字、下划线或连字符。已发布任务修改结构时创建下一不可变版本，旧条目继续绑定旧版本；跨 `tasks`/`task_versions` 写入失败时使用保存后最新版本号执行补偿，补偿本身失败返回受控一致性错误；首期固定 `aiEnabled=false`。
+- 任务：`/api/tasks` 提供创建、结构编辑、发布、暂停、恢复、结束和分页查询。任务编码由数据库序列自动生成 `T000001` 格式，不允许前端输入或修改；任务条目编码使用 `{taskCode}-{7位序号}`，单任务支持至 100 万条且序号不回收。所有任务都必须录音；最终成果为 `TEXT` 时提交录音和文本，为 `AUDIO` 时只提交录音。关闭人工审核时不显示也不保存驳回预设原因。已发布任务修改结构时创建下一不可变版本，旧条目继续绑定旧版本；首期固定 `aiEnabled=false`。
 - 授权：`/api/tasks/{taskId}/grants` 与 `/access-requests` 管理直接授权、申请、原子批准/驳回和撤销。撤销只阻止新领取，不影响已领取条目的提交或释放；批准申请重放不会复活后来已撤销的授权。
 - 数据池：ADMIN 使用 `POST /api/tasks/{taskId}/items` 单条添加并传 `Idempotency-Key`，或通过 `/api/import-jobs` 异步导入。COLLECTOR 使用 `POST /api/tasks/{taskId}/items/start` 原子领取或继续全系统唯一的当前条目。
-- 提交与返修：`POST /api/task-items/{itemId}/submit` 接收 multipart 的 `operationId`、`assignmentId`、`expectedRevision`、可选文字和录音；重复 operationId 返回首次结果，过期修订返回 `409 STALE_STATE`。驳回保留原采集员，释放清除当前结果但保留提交和操作历史。提交或释放成功后，旧文件备份和旧媒体元数据由持久化清理任务处理；即时清理失败不改变首次业务结果，同 operationId 重放和应用启动恢复都会继续重试。
+- 提交与返修：`POST /api/task-items/{itemId}/submit` 接收 multipart 的 `operationId`、`assignmentId`、`expectedRevision` 以及与任务成果类型匹配的文字或录音；重复 operationId 返回首次结果，过期修订返回 `409 STALE_STATE`。驳回进入独立 `REWORK_PENDING` 队列并保留原因、原采集员和 assignment；采集员可同时持有一条普通待录制和多条返修。释放清除当前结果但保留提交和操作历史。
 - 录音文件：`RECORDING_STORAGE_DIR` 的相对值按仓库根目录解析，目录下只使用相对媒体路径；当前录音固定为 `{taskCode}/{itemCode}.wav|mp3`。上传先进入 `temp/`，完成扩展名、魔数、100MB、单声道、采样率和时长校验后原子替换，失败恢复旧文件。待删除的旧稳定文件会先移动到 `temp/backups/` 唯一路径，避免后续重录复用同一路径时误删新文件；`GET /api/media/{mediaId}` 鉴权读取并支持单 Range，完整文件和 Range 响应都使用分块流式输出，避免将最大 100MB 媒体整体载入内存。
-- 导入固定列为 `externalItemId`、`referenceText`、`referenceAudioUrl`、`referenceVideoUrl`，支持 `.csv` 和 `.xlsx`、部分成功、失败行重试及幂等。单文件最多 50000 个数据行；每 100 行持久化一次进度，行错误摘要最多保存 1000 条，完整失败行号单独保留用于重试。初始导入与过期 PROCESSING 恢复使用 `FULL` 模式幂等重放完整源文件，只有用户显式重试使用 `FAILED_ROWS`；worker 的心跳、进度和完成状态均以 `leaseOwner` 条件原子更新，旧 worker 失去租约后不能覆盖最终状态。部分成功时先生成只含失败行的 worker 唯一重试 CSV，只有 fenced 完成写入成功后才切换文件并清理旧源，成功行签名 URL 不再落盘。
+- 导入固定列为 `externalItemId`、`referenceText`、`referenceAudioUrl`、`referenceVideoUrl`，仅支持 `.csv`，支持部分成功、失败行重试及幂等。单文件最多 50000 个数据行；每 100 行持久化一次进度，行错误摘要最多保存 1000 条，完整失败行号单独保留用于重试。
 - 本地批量导入正向测试可直接使用 `docs/test-data/task-items-import-valid.csv`。该文件使用 UTF-8 BOM、包含 8 条唯一外部编号和中文参考文字，不包含远程音频或视频 URL，可用于先验证 CSV 解析、异步导入和数据池新增闭环。
 - 部分失败测试可使用 `docs/test-data/task-items-import-partial-failure.csv`。该文件共 5 行：2 行为新编号且应成功，2 行复用正向样例中的外部编号并应返回 `EXTERNAL_ITEM_EXISTS`，1 行三个参考源均为空并应返回 `ITEM_REFERENCE_REQUIRED`；首次导入预期为 `PARTIAL_SUCCESS`、成功 2 行、失败 3 行。失败行重试不会修正源数据，因此预期仍保持部分失败，可用于验证失败行保留和重试幂等。
 - 远程参考媒体生产默认只允许 HTTPS；每次重定向重新执行协议、主机和地址策略，禁止本机、环回、私网、链路本地与多播地址，并将校验后的地址绑定到实际连接。开发环境只有显式设置 `REMOTE_MEDIA_ALLOW_HTTP=true` 才允许 HTTP，仍不允许私网目标。音频上限 100MB、视频上限 500MB。
+
+## 本地数据全量重置
+
+仅在确认需要丢弃本地开发数据时运行 `scripts\reset-local-data.cmd recording_platform`。脚本读取未提交的根目录 `.env`，只有精确确认词、有效的 `INITIAL_ADMIN_USERNAME`、`INITIAL_ADMIN_PASSWORD` 和精确指向 `recording_platform` 的 `MONGODB_URI` 同时满足时才启用一次性重置。后端还会再次校验确认词、数据库真实名称及存储目录必须是受限的 recordings/recording-data/voice-generation 运行目录，然后清空数据并重建首管理员。不要在生产环境运行，脚本不会备份数据。
 
 ## 一次性旧录音路径迁移
 
@@ -179,8 +183,8 @@ $env:RECORDING_PATH_MIGRATION_ENABLED='true'
 
 ## 人工审核与状态管理
 
-- `/api/reviews` 支持审核池、单条/批量领取、管理员指定审核员、释放审核占用、通过、驳回和管理员批量通过。审核员的审核池只显示未占用条目，必须先领取并只能处理本人占用；管理员审核池显示全部待审核条目（包括已分配条目），管理员不领取审核占用，可直接单条通过/驳回，也可分配或批量通过。
-- 驳回使用任务版本配置的原因多选加补充说明，回到原采集员的待录制状态；通过可补改文字并进入已完成。
+- `/api/reviews/tasks` 先列出有待审数据的任务，再通过 `/api/reviews/tasks/{taskId}/pool|claim|claim-batch` 进入指定任务审核池。审核员必须先领取并只能处理本人占用；管理员可查看全部待审条目并直接处理。
+- 启用人工审核时，驳回使用任务版本配置的原因多选加补充说明并进入原采集员的返修队列；通过时仅文本成果允许补改文字，录音文件保持不变并进入已完成。
 - ADMIN 可单条或批量调整状态、释放、软废弃和恢复；普通状态调整不能进入待领取，返回池只能使用释放。
 - 未启用的审核或 AI 阶段不可进入；废弃保留归属、当前结果、文件和历史，恢复回废弃前状态。
 - 所有写接口使用 operationId、持久化幂等快照及 revision/CAS；批量操作逐条返回成功或冲突结果。
@@ -197,7 +201,6 @@ $env:RECORDING_PATH_MIGRATION_ENABLED='true'
 任务相关分页响应统一为 `{ items, page, size, total }`。常用端点：
 
 ```text
-POST/GET/PUT/DELETE /api/platforms[/{id}]
 POST/GET/PUT        /api/tasks[/{taskId}]
 POST                /api/tasks/{taskId}/publish|pause|resume|end
 POST/GET/DELETE     /api/tasks/{taskId}/grants[/{userId}]
@@ -206,8 +209,10 @@ POST                /api/tasks/{taskId}/access-requests/{requestId}/approve|reje
 POST/GET            /api/tasks/{taskId}/items
 POST                /api/tasks/{taskId}/items/start
 GET                 /api/task-items/{itemId}
+GET                 /api/task-items/mine?kind=ALL|ORDINARY|REWORK
 POST                /api/task-items/{itemId}/submit|release|reject
-GET/POST            /api/reviews/pool|claim|claim-batch|assign
+GET                 /api/reviews/tasks
+GET/POST            /api/reviews/tasks/{taskId}/pool|claim|claim-batch
 GET/POST            /api/reviews/{itemId}|release|approve|reject
 POST                /api/reviews/batch/approve
 POST                /api/task-items/{itemId}/status|discard|restore
@@ -226,7 +231,7 @@ MongoDB 当前集合：
 - `sessions`：仅保存令牌哈希，包含状态、最后访问时间和 TTL 到期时间。
 - `voice_generation_records`：语音生成记录。
 - `voice_generation_configs`：默认声音配置。
-- `platforms`、`tasks`、`task_versions`：平台、任务生命周期和不可变版本快照。
+- `sequences`、`tasks`、`task_versions`：原子编号序列、任务生命周期和不可变版本快照。
 - `task_grants`、`task_access_requests`：任务授权与待决申请。
 - `task_items`：池条目、领取归属、当前结果、提交历史和操作历史。
 - `media_assets`：参考媒体与当前录音元数据，只保存相对路径。
@@ -241,7 +246,7 @@ MongoDB 当前集合：
 已使用本机 MongoDB、真实 Chrome/Edge、微信开发者工具和微信真机完成开发环境闭环验收：
 
 - 后台账号登录、单账号会话接管、首次改密及 ADMIN/REVIEWER 角色菜单通过。
-- 平台、任务版本、池数据、采集权限申请审批、领取、MP3 录音试听/上传、文字单独提交通过。
+- 任务版本、池数据、采集权限申请审批、领取、MP3 录音试听/上传通过。当时验收的“文字单独提交”旧行为已在 2026-07-18 调整为“录音＋文本”。
 - 返修保持原采集员，同条目重录覆盖稳定文件；采集员释放后结果和当前文件清理，提交与操作历史保留。
 - 管理员直接审核以及审核员领取、释放、再次领取、补充文字后通过均完成；审核音频 Range 播放正常。
 - 任务、采集员、审核员和小程序个人统计与实际操作记录一致。

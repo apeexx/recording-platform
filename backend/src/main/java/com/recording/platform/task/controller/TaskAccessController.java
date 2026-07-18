@@ -6,6 +6,8 @@ import com.recording.platform.security.PlatformPrincipal;
 import com.recording.platform.task.model.TaskAccessRequest;
 import com.recording.platform.task.model.TaskGrant;
 import com.recording.platform.task.service.TaskAccessService;
+import com.recording.platform.task.service.TaskAccessRequestView;
+import com.recording.platform.task.service.TaskGrantView;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.http.HttpStatus;
@@ -45,7 +47,7 @@ public class TaskAccessController {
 		);
 	}
 	@GetMapping("/access-requests")
-	public PageResponse<TaskAccessRequest> requests(
+	public PageResponse<TaskAccessRequestView> requests(
 		@PathVariable String taskId,
 		@RequestParam(defaultValue = "0") int page,
 		@RequestParam(defaultValue = "20") int size,
@@ -87,7 +89,7 @@ public class TaskAccessController {
 		() -> access.grant(taskId, request.userId(), actor)
 	); }
 	@GetMapping("/grants")
-	public PageResponse<TaskGrant> grants(
+	public PageResponse<TaskGrantView> grants(
 		@PathVariable String taskId,
 		@RequestParam(defaultValue = "0") int page,
 		@RequestParam(defaultValue = "20") int size,

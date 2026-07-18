@@ -14,6 +14,3 @@
 .auth-primary:disabled { cursor: wait; opacity: .65; }
 .auth-secondary, .admin-logout-button { border: 1px solid var(--border); background: var(--card); color: var(--foreground); }
 .auth-error { margin: 0; padding: 11px 12px; border-radius: calc(var(--radius) * .55); background: color-mix(in srgb, var(--destructive) 10%, transparent); color: var(--destructive); font-size: 13px; }
-.auth-takeover { margin-top: 18px; padding: 16px; border: 1px solid var(--border); border-radius: calc(var(--radius) * .65); background: var(--accent); }
-.auth-takeover p { color: var(--muted-foreground); font-size: 13px; }
-.auth-takeover div { display: flex; justify-content: flex-end; gap: 10px; }
