@@ -5,8 +5,27 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
+import org.springframework.core.annotation.Order;
 
 class LocalDataResetRunnerTests {
+	@Test
+	void securityConfigurationIsSkippedForTheNonWebResetProcess() {
+		ConditionalOnWebApplication condition = SecurityConfig.class.getAnnotation(ConditionalOnWebApplication.class);
+
+		assertThat(condition).isNotNull();
+		assertThat(condition.type()).isEqualTo(ConditionalOnWebApplication.Type.SERVLET);
+	}
+
+	@Test
+	void resetProcessExitsOnlyAfterTheAdminInitializerOrder() {
+		Order resetOrder = LocalDataResetRunner.class.getAnnotation(Order.class);
+		Order exitOrder = LocalDataResetExitRunner.class.getAnnotation(Order.class);
+
+		assertThat(resetOrder.value()).isLessThan(0);
+		assertThat(exitOrder.value()).isGreaterThan(0);
+	}
+
 	@Test
 	void acceptsANarrowRuntimeStorageDirectory() {
 		Path working = Path.of(System.getProperty("user.dir"));

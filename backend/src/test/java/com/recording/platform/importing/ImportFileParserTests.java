@@ -19,13 +19,12 @@ class ImportFileParserTests {
 		ImportFileParser parser = new ImportFileParser();
 		Path csv = tempDir.resolve("items.csv");
 		Files.writeString(csv,
-			"externalItemId,referenceText,referenceAudioUrl,referenceVideoUrl\n"
-				+ "ext-1,请朗读,https://cdn.example.com/a.wav,\n"
+			"referenceText,referenceAudioUrl,referenceVideoUrl\n"
+				+ "请朗读,https://cdn.example.com/a.wav,\n"
 		);
 		List<ImportRow> csvRows = parser.parse(csv, "items.csv");
 		assertThat(csvRows).singleElement().satisfies((row) -> {
 			assertThat(row.rowNumber()).isEqualTo(2);
-			assertThat(row.externalItemId()).isEqualTo("ext-1");
 			assertThat(row.referenceText()).isEqualTo("请朗读");
 			assertThat(row.referenceAudioUrl()).isEqualTo("https://cdn.example.com/a.wav");
 		});
@@ -42,7 +41,7 @@ class ImportFileParserTests {
 	@Test
 	void missingOrRenamedHeadersAreRejected() throws Exception {
 		Path csv = tempDir.resolve("bad.csv");
-		Files.writeString(csv, "id,text,audio,video\n1,hello,,\n");
+		Files.writeString(csv, "text,audio,video\nhello,,\n");
 
 		assertThatThrownBy(() -> new ImportFileParser().parse(csv, "bad.csv"))
 			.isInstanceOfSatisfying(ApiException.class, (exception) ->
@@ -55,8 +54,8 @@ class ImportFileParserTests {
 		Path csv = tempDir.resolve("too-many.csv");
 		Files.writeString(
 			csv,
-			"externalItemId,referenceText,referenceAudioUrl,referenceVideoUrl\n"
-				+ "row-1,第一条,,\nrow-2,第二条,,\nrow-3,第三条,,\n"
+			"referenceText,referenceAudioUrl,referenceVideoUrl\n"
+				+ "第一条,,\n第二条,,\n第三条,,\n"
 		);
 
 		assertThatThrownBy(() -> new ImportFileParser(2).parse(csv, "too-many.csv"))

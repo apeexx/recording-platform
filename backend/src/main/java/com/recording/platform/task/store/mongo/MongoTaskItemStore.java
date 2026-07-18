@@ -45,9 +45,6 @@ public class MongoTaskItemStore implements TaskItemStore {
 
 	@Override public TaskItem save(TaskItem item) { return repository.save(item); }
 	@Override public Optional<TaskItem> findById(String id) { return repository.findById(id); }
-	@Override public Optional<TaskItem> findByTaskIdAndExternalItemId(String taskId, String externalItemId) {
-		return repository.findByTaskIdAndExternalItemId(taskId, externalItemId);
-	}
 	@Override public Optional<TaskItem> findByTaskIdAndCreationOperationId(String taskId, String operationId) {
 		return repository.findByTaskIdAndCreationOperationId(taskId, operationId);
 	}

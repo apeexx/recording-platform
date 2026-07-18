@@ -5,12 +5,12 @@
 - 时间：2026-07-16
 - commit ID：待提交后补记
 - 修改内容：
-  - 新增 `docs/test-data/task-items-import-partial-failure.csv`，混合 2 条有效新数据、2 条已存在外部编号和 1 条无参考源数据。
-  - 预期首次导入状态为 `PARTIAL_SUCCESS`，成功 2 行、失败 3 行；失败码分别覆盖 `EXTERNAL_ITEM_EXISTS` 和 `ITEM_REFERENCE_REQUIRED`。
+  - 新增 `docs/test-data/task-items-import-partial-failure.csv`，混合 2 条有效数据和 3 条无参考源数据。
+  - 预期首次导入状态为 `PARTIAL_SUCCESS`，成功 2 行、失败 3 行；失败码覆盖 `ITEM_REFERENCE_REQUIRED`。
   - README 补充样例用途、预期计数和失败行重试仍会失败的边界，避免把重试误解为自动修复源数据。
 - 验证结果：
   - 使用 Artifact Tool 回读并渲染检查 6 行 4 列数据，固定表头、中文内容和空列位置正确。
-  - 对照后端任务条目创建与导入状态逻辑，确认有成功且有失败时状态为 `PARTIAL_SUCCESS`；重复外部编号与无参考源分别映射到预期错误码。
+  - 对照后端任务条目创建与导入状态逻辑，确认有成功且有失败时状态为 `PARTIAL_SUCCESS`；无参考源映射到预期错误码。
   - `backend\\mvnw.cmd "-Dtest=ImportFileParserTests,TaskItemCreationServiceTests,ImportJobServiceTests" test`：15/15 通过，0 failures、0 errors、0 skipped，`BUILD SUCCESS`。
 
 ## 2026-07-15 生成任务批量导入 CSV 测试数据
@@ -19,7 +19,7 @@
 - commit ID：待提交后补记
 - 修改内容：
   - 新增 `docs/test-data/task-items-import-valid.csv`，提供 8 条仅含中文参考文字的有效任务池数据。
-  - 表头固定为 `externalItemId`、`referenceText`、`referenceAudioUrl`、`referenceVideoUrl`，外部编号使用独立的 `IMPORT-CSV-*` 前缀。
+  - 表头固定为 `referenceText`、`referenceAudioUrl`、`referenceVideoUrl`。
   - 文件使用 UTF-8 BOM，便于 Windows 表格工具正确显示中文；后端导入解析器会安全移除 BOM。
 - 验证结果：
   - 使用 Artifact Tool 创建、回读并渲染检查 9 行 4 列数据，中文与空列位置正确。
@@ -425,7 +425,7 @@
 - 修改内容：
   - 新增平台 CRUD、任务生命周期和发布后不可变版本；任务结构变更创建下一版本，限制任务编码、参考组件、微信采样率、单声道和首期 AI 禁用。
   - 新增任务授权、权限申请及 PENDING 条件原子决策；授权撤销只阻止新领取，已批准申请重放不会复活已撤销授权。
-  - 新增任务池条目、可选 externalItemId 部分唯一索引、任务内 itemCode 序号和 Mongo `findAndModify` 原子领取；保证采集员全系统最多一条待录制作业。
+  - 新增任务池条目、任务内 itemCode 序号和 Mongo `findAndModify` 原子领取；保证采集员全系统最多一条待录制作业。
   - 新增 operationId/assignmentId/revision 条件提交、人工待审、驳回返修和释放；幂等历史绑定原操作者，释放清当前结果并保留提交/操作历史。
   - 新增 WAV/MP3 录音校验、100MB 限制、稳定 `current.ext` 临时写入/原子替换/失败回滚、条目级并发串行、媒体鉴权和单 Range 读取。
   - 新增单条数据添加与 CSV/XLSX 异步导入，支持 operationId 幂等、部分成功和失败行重试；部分成功后只留失败行重试 CSV，移除成功行签名 URL。
@@ -724,3 +724,10 @@
 - Web 新增全局悬浮操作提示和登录接管弹窗；权限审批后即时移除待审批项并展示用户姓名、编号。
 - 小程序录音改为 PCM 样本计时和 RMS 波形，提供麦克风、暂停、结束状态；WAV 流式写入，MP3 固定使用 `@breezystack/lamejs@1.2.7` 本地 vendor。
 - 导入范围收敛为 CSV；新增带数据库名、初始管理员和存储目录保护的本地全量重置入口。
+
+## 2026-07-18 删除任务条目外部编号
+
+- Web 单条添加和数据池列表移除外部编号，条目只展示系统生成编号。
+- 后端请求、任务条目模型、Mongo 唯一索引和 CSV 导入契约删除外部编号字段。
+- CSV 表头调整为 `referenceText,referenceAudioUrl,referenceVideoUrl`，同步更新测试数据、接口文档和回归测试。
+- 修复本地重置的非 Web 启动模式：跳过仅 Servlet 环境需要的安全配置，并在清库、清理媒体及重建首管理员后自动退出。

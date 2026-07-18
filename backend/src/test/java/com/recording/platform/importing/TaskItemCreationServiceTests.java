@@ -82,7 +82,7 @@ class TaskItemCreationServiceTests {
 	@Test
 	void itemRequiresAtLeastOneReference() {
 		assertThatThrownBy(() -> service.add(
-			"task-1", new AddTaskItemCommand(null, null, null, null), "add-1", admin
+			"task-1", new AddTaskItemCommand(null, null, null), "add-1", admin
 		)).isInstanceOfSatisfying(ApiException.class, (exception) -> {
 			assertThat(exception.getStatus().value()).isEqualTo(422);
 			assertThat(exception.getCode()).isEqualTo("ITEM_REFERENCE_REQUIRED");
@@ -102,9 +102,7 @@ class TaskItemCreationServiceTests {
 
 		TaskItem created = service.add(
 			"task-1",
-			new AddTaskItemCommand(
-				"external-1", "请朗读", "https://cdn.example.com/a.wav", "https://cdn.example.com/v.mp4"
-			),
+			new AddTaskItemCommand("请朗读", "https://cdn.example.com/a.wav", "https://cdn.example.com/v.mp4"),
 			"add-1",
 			admin
 		);
@@ -131,7 +129,7 @@ class TaskItemCreationServiceTests {
 		when(tasks.nextItemSequence("task-1")).thenReturn(1_000_001L);
 
 		assertThatThrownBy(() -> service.add(
-			"task-1", new AddTaskItemCommand(null, "请朗读", null, null), "add-overflow", admin
+			"task-1", new AddTaskItemCommand("请朗读", null, null), "add-overflow", admin
 		)).isInstanceOfSatisfying(ApiException.class, (exception) -> {
 			assertThat(exception.getStatus().value()).isEqualTo(409);
 			assertThat(exception.getCode()).isEqualTo("ITEM_CODE_EXHAUSTED");
@@ -155,7 +153,7 @@ class TaskItemCreationServiceTests {
 
 		assertThatThrownBy(() -> service.add(
 			"task-1",
-			new AddTaskItemCommand(null, null, "https://cdn.example.com/a.wav", "https://cdn.example.com/v.mp4"),
+			new AddTaskItemCommand(null, "https://cdn.example.com/a.wav", "https://cdn.example.com/v.mp4"),
 			"add-video-failure",
 			admin
 		)).isInstanceOfSatisfying(ApiException.class, (exception) ->
@@ -181,7 +179,7 @@ class TaskItemCreationServiceTests {
 
 		assertThatThrownBy(() -> service.add(
 			"task-1",
-			new AddTaskItemCommand(null, null, "https://cdn.example.com/a.wav", "https://cdn.example.com/v.mp4"),
+			new AddTaskItemCommand(null, "https://cdn.example.com/a.wav", "https://cdn.example.com/v.mp4"),
 			"add-save-failure",
 			admin
 		)).isInstanceOf(IllegalStateException.class).hasMessageContaining("item save failure");
@@ -213,7 +211,7 @@ class TaskItemCreationServiceTests {
 
 		assertThatThrownBy(() -> service.add(
 			"task-1",
-			new AddTaskItemCommand(null, null, "https://cdn.example.com/a.wav", "https://cdn.example.com/v.mp4"),
+			new AddTaskItemCommand(null, "https://cdn.example.com/a.wav", "https://cdn.example.com/v.mp4"),
 			"add-cleanup-failure",
 			admin
 		)).isInstanceOfSatisfying(ApiException.class, (exception) -> {

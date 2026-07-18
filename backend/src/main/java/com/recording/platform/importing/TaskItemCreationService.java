@@ -75,7 +75,6 @@ public class TaskItemCreationService {
 		if (!version.isPublished()) {
 			throw new ApiException(HttpStatus.CONFLICT, "TASK_VERSION_NOT_PUBLISHED", "任务版本尚未发布");
 		}
-		String externalId = trimToNull(command.externalItemId());
 		String text = trimToNull(command.referenceText());
 		String audioUrl = trimToNull(command.referenceAudioUrl());
 		String videoUrl = trimToNull(command.referenceVideoUrl());
@@ -83,9 +82,6 @@ public class TaskItemCreationService {
 			throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "ITEM_REFERENCE_REQUIRED", "每条数据至少需要一种参考内容");
 		}
 		validateEnabledReferences(version, text, audioUrl, videoUrl);
-		if (externalId != null && items.findByTaskIdAndExternalItemId(taskId, externalId).isPresent()) {
-			throw new ApiException(HttpStatus.CONFLICT, "EXTERNAL_ITEM_EXISTS", "externalItemId 在任务内已存在");
-		}
 		long sequence = tasks.nextItemSequence(taskId);
 		if (sequence < 1) throw new ApiException(HttpStatus.CONFLICT, "TASK_STATE_CHANGED", "任务状态已变化");
 		if (sequence > 1_000_000) {
@@ -99,7 +95,6 @@ public class TaskItemCreationService {
 		item.setTaskVersionNumber(version.getVersionNumber());
 		item.setSequence(sequence);
 		item.setItemCode(itemCode);
-		item.setExternalItemId(externalId);
 		item.setCreationOperationId(normalizedOperationId);
 		item.setReferenceText(text);
 		item.setStatus(TaskItemStatus.AVAILABLE);

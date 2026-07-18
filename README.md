@@ -156,9 +156,9 @@ POST /api/admin/users/{userId}/disable
 - 数据池：ADMIN 使用 `POST /api/tasks/{taskId}/items` 单条添加并传 `Idempotency-Key`，或通过 `/api/import-jobs` 异步导入。COLLECTOR 使用 `POST /api/tasks/{taskId}/items/start` 原子领取或继续全系统唯一的当前条目。
 - 提交与返修：`POST /api/task-items/{itemId}/submit` 接收 multipart 的 `operationId`、`assignmentId`、`expectedRevision` 以及与任务成果类型匹配的文字或录音；重复 operationId 返回首次结果，过期修订返回 `409 STALE_STATE`。驳回进入独立 `REWORK_PENDING` 队列并保留原因、原采集员和 assignment；采集员可同时持有一条普通待录制和多条返修。释放清除当前结果但保留提交和操作历史。
 - 录音文件：`RECORDING_STORAGE_DIR` 的相对值按仓库根目录解析，目录下只使用相对媒体路径；当前录音固定为 `{taskCode}/{itemCode}.wav|mp3`。上传先进入 `temp/`，完成扩展名、魔数、100MB、单声道、采样率和时长校验后原子替换，失败恢复旧文件。待删除的旧稳定文件会先移动到 `temp/backups/` 唯一路径，避免后续重录复用同一路径时误删新文件；`GET /api/media/{mediaId}` 鉴权读取并支持单 Range，完整文件和 Range 响应都使用分块流式输出，避免将最大 100MB 媒体整体载入内存。
-- 导入固定列为 `externalItemId`、`referenceText`、`referenceAudioUrl`、`referenceVideoUrl`，仅支持 `.csv`，支持部分成功、失败行重试及幂等。单文件最多 50000 个数据行；每 100 行持久化一次进度，行错误摘要最多保存 1000 条，完整失败行号单独保留用于重试。
-- 本地批量导入正向测试可直接使用 `docs/test-data/task-items-import-valid.csv`。该文件使用 UTF-8 BOM、包含 8 条唯一外部编号和中文参考文字，不包含远程音频或视频 URL，可用于先验证 CSV 解析、异步导入和数据池新增闭环。
-- 部分失败测试可使用 `docs/test-data/task-items-import-partial-failure.csv`。该文件共 5 行：2 行为新编号且应成功，2 行复用正向样例中的外部编号并应返回 `EXTERNAL_ITEM_EXISTS`，1 行三个参考源均为空并应返回 `ITEM_REFERENCE_REQUIRED`；首次导入预期为 `PARTIAL_SUCCESS`、成功 2 行、失败 3 行。失败行重试不会修正源数据，因此预期仍保持部分失败，可用于验证失败行保留和重试幂等。
+- 导入固定列为 `referenceText`、`referenceAudioUrl`、`referenceVideoUrl`，仅支持 `.csv`，支持部分成功、失败行重试及幂等。条目不再接收或保存外部编号，只使用系统生成的条目编号。单文件最多 50000 个数据行；每 100 行持久化一次进度，行错误摘要最多保存 1000 条，完整失败行号单独保留用于重试。
+- 本地批量导入正向测试可直接使用 `docs/test-data/task-items-import-valid.csv`。该文件包含 8 条中文参考文字，不包含远程音频或视频 URL，可用于验证 CSV 解析、异步导入和数据池新增闭环。
+- 部分失败测试可使用 `docs/test-data/task-items-import-partial-failure.csv`。该文件共 5 行：2 行具有参考文字并应成功，3 行参考源均为空并应返回 `ITEM_REFERENCE_REQUIRED`；首次导入预期为 `PARTIAL_SUCCESS`、成功 2 行、失败 3 行。失败行重试不会修正源数据，因此预期仍保持部分失败，可用于验证失败行保留和重试幂等。
 - 远程参考媒体生产默认只允许 HTTPS；每次重定向重新执行协议、主机和地址策略，禁止本机、环回、私网、链路本地与多播地址，并将校验后的地址绑定到实际连接。开发环境只有显式设置 `REMOTE_MEDIA_ALLOW_HTTP=true` 才允许 HTTP，仍不允许私网目标。音频上限 100MB、视频上限 500MB。
 
 ## 本地数据全量重置

@@ -19,6 +19,14 @@ describe('任务页面 API', () => {
 	  expect(source).toContain('v-if="form.humanReviewEnabled"')
 	  expect(source).toContain("rejectionReasons: form.humanReviewEnabled")
 	})
+	it('任务数据池完全不显示或提交外部编号', () => {
+	  const detail = fs.readFileSync(path.resolve('src/pages/admin/tasks/TaskDetailPage.vue'), 'utf8')
+	  const pool = fs.readFileSync(path.resolve('src/pages/admin/tasks/TaskPoolPage.vue'), 'utf8')
+	  expect(detail).not.toContain('externalItemId')
+	  expect(detail).not.toContain('外部编号')
+	  expect(pool).not.toContain('externalItemId')
+	  expect(pool).not.toContain('外部编号')
+	})
   it('任务状态和数据池请求使用后端真实路径', async () => {
     httpRequest.mockResolvedValue({})
     await taskApi.transition('t1', 'publish', 'op-2')

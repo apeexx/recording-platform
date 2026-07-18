@@ -167,7 +167,7 @@ public class ImportJobService {
 					itemCreation.add(
 						job.getTaskId(),
 						new AddTaskItemCommand(
-							row.externalItemId(), row.referenceText(), row.referenceAudioUrl(), row.referenceVideoUrl()
+							row.referenceText(), row.referenceAudioUrl(), row.referenceVideoUrl()
 						),
 						job.getOperationId() + ":row:" + row.rowNumber(),
 						actor

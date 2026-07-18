@@ -217,7 +217,7 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 
 远程参考媒体生产默认只允许 HTTPS。策略必须阻止 localhost、环回、私网、链路本地、多播和危险重定向，并把校验后的公共 IP 绑定到实际 Socket；HTTPS 仍使用原 hostname 做 SNI、证书主机校验和 Host 请求头。`REMOTE_MEDIA_ALLOW_HTTP=true` 仅供显式开发联调，仍不允许私网目标。音频上限 100MB，视频上限 500MB；成功后不得保存完整签名 URL，只能保存 hostname、状态和脱敏错误摘要。
 
-导入只支持 `.csv`，固定列为 `externalItemId`、`referenceText`、`referenceAudioUrl`、`referenceVideoUrl`；返回 HTTP 202 和 importJobId，Mongo 持久化状态/计数/失败行号/有限脱敏行错误，支持幂等、部分成功与失败行重试。单文件最多 50000 个数据行，每 100 行持久化一次进度，脱敏行错误摘要最多保存 1000 条。初始导入和过期 PROCESSING 恢复固定使用 `FULL` 模式幂等重放完整源文件，只有用户显式失败行重试使用 `FAILED_ROWS`。
+导入只支持 `.csv`，固定列为 `referenceText`、`referenceAudioUrl`、`referenceVideoUrl`；条目不接收或保存外部编号，只使用系统生成的 itemCode。返回 HTTP 202 和 importJobId，Mongo 持久化状态/计数/失败行号/有限脱敏行错误，支持幂等、部分成功与失败行重试。单文件最多 50000 个数据行，每 100 行持久化一次进度，脱敏行错误摘要最多保存 1000 条。初始导入和过期 PROCESSING 恢复固定使用 `FULL` 模式幂等重放完整源文件，只有用户显式失败行重试使用 `FAILED_ROWS`。
 
 ## 7. 接口说明
 
@@ -356,11 +356,11 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 ```text
 请求方法：POST / GET
 请求路径：/api/tasks/{taskId}/items、/api/tasks/{taskId}/items/start、/api/task-items/{itemId}
-请求参数：单条添加 JSON externalItemId/referenceText/referenceAudioUrl/referenceVideoUrl + Idempotency-Key；start 携带 Idempotency-Key；列表 page、size
+请求参数：单条添加 JSON referenceText/referenceAudioUrl/referenceVideoUrl + Idempotency-Key；start 携带 Idempotency-Key；列表 page、size
 响应结构：TaskItem 或 {items,page,size,total}
-错误码：404 NO_AVAILABLE_ITEM/TASK_ITEM_NOT_FOUND；409 ITEM_CONFLICT/EXTERNAL_ITEM_EXISTS；422 ITEM_REFERENCE_REQUIRED/远程媒体错误
+错误码：404 NO_AVAILABLE_ITEM/TASK_ITEM_NOT_FOUND；409 ITEM_CONFLICT；422 ITEM_REFERENCE_REQUIRED/远程媒体错误
 权限要求：添加和任务条目列表仅 ADMIN；start 仅 COLLECTOR；详情仅 ADMIN/REVIEWER/当前采集员
-数据一致性要求：新条目绑定 currentVersion；itemCode 任务内递增唯一；externalItemId 可空且存在时任务内唯一；添加和领取均持久化幂等；领取 findAndModify 原子更新并以同一更新递增 revision、追加新 revision 的操作历史，同时保持采集员全局唯一待录制
+数据一致性要求：新条目绑定 currentVersion；itemCode 任务内递增唯一且是条目唯一业务编号；添加和领取均持久化幂等；领取 findAndModify 原子更新并以同一更新递增 revision、追加新 revision 的操作历史，同时保持采集员全局唯一待录制
 前端调用位置：apps/web/src/pages/admin/tasks/TaskPoolPage.vue、apps/miniprogram/pages/tasks/*、apps/miniprogram/pages/work/*
 ```
 
@@ -572,10 +572,10 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 
 ```text
 集合名称：task_items
-字段名称：taskId、taskVersionId/Number、sequence、itemCode、externalItemId、creationOperationId、status、collectorId、reviewerId、assignmentId、reviewAssignmentId、revision、参考字段、currentResult、currentRejection、submissions（含提交时 collectorId）、operations、discardedPreviousStatus、createdAt、updatedAt
+字段名称：taskId、taskVersionId/Number、sequence、itemCode、creationOperationId、status、collectorId、reviewerId、assignmentId、reviewAssignmentId、revision、参考字段、currentResult、currentRejection、submissions（含提交时 collectorId）、operations、discardedPreviousStatus、createdAt、updatedAt
 字段类型：字符串、枚举、数值、嵌套文档、数组、UTC Instant
 默认值：新条目 AVAILABLE、revision=0、历史数组为空
-唯一约束：(taskId,itemCode)；externalItemId 存在时 (taskId,externalItemId)；creationOperationId 存在时任务内唯一；仅普通 RECORDING_PENDING 的 collectorId 全系统唯一，REWORK_PENDING 不限条数
+唯一约束：(taskId,itemCode)；creationOperationId 存在时任务内唯一；仅普通 RECORDING_PENDING 的 collectorId 全系统唯一，REWORK_PENDING 不限条数
 索引：上述唯一/部分唯一索引；(taskId,status,sequence) 领取索引；(collectorId,status)
 数据兼容策略：条目固定绑定创建时版本；当前结果可替换/清除，提交与操作历史只追加
 迁移步骤：本阶段首次建立，无旧条目迁移

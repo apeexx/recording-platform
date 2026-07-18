@@ -84,13 +84,12 @@ public class TaskItemsController {
 	}
 
 	public record AddItemRequest(
-		String externalItemId,
 		String referenceText,
 		String referenceAudioUrl,
 		String referenceVideoUrl
 	) {
 		AddTaskItemCommand command() {
-			return new AddTaskItemCommand(externalItemId, referenceText, referenceAudioUrl, referenceVideoUrl);
+			return new AddTaskItemCommand(referenceText, referenceAudioUrl, referenceVideoUrl);
 		}
 	}
 }

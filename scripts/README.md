@@ -59,4 +59,4 @@ http://localhost:5173/admin/voice-generation/workbench
 
 ## 本地数据重置
 
-`reset-local-data.cmd recording_platform` 只用于已获确认的本地开发数据清空。命令行必须传入区分大小写的精确确认词；同时要求根目录 `.env` 具有 `INITIAL_ADMIN_USERNAME`、`INITIAL_ADMIN_PASSWORD`，并拒绝非 `recording_platform` 数据库。Java 端会再次校验确认词、真实库名和受限运行存储路径后才执行。该命令不可恢复且不会生成备份，普通开发启动不要设置任何 `RECORDING_LOCAL_RESET_*` 变量。
+`reset-local-data.cmd recording_platform` 只用于已获确认的本地开发数据清空。命令行必须传入区分大小写的精确确认词；同时要求根目录 `.env` 具有 `INITIAL_ADMIN_USERNAME`、`INITIAL_ADMIN_PASSWORD`，并拒绝非 `recording_platform` 数据库。Java 端会再次校验确认词、真实库名和受限运行存储路径，清库、清理媒体并重建首管理员后自动退出。该命令不可恢复且不会生成备份，普通开发启动不要设置任何 `RECORDING_LOCAL_RESET_*` 变量。

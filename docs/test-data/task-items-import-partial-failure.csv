@@ -1,6 +1,6 @@
-﻿externalItemId,referenceText,referenceAudioUrl,referenceVideoUrl
-IMPORT-MIXED-001,部分成功测试：这是一条应成功导入的新文字参考数据,,
-IMPORT-CSV-001,重复编号测试：该编号已在上一轮正向导入中存在，应返回外部编号冲突,,
-IMPORT-MIXED-002,,,
-IMPORT-MIXED-003,部分成功测试：这是另一条应成功导入的新文字参考数据,,
-IMPORT-CSV-008,重复编号测试：该编号已在上一轮正向导入中存在，应返回外部编号冲突,,
+referenceText,referenceAudioUrl,referenceVideoUrl
+部分成功测试：这是一条应成功导入的文字参考数据,,
+,,
+,,
+部分成功测试：这是另一条应成功导入的文字参考数据,,
+,,

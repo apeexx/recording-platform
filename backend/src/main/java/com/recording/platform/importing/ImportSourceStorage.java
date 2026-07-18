@@ -84,10 +84,10 @@ public class ImportSourceStorage {
 					ImportRow row = byNumber.get(rowNumber);
 					if (failedRows.contains(rowNumber) && row != null) {
 						csv.printRecord(
-							row.externalItemId(), row.referenceText(), row.referenceAudioUrl(), row.referenceVideoUrl()
+							row.referenceText(), row.referenceAudioUrl(), row.referenceVideoUrl()
 						);
 					} else {
-						csv.printRecord("__redacted_row_" + rowNumber, "", "", "");
+						csv.printRecord("__redacted_row_" + rowNumber, "", "");
 					}
 				}
 			}

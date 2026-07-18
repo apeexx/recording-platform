@@ -56,10 +56,8 @@ class TaskDomainMappingTests {
 
 		assertCollection(TaskItem.class, "task_items");
 		assertCompoundIndex(TaskItem.class, true, "taskId", "itemCode");
-		CompoundIndex externalItem = findCompoundIndex(TaskItem.class, "taskId", "externalItemId");
-		assertThat(externalItem.unique()).isTrue();
-		assertThat(externalItem.sparse()).isFalse();
-		assertThat(externalItem.partialFilter()).contains("externalItemId").contains("$type");
+		assertThat(Arrays.stream(TaskItem.class.getDeclaredFields()).map(Field::getName))
+			.doesNotContain("externalItemId");
 		CompoundIndex collectorPending = findCompoundIndex(TaskItem.class, "collectorId");
 		assertThat(collectorPending.unique()).isTrue();
 		assertThat(collectorPending.partialFilter()).contains("RECORDING_PENDING");

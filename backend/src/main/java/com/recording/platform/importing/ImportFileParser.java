@@ -22,7 +22,7 @@ import org.springframework.stereotype.Component;
 public class ImportFileParser {
 	public static final int DEFAULT_MAX_ROWS = 50_000;
 	public static final List<String> COLUMNS = List.of(
-		"externalItemId", "referenceText", "referenceAudioUrl", "referenceVideoUrl"
+		"referenceText", "referenceAudioUrl", "referenceVideoUrl"
 	);
 	private final int maxRows;
 
@@ -67,8 +67,7 @@ public class ImportFileParser {
 					record.getRecordNumber() + 1,
 					blankToNull(record.get(COLUMNS.get(0))),
 					blankToNull(record.get(COLUMNS.get(1))),
-					blankToNull(record.get(COLUMNS.get(2))),
-					blankToNull(record.get(COLUMNS.get(3)))
+					blankToNull(record.get(COLUMNS.get(2)))
 				));
 			}
 			return rows;
@@ -93,7 +92,7 @@ public class ImportFileParser {
 		return new ApiException(
 			HttpStatus.UNPROCESSABLE_ENTITY,
 			"IMPORT_HEADER_INVALID",
-			"导入表头必须依次为 externalItemId、referenceText、referenceAudioUrl、referenceVideoUrl"
+			"导入表头必须依次为 referenceText、referenceAudioUrl、referenceVideoUrl"
 		);
 	}
 

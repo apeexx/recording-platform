@@ -10,9 +10,6 @@ import java.util.Collection;
 public interface TaskItemStore {
 	TaskItem save(TaskItem item);
 	Optional<TaskItem> findById(String id);
-	default Optional<TaskItem> findByTaskIdAndExternalItemId(String taskId, String externalItemId) {
-		return Optional.empty();
-	}
 	default Optional<TaskItem> findByTaskIdAndCreationOperationId(String taskId, String operationId) {
 		return Optional.empty();
 	}

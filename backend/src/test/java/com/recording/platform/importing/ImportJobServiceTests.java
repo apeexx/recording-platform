@@ -52,7 +52,7 @@ class ImportJobServiceTests {
 			"https://signed.example.com/private?token=must-not-leak"
 		)).doReturn(created).when(itemCreation).add(
 			eq("task-1"),
-			argThat((AddTaskItemCommand command) -> "bad-2".equals(command.externalItemId())),
+			argThat((AddTaskItemCommand command) -> "第二条".equals(command.referenceText())),
 			any(),
 			any()
 		);
@@ -67,9 +67,9 @@ class ImportJobServiceTests {
 		);
 		MockMultipartFile file = new MockMultipartFile(
 			"file", "items.csv", "text/csv",
-			("externalItemId,referenceText,referenceAudioUrl,referenceVideoUrl\n"
-				+ "good-1,第一条,https://signed-success.example/audio.wav?token=success-token,\n"
-				+ "bad-2,第二条,,\n").getBytes()
+			("referenceText,referenceAudioUrl,referenceVideoUrl\n"
+				+ "第一条,https://signed-success.example/audio.wav?token=success-token,\n"
+				+ "第二条,,\n").getBytes()
 		);
 		PlatformPrincipal admin = new PlatformPrincipal(
 			"session-1", "admin-1", "admin", "管理员", UserRole.ADMIN, SessionType.WEB, false
@@ -110,14 +110,14 @@ class ImportJobServiceTests {
 		doReturn(new TaskItem()).when(itemCreation).add(eq("task-1"), any(), any(), any());
 		org.mockito.Mockito.when(parser.parse(any(), any()))
 			.thenThrow(new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "IMPORT_FILE_INVALID", "解析失败"))
-			.thenReturn(List.of(new ImportRow(2, "row-1", "第一条", null, null)));
+			.thenReturn(List.of(new ImportRow(2, "第一条", null, null)));
 		ImportJobService service = new ImportJobService(
 			jobs, parser, itemCreation, new ImportSourceStorage(tempDir), Runnable::run,
 			Clock.fixed(Instant.parse("2026-07-11T12:00:00Z"), ZoneOffset.UTC)
 		);
 		MockMultipartFile file = new MockMultipartFile(
 			"file", "items.csv", "text/csv",
-			("externalItemId,referenceText,referenceAudioUrl,referenceVideoUrl\nrow-1,第一条,,\n").getBytes()
+			("referenceText,referenceAudioUrl,referenceVideoUrl\n第一条,,\n").getBytes()
 		);
 		PlatformPrincipal admin = new PlatformPrincipal(
 			"session-1", "admin-1", "admin", "管理员", UserRole.ADMIN, SessionType.WEB, false
@@ -144,7 +144,7 @@ class ImportJobServiceTests {
 		Files.createDirectories(staleSource.getParent());
 		Files.writeString(
 			staleSource,
-			"externalItemId,referenceText,referenceAudioUrl,referenceVideoUrl\nrow-1,第一条,,\n"
+			"referenceText,referenceAudioUrl,referenceVideoUrl\n第一条,,\n"
 		);
 		ImportJob active = recoverableJob("job-active", Instant.parse("2026-07-11T12:10:00Z"));
 		jobs.save(active);
@@ -152,7 +152,7 @@ class ImportJobServiceTests {
 		Files.createDirectories(activeSource.getParent());
 		Files.writeString(
 			activeSource,
-			"externalItemId,referenceText,referenceAudioUrl,referenceVideoUrl\nrow-2,第二条,,\n"
+			"referenceText,referenceAudioUrl,referenceVideoUrl\n第二条,,\n"
 		);
 		ImportJobService service = new ImportJobService(
 			jobs,
@@ -196,10 +196,10 @@ class ImportJobServiceTests {
 		Files.createDirectories(source.getParent());
 		Files.writeString(
 			source,
-			"externalItemId,referenceText,referenceAudioUrl,referenceVideoUrl\n"
-				+ "row-1,第一条,,\n"
-				+ "row-2,第二条,,\n"
-				+ "row-3,第三条,,\n"
+			"referenceText,referenceAudioUrl,referenceVideoUrl\n"
+				+ "第一条,,\n"
+				+ "第二条,,\n"
+				+ "第三条,,\n"
 		);
 		ImportJobService service = new ImportJobService(
 			jobs,
@@ -244,8 +244,8 @@ class ImportJobServiceTests {
 		);
 		MockMultipartFile file = new MockMultipartFile(
 			"file", "items.csv", "text/csv",
-			("externalItemId,referenceText,referenceAudioUrl,referenceVideoUrl\n"
-				+ "row-1,第一条,,\n").getBytes()
+			("referenceText,referenceAudioUrl,referenceVideoUrl\n"
+				+ "第一条,,\n").getBytes()
 		);
 		PlatformPrincipal admin = new PlatformPrincipal(
 			"session-1", "admin-1", "admin", "管理员", UserRole.ADMIN, SessionType.WEB, false
@@ -276,8 +276,8 @@ class ImportJobServiceTests {
 		);
 		MockMultipartFile file = new MockMultipartFile(
 			"file", "items.csv", "text/csv",
-			("externalItemId,referenceText,referenceAudioUrl,referenceVideoUrl\n"
-				+ "row-1,第一条,,\nrow-2,第二条,,\n").getBytes()
+			("referenceText,referenceAudioUrl,referenceVideoUrl\n"
+				+ "第一条,,\n第二条,,\n").getBytes()
 		);
 		PlatformPrincipal admin = new PlatformPrincipal(
 			"session-1", "admin-1", "admin", "管理员", UserRole.ADMIN, SessionType.WEB, false
@@ -306,9 +306,9 @@ class ImportJobServiceTests {
 			Clock.fixed(Instant.parse("2026-07-11T12:00:00Z"), ZoneOffset.UTC)
 		);
 		StringBuilder csv = new StringBuilder(
-			"externalItemId,referenceText,referenceAudioUrl,referenceVideoUrl\n"
+			"referenceText,referenceAudioUrl,referenceVideoUrl\n"
 		);
-		for (int index = 1; index <= 1005; index++) csv.append("row-").append(index).append(",文本,,\n");
+		for (int index = 1; index <= 1005; index++) csv.append("文本 ").append(index).append(",,\n");
 		MockMultipartFile file = new MockMultipartFile(
 			"file", "large.csv", "text/csv", csv.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8)
 		);
