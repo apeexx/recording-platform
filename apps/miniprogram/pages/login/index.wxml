@@ -1,6 +1,8 @@
 <view class="login-page">
-  <view class="brand-mark"><image src="/assets/icons/default-collector-avatar.svg"/></view>
-  <view class="brand-title">录音任务平台</view><view class="brand-copy">安全、便捷地完成语音数据采集</view>
+  <view class="brand-title">砚数声采</view>
+  <view class="brand-mark"><image src="/assets/branding/yanshu-avatar-144.png"/></view>
+  <view class="brand-slogan">让声音成为时光的画笔</view>
+  <view class="brand-copy">安全、便捷地完成语音数据采集</view>
   <view class="login-card">
     <block wx:if="{{mode==='wechat'}}">
       <view class="mode-title">微信快捷登录</view><view class="mode-copy">点击按钮，即可使用当前微信身份进入首页</view>
@@ -8,8 +10,8 @@
     </block>
     <block wx:else>
       <view class="mode-title">账号密码登录</view><view class="mode-copy">使用个人中心设置的数字账号跨设备登录</view>
-      <input class="input" type="number" maxlength="12" placeholder="6–12 位数字账号" data-field="account" bindinput="input"/>
-      <input class="input" password placeholder="请输入密码" data-field="password" bindinput="input"/>
+      <input class="login-input" type="number" maxlength="12" placeholder="6–12 位数字账号" data-field="account" bindinput="input"/>
+      <input class="login-input" password placeholder="请输入密码" data-field="password" bindinput="input"/>
       <button class="account-button" loading="{{loading}}" bindtap="accountLogin">登录</button>
     </block>
     <view wx:if="{{error}}" class="error">{{error}}</view>

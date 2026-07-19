@@ -1,6 +1,5 @@
 <view class="page">
-  <view class="card profile-card" bindtap="openSettings"><image class="profile-avatar" src="{{avatarSrc}}"/><view class="profile-copy"><view class="title">{{user.name||'录音人员'}}</view><view class="subtle">内部编号：{{user.internalUserNo}}</view><view class="profile-state {{user.profileComplete?'complete':''}}">{{user.profileComplete?'资料已完善':'待完善资料'}}</view></view><view class="chevron">›</view></view>
-  <view wx:if="{{error}}" class="error">{{error}}</view>
+  <view class="card profile-card" bindtap="openSettings"><image class="profile-avatar" src="{{avatarSrc}}"/><view class="profile-copy"><view class="title">{{user.name||'录音人员'}}</view><view class="subtle">用户 ID：{{user.userId||'-'}}</view><view class="profile-state {{user.profileComplete?'complete':''}}">资料状态：{{user.profileComplete?'已完善':'待完善'}}</view></view><view class="chevron">›</view></view>
   <view class="grid">
     <view class="card center"><view class="metric">{{summary.cumulativeSubmissions||0}}</view><view class="subtle">累计提交</view></view>
     <view class="card center"><view class="metric">{{summary.currentCompletedCount||0}}</view><view class="subtle">有效完成</view></view>
@@ -10,11 +9,17 @@
     <view class="card center"><view class="metric">{{summary.discardCount||0}}</view><view class="subtle">废弃次数</view></view>
   </view>
   <view class="title section-title">提交记录</view>
-  <view wx:if="{{!loading&&!submissions.length}}" class="empty">暂无提交记录</view>
-  <view wx:for="{{submissions}}" wx:key="operationId" class="card">
-    <view class="row"><text>{{item.submittedAtText}}</text><view class="tag">{{item.statusText}}</view></view>
-    <view class="subtle">时长 {{item.durationText}} · {{item.audioPresent?'录音':''}} {{item.textPresent?'文字':''}}</view>
-    <view wx:if="{{item.reviewConclusion}}">审核：{{item.reviewConclusion}}</view>
+  <view wx:if="{{loading}}" class="records-state">正在加载提交记录</view>
+  <view wx:elif="{{error}}" class="records-state error">加载失败：{{error}}</view>
+  <view wx:elif="{{!submissions.length}}" class="records-state empty">暂无提交记录</view>
+  <view wx:else>
+    <view wx:for="{{submissions}}" wx:key="operationId" class="card record-card">
+      <view class="row"><text>提交时间：{{item.submittedAtText}}</text><view class="tag">{{item.statusText}}</view></view>
+      <view class="record-detail">审核/条目状态：{{item.statusText}}</view>
+      <view class="record-detail">结果类型：{{item.resultTypeText}}</view>
+      <view class="record-detail">音频时长：{{item.durationText}}</view>
+      <view wx:if="{{item.reviewConclusion}}" class="record-detail">审核结论：{{item.reviewConclusion}}</view>
+    </view>
   </view>
   <button class="button secondary" bindtap="logout">退出登录</button>
 </view>

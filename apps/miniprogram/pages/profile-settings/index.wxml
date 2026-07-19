@@ -1,1 +1,35 @@
-<view class="page settings-page"><view class="card avatar-card"><image class="avatar" src="{{avatarSrc}}"/><view><view class="avatar-title">个人头像</view><view class="subtle">可使用微信头像，也可恢复默认头像</view></view></view><view class="avatar-actions"><button class="small" open-type="chooseAvatar" bindchooseavatar="chooseAvatar">选择微信头像</button><button class="small ghost" bindtap="restoreAvatar">恢复默认</button></view><view class="card section"><view class="section-head"><image src="/assets/icons/id-card.svg"/><view><view class="section-title">基本信息</view><view class="subtle">用于账号识别和任务归属</view></view></view><view class="field"><view class="label"><image src="/assets/icons/signature.svg"/>姓名</view><input class="input" maxlength="64" value="{{name}}" placeholder="请输入真实姓名" data-field="name" bindinput="input"/></view><view class="field"><view class="label">数字登录账号</view><input class="input" type="number" maxlength="12" disabled="{{profile.profileComplete}}" value="{{account}}" placeholder="6–12 位数字，首位不能为 0" data-field="account" bindinput="input"/></view><block wx:if="{{!profile.profileComplete}}"><input class="input" password placeholder="登录密码（至少 8 个字符）" data-field="password" bindinput="input"/><input class="input" password placeholder="再次输入密码" data-field="confirmPassword" bindinput="input"/></block><button class="button" bindtap="save">{{profile.profileComplete?'保存姓名':'完成资料设置'}}</button></view><view wx:if="{{profile.profileComplete}}" class="card"><view class="section-title">修改密码</view><input class="input" password placeholder="当前密码" data-field="currentPassword" bindinput="input"/><input class="input" password placeholder="新密码（至少 8 个字符）" data-field="newPassword" bindinput="input"/><button class="button secondary" bindtap="changePassword">修改密码</button></view><view wx:if="{{error}}" class="error">{{error}}</view></view>
+<view class="page settings-page">
+  <view class="card avatar-card" bindtap="openAvatarSheet">
+    <image class="avatar" src="{{avatarSrc}}" mode="aspectFill"/>
+    <view class="avatar-content"><view class="avatar-title">个人头像</view><view class="subtle">点击选择微信头像、相册图片或默认头像</view></view>
+    <view class="avatar-chevron">›</view>
+  </view>
+
+  <view class="card section">
+    <view class="section-head"><image src="/assets/icons/id-card.svg"/><view><view class="section-title">基本信息</view><view class="subtle">用于账号识别和任务归属</view></view></view>
+    <view class="field"><view class="label"><image src="/assets/icons/signature.svg"/>姓名</view><input class="input" maxlength="64" value="{{name}}" placeholder="请输入真实姓名" data-field="name" bindinput="input"/></view>
+    <view class="field"><view class="label">数字登录账号</view><input class="input" type="number" maxlength="12" disabled="{{profile.profileComplete}}" value="{{account}}" placeholder="6–12 位数字，首位不能为 0" data-field="account" bindinput="input"/></view>
+    <block wx:if="{{!profile.profileComplete}}"><view class="field"><input class="input" password placeholder="登录密码（至少 8 个字符）" data-field="password" bindinput="input"/></view><view class="field"><input class="input" password placeholder="再次输入密码" data-field="confirmPassword" bindinput="input"/></view></block>
+    <button class="button" bindtap="save">{{profile.profileComplete?'保存姓名':'完成资料设置'}}</button>
+  </view>
+  <view wx:if="{{profile.profileComplete}}" class="card password-section"><view class="section-title">修改密码</view><view class="field"><input class="input" password placeholder="当前密码" data-field="currentPassword" bindinput="input"/></view><view class="field"><input class="input" password placeholder="新密码（至少 8 个字符）" data-field="newPassword" bindinput="input"/></view><button class="button secondary" bindtap="changePassword">修改密码</button></view>
+  <view wx:if="{{error}}" class="error">{{error}}</view>
+
+  <view wx:if="{{avatarSheetVisible}}" class="avatar-mask" bindtap="closeAvatarSheet">
+    <view class="avatar-sheet" catchtap="preventClose">
+      <view class="avatar-sheet-title">更换头像</view>
+      <button class="avatar-sheet-item" open-type="chooseAvatar" bindchooseavatar="chooseAvatar">使用微信头像</button>
+      <button class="avatar-sheet-item" bindtap="chooseFromAlbum">从相册选择</button>
+      <button class="avatar-sheet-item" bindtap="previewDefaultAvatar">恢复默认头像</button>
+      <button class="avatar-sheet-cancel" bindtap="closeAvatarSheet">取消</button>
+    </view>
+  </view>
+  <view wx:if="{{avatarPreviewVisible}}" class="avatar-mask" catchtap="preventClose">
+    <view class="avatar-preview">
+      <view class="avatar-sheet-title">确认头像</view>
+      <image class="avatar-preview-image" src="{{pendingAvatarMode === 'default' ? '/assets/icons/default-collector-avatar.svg' : pendingAvatarPath}}" mode="aspectFill"/>
+      <view class="subtle">保存后将同步到当前账号</view>
+      <view class="preview-actions"><button class="preview-cancel" disabled="{{avatarSaving}}" bindtap="closeAvatarPreview">返回</button><button class="preview-save" bindtap="saveAvatar" loading="{{avatarSaving}}" disabled="{{avatarSaving}}">保存头像</button></view>
+    </view>
+  </view>
+</view>
