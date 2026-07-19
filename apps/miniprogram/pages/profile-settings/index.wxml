@@ -1,9 +1,10 @@
 <view class="page settings-page">
-  <view class="card avatar-card" bindtap="openAvatarSheet">
+  <button class="card avatar-card" open-type="chooseAvatar" bindchooseavatar="chooseAvatar">
     <image class="avatar" src="{{avatarSrc}}" mode="aspectFill"/>
-    <view class="avatar-content"><view class="avatar-title">个人头像</view><view class="subtle">点击选择微信头像、相册图片或默认头像</view></view>
+    <view class="avatar-content"><view class="avatar-title">个人头像</view><view class="subtle">点击使用微信原生方式选择头像</view></view>
     <view class="avatar-chevron">›</view>
-  </view>
+  </button>
+  <button class="restore-avatar" bindtap="previewDefaultAvatar">恢复默认头像</button>
 
   <view class="card section">
     <view class="section-head"><image src="/assets/icons/id-card.svg"/><view><view class="section-title">基本信息</view><view class="subtle">用于账号识别和任务归属</view></view></view>
@@ -15,15 +16,6 @@
   <view wx:if="{{profile.profileComplete}}" class="card password-section"><view class="section-title">修改密码</view><view class="field"><input class="input" password placeholder="当前密码" data-field="currentPassword" bindinput="input"/></view><view class="field"><input class="input" password placeholder="新密码（至少 8 个字符）" data-field="newPassword" bindinput="input"/></view><button class="button secondary" bindtap="changePassword">修改密码</button></view>
   <view wx:if="{{error}}" class="error">{{error}}</view>
 
-  <view wx:if="{{avatarSheetVisible}}" class="avatar-mask" bindtap="closeAvatarSheet">
-    <view class="avatar-sheet" catchtap="preventClose">
-      <view class="avatar-sheet-title">更换头像</view>
-      <button class="avatar-sheet-item" open-type="chooseAvatar" bindchooseavatar="chooseAvatar">使用微信头像</button>
-      <button class="avatar-sheet-item" bindtap="chooseFromAlbum">从相册选择</button>
-      <button class="avatar-sheet-item" bindtap="previewDefaultAvatar">恢复默认头像</button>
-      <button class="avatar-sheet-cancel" bindtap="closeAvatarSheet">取消</button>
-    </view>
-  </view>
   <view wx:if="{{avatarPreviewVisible}}" class="avatar-mask" catchtap="preventClose">
     <view class="avatar-preview">
       <view class="avatar-sheet-title">确认头像</view>

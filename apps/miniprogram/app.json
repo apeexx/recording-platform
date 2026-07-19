@@ -18,8 +18,8 @@
     "selectedColor": "#2563eb",
     "backgroundColor": "#ffffff",
     "list": [
-      {"pagePath": "pages/tasks/index", "text": "任务"},
-      {"pagePath": "pages/profile/index", "text": "我的"}
+      {"pagePath": "pages/tasks/index", "text": "任务", "iconPath": "assets/tabbar/tasks.png", "selectedIconPath": "assets/tabbar/tasks-active.png"},
+      {"pagePath": "pages/profile/index", "text": "我的", "iconPath": "assets/tabbar/profile.png", "selectedIconPath": "assets/tabbar/profile-active.png"}
     ]
   },
   "sitemapLocation": "sitemap.json"

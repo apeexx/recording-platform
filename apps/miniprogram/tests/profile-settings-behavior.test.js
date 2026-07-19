@@ -63,15 +63,6 @@ test('头像上传失败保留旧头像和预览，并显示中文 Toast',async(
   assert.equal(toasts[0].title,'头像保存失败，请重试')
 })
 
-test('相册选择失败显示可见中文 Toast',()=>{
-  const {page,toasts,wx}=loadPage()
-  wx.chooseMedia=options=>options.fail({errMsg:'chooseMedia:fail permission denied'})
-  page.chooseFromAlbum()
-  assert.equal(toasts.length,1)
-  assert.equal(toasts[0].icon,'none')
-  assert.equal(toasts[0].title,'图片选择失败，请重试')
-})
-
 test('自定义头像读取失败静默回退默认头像',async()=>{
   const {page,toasts}=loadPage({profile:{profileComplete:true,hasCustomAvatar:true},api:{avatar:async()=>{throw new Error('missing')}}})
   page.setData({avatarSrc:'/tmp/old-avatar.png'})
@@ -79,4 +70,45 @@ test('自定义头像读取失败静默回退默认头像',async()=>{
   assert.equal(page.data.avatarSrc,'/assets/icons/default-collector-avatar.svg')
   assert.equal(page.data.error,'')
   assert.equal(toasts.length,0)
+})
+
+test('资料成功重新加载会清除历史请求错误',async()=>{
+  const {page}=loadPage({profile:{profileComplete:true,hasCustomAvatar:false,name:'测试用户',account:'123456'}})
+  page.setData({error:'请求资源不存在',avatarSrc:'/tmp/old-avatar.png'})
+  await page.load()
+  assert.equal(page.data.error,'')
+  assert.equal(page.data.avatarSrc,'/assets/icons/default-collector-avatar.svg')
+})
+
+test('较慢的资料加载完成时不会覆盖加载期间产生的新错误',async()=>{
+  let resolveProfile
+  const pendingProfile=new Promise(resolve=>{resolveProfile=resolve})
+  // 用延迟完成的 refreshProfile 模拟页面加载与用户操作并发。
+  const source=fs.readFileSync(path.resolve('pages/profile-settings/index.js'),'utf8')
+  let definition
+  vm.runInNewContext(source,{Page:value=>{definition=value},wx:{showToast(){},showModal(){},reLaunch(){}},getApp:()=>({globalData:{api:{avatar:async()=>'/tmp/avatar.png'},session:{refreshProfile:()=>pendingProfile}}})})
+  const slowPage={...definition,data:{...definition.data},setData(patch){Object.assign(this.data,patch)}}
+  const loading=slowPage.load()
+  slowPage.setData({error:'头像保存失败，请重试'})
+  resolveProfile({profileComplete:true,hasCustomAvatar:false})
+  await loading
+  assert.equal(slowPage.data.error,'头像保存失败，请重试')
+})
+
+test('没有自定义头像时不会请求头像文件',async()=>{
+  let avatarCalls=0
+  const {page}=loadPage({profile:{profileComplete:true,hasCustomAvatar:false},api:{avatar:async()=>{avatarCalls+=1;return '/tmp/avatar.png'}}})
+  await page.load()
+  assert.equal(avatarCalls,0)
+})
+
+test('恢复默认头像先进入预览，确认后才删除',async()=>{
+  let deleteCalls=0
+  const {page}=loadPage({api:{deleteAvatar:async()=>{deleteCalls+=1;return {profileComplete:true,hasCustomAvatar:false}}}})
+  page.previewDefaultAvatar()
+  assert.equal(deleteCalls,0)
+  assert.equal(page.data.avatarPreviewVisible,true)
+  assert.equal(page.data.pendingAvatarMode,'default')
+  await page.saveAvatar()
+  assert.equal(deleteCalls,1)
 })
