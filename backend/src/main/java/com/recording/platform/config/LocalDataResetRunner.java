@@ -3,6 +3,7 @@ package com.recording.platform.config;
 import com.recording.platform.identity.service.BcryptPasswordPolicy;
 import com.recording.platform.media.RecordingMediaStorage;
 import com.recording.platform.voice.VoiceGenerationStorage;
+import com.recording.platform.identity.service.CollectorAvatarService;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -25,6 +26,7 @@ public final class LocalDataResetRunner implements ApplicationRunner {
 	private final MongoTemplate mongo;
 	private final RecordingMediaStorage recordings;
 	private final VoiceGenerationStorage voices;
+	private final CollectorAvatarService avatars;
 	private final String initialAdminUsername;
 	private final String initialAdminPassword;
 	private final String confirmation;
@@ -33,6 +35,7 @@ public final class LocalDataResetRunner implements ApplicationRunner {
 		MongoTemplate mongo,
 		RecordingMediaStorage recordings,
 		VoiceGenerationStorage voices,
+		CollectorAvatarService avatars,
 		@Value("${recording.initial-admin.username:}") String initialAdminUsername,
 		@Value("${recording.initial-admin.password:}") String initialAdminPassword,
 		@Value("${recording.local-reset.confirmation:}") String confirmation
@@ -40,6 +43,7 @@ public final class LocalDataResetRunner implements ApplicationRunner {
 		this.mongo = mongo;
 		this.recordings = recordings;
 		this.voices = voices;
+		this.avatars = avatars;
 		this.initialAdminUsername = initialAdminUsername;
 		this.initialAdminPassword = initialAdminPassword;
 		this.confirmation = confirmation;
@@ -61,11 +65,13 @@ public final class LocalDataResetRunner implements ApplicationRunner {
 
 		Path recordingRoot = validateStorageRoot(recordings.rootPath());
 		Path voiceRoot = validateStorageRoot(voices.rootPath());
+		Path avatarRoot = validateStorageRoot(avatars.rootPath());
 		mongo.getDb().drop();
 		deleteChildren(recordingRoot);
 		if (!voiceRoot.equals(recordingRoot)) {
 			deleteChildren(voiceRoot);
 		}
+		if (!avatarRoot.equals(recordingRoot) && !avatarRoot.equals(voiceRoot)) deleteChildren(avatarRoot);
 	}
 
 	static Path validateStorageRoot(Path configured) {
@@ -78,7 +84,8 @@ public final class LocalDataResetRunner implements ApplicationRunner {
 		Path repositoryStorage = repository.resolve("backend/storage").normalize();
 		String leaf = root.getFileName() == null ? "" : root.getFileName().toString();
 		boolean approvedLeaf = leaf.equalsIgnoreCase("recordings")
-			|| leaf.equalsIgnoreCase("recording-data") || leaf.equalsIgnoreCase("voice-generation");
+			|| leaf.equalsIgnoreCase("recording-data") || leaf.equalsIgnoreCase("voice-generation")
+			|| leaf.equalsIgnoreCase("avatars");
 		boolean unsafeRepositoryPath = root.startsWith(repository) && !root.startsWith(repositoryStorage);
 		boolean containsRepository = repository.startsWith(root);
 		if (root.equals(filesystemRoot) || root.equals(userHome) || root.equals(working) || root.getNameCount() < 3

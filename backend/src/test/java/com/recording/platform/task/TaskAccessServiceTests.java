@@ -52,6 +52,9 @@ class TaskAccessServiceTests {
 		user.setId("collector-1");
 		user.setRole(UserRole.COLLECTOR);
 		user.setStatus(UserStatus.ACTIVE);
+		user.setUsername("123456");
+		user.setName("采集员");
+		user.setPasswordHash("encoded");
 		when(users.findById("collector-1")).thenReturn(Optional.of(user));
 		grants = new InMemoryGrantStore();
 		requests = new InMemoryAccessRequestStore();

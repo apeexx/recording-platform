@@ -41,6 +41,9 @@ public class UserAccount {
 	private boolean firstPasswordChangeRequired;
 	private String wechatAppId;
 	private String wechatOpenId;
+	private String avatarPath;
+	private String avatarContentType;
+	private Instant avatarUpdatedAt;
 	private Instant createdAt;
 	private Instant updatedAt;
 }

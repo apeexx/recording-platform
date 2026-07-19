@@ -1,0 +1,3 @@
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path')
+test('登录页和独立资料页包含双登录、微信头像与默认耳机头像',()=>{const login=fs.readFileSync(path.resolve('pages/login/index.wxml'),'utf8'),profile=fs.readFileSync(path.resolve('pages/profile-settings/index.wxml'),'utf8'),app=JSON.parse(fs.readFileSync(path.resolve('app.json'),'utf8'));assert.match(login,/微信快捷登录/);assert.match(login,/切换账号登录/);assert.match(profile,/chooseAvatar/);assert.match(profile,/恢复默认/);assert.ok(app.pages.includes('pages/profile-settings/index'))})
+test('任务入口统一使用资料完整性守卫',()=>{for(const file of ['pages/tasks/index.js','pages/work-list/index.js','pages/work/index.js'])assert.match(fs.readFileSync(path.resolve(file),'utf8'),/requireCompleteProfile/)})

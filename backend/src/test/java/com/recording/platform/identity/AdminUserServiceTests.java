@@ -146,10 +146,14 @@ class AdminUserServiceTests {
 		when(users.findById("reviewer-1")).thenReturn(Optional.of(reviewer));
 		when(users.resetBackendPasswordIfActive(org.mockito.ArgumentMatchers.eq("reviewer-1"), any(), any()))
 			.thenReturn(Optional.of(reviewer));
+		when(users.findById("collector-1")).thenReturn(Optional.of(collector));
+		when(users.resetCollectorPasswordIfActive(org.mockito.ArgumentMatchers.eq("collector-1"), any(), any()))
+			.thenReturn(Optional.of(collector));
 		AdminUserService service = new AdminUserService(users, sessions, encoder, CLOCK);
 
 		assertThat(service.search(" 张 ", UserRole.COLLECTOR, 0, 20).getContent()).hasSize(1);
 		service.resetPassword("reviewer-1", "NewPassword-1");
+		service.resetPassword("collector-1", "CollectorPassword-1");
 
 		verify(users).resetBackendPasswordIfActive(
 			org.mockito.ArgumentMatchers.eq("reviewer-1"),
@@ -157,5 +161,11 @@ class AdminUserServiceTests {
 			org.mockito.ArgumentMatchers.eq(Instant.parse("2026-07-11T12:00:00Z"))
 		);
 		verify(sessions).revokeAll("reviewer-1");
+		verify(users).resetCollectorPasswordIfActive(
+			org.mockito.ArgumentMatchers.eq("collector-1"),
+			org.mockito.ArgumentMatchers.argThat((String hash) -> encoder.matches("CollectorPassword-1", hash)),
+			org.mockito.ArgumentMatchers.eq(Instant.parse("2026-07-11T12:00:00Z"))
+		);
+		verify(sessions).revokeAll("collector-1");
 	}
 }

@@ -15,6 +15,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.dao.DuplicateKeyException;
 
 @Service
 public class AdminUserService {
@@ -88,15 +89,35 @@ public class AdminUserService {
 		}
 		UserAccount user = users.findById(userId)
 			.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "USER_NOT_FOUND", "用户不存在"));
-		if (user.getRole() == UserRole.COLLECTOR) {
-			throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "INVALID_BACKEND_ROLE", "只能重置后台账号密码");
-		}
-		UserAccount saved = users.resetBackendPasswordIfActive(
-			userId, passwordEncoder.encode(newPassword), Instant.now(clock)
-		).orElseThrow(() -> new ApiException(HttpStatus.CONFLICT, "ACCOUNT_STATE_CHANGED", "账号状态已变化，请重试"));
+		UserAccount saved = (user.getRole() == UserRole.COLLECTOR
+			? users.resetCollectorPasswordIfActive(userId, passwordEncoder.encode(newPassword), Instant.now(clock))
+			: users.resetBackendPasswordIfActive(userId, passwordEncoder.encode(newPassword), Instant.now(clock)))
+			.orElseThrow(() -> new ApiException(HttpStatus.CONFLICT, "ACCOUNT_STATE_CHANGED", "账号状态已变化，请重试"));
 		sessions.revokeAll(userId);
 		return UserResponse.from(saved);
 	}
+
+	public UserResponse updateCollectorAccount(String userId, String account) {
+		String normalized = account == null ? "" : account.trim();
+		if (!CollectorProfilePolicy.isValidAccount(normalized)) {
+			throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "INVALID_COLLECTOR_ACCOUNT", "登录账号必须为 6 到 12 位数字且首位不能为 0");
+		}
+		UserAccount current = users.findById(userId)
+			.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "USER_NOT_FOUND", "用户不存在"));
+		if (current.getRole() != UserRole.COLLECTOR) {
+			throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "INVALID_COLLECTOR", "只能修改录音人员账号");
+		}
+		var existing = users.findByUsername(normalized);
+		if (existing.isPresent() && !userId.equals(existing.get().getId())) throw usernameExists();
+		try {
+			UserAccount saved = users.updateCollectorAccountIfActive(userId, normalized, Instant.now(clock))
+				.orElseThrow(() -> new ApiException(HttpStatus.CONFLICT, "ACCOUNT_STATE_CHANGED", "账号状态已变化，请重试"));
+			sessions.revokeAll(userId);
+			return UserResponse.from(saved);
+		} catch (DuplicateKeyException exception) { throw usernameExists(); }
+	}
+
+	private ApiException usernameExists() { return new ApiException(HttpStatus.CONFLICT, "USERNAME_EXISTS", "该登录账号已被使用"); }
 
 	public UserResponse disable(String userId) {
 		UserAccount user = users.findById(userId)

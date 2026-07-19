@@ -1,6 +1,6 @@
 # 录音任务平台
 
-录音任务平台用于管理录音任务的创建、领取、录制、上传和审核流程。当前仓库已具备管理员/审核员 Web 管理闭环、MongoDB 任务与审核后端闭环，以及原生微信小程序的登录、实名、授权申请、任务领取、录音/文字提交、释放、自动下一条和个人统计页面。
+录音任务平台用于管理录音任务的创建、领取、录制、上传和审核流程。当前仓库已具备管理员/审核员 Web 管理闭环、MongoDB 任务与审核后端闭环，以及原生微信小程序的微信/数字账号双登录、独立个人资料、头像、授权申请、任务领取、录音/文字提交、释放、自动下一条和个人统计页面。
 
 ## 项目定位
 
@@ -82,6 +82,7 @@ MINIMAX_API_BASE_URL=https://api.minimaxi.com
 VOICE_GENERATION_STORAGE_DIR=backend/storage/voice-generation
 MONGODB_URI=mongodb://localhost:27017/recording_platform
 RECORDING_STORAGE_DIR=backend/storage/recordings
+AVATAR_STORAGE_DIR=backend/storage/avatars
 RECORDING_PATH_MIGRATION_ENABLED=false
 REMOTE_MEDIA_ALLOW_HTTP=false
 REMOTE_MEDIA_TIMEOUT_SECONDS=15
@@ -126,6 +127,7 @@ Windows PowerShell 本地联调可使用一键启动脚本：
 - 已登录 Web 用户先调用 `GET /api/auth/web/csrf` 获取可读的 `XSRF-TOKEN` Cookie；执行退出、改密或管理员写操作等非安全方法时，同时通过 `X-XSRF-TOKEN` 请求头回传该值。首次登录待改密账号也允许获取 CSRF token。
 - 同一后台账号只允许一个活动 Web 会话。重复登录返回 `409 ACCOUNT_IN_USE` 和短时一次性 `takeoverToken`；确认接管后旧会话返回 `401 SESSION_REPLACED`。
 - 小程序只向后端提交 `wx.login` 临时 `code`。后端使用 `WECHAT_APP_ID`、`WECHAT_APP_SECRET` 调用微信 `jscode2session`，不接受客户端直接提交 OpenID；兼容微信以 `text/plain` 返回 JSON 内容的实际响应，且不保存或输出 `session_key`；小程序 Bearer token 默认 30 天。
+- 微信登录和 6–12 位数字账号密码登录映射到同一个采集员用户 ID。首次资料设置原子写入姓名、唯一数字账号和密码；任务列表允许浏览，但申请、待办、领取、继续及提交前后端均校验资料完整性。自定义头像保存到 `AVATAR_STORAGE_DIR`，仅支持魔数有效的 JPEG/PNG/WebP、最大 5MB；MongoDB 只保存相对路径和内容类型。
 - `/api/voice-generation/**` 与 `/api/admin/**` 仅 `ADMIN` 可访问；除 Web/微信登录与接管接口外，其余 `/api/**` 默认要求认证。
 - 任务管理、授权管理、任务条目管理和导入仅 `ADMIN` 可写；`COLLECTOR` 通过小程序 Bearer token 申请权限、领取、提交和释放本人条目；`REVIEWER`/`ADMIN` 可驳回待审结果。
 - Web Cookie 写请求必须携带 CSRF token。只有不含 `REC_WEB_SESSION` Cookie 的小程序 Bearer 采集写请求豁免 CSRF，夹带 Bearer 头不能绕过 Web CSRF。缺失或失效返回 `403 CSRF_TOKEN_INVALID`，Web 请求层刷新 token 后仅重试一次；真实角色越权仍返回 `403 ACCESS_DENIED`。
@@ -143,10 +145,18 @@ GET  /api/auth/web/csrf
 POST /api/auth/web/logout
 PUT  /api/auth/web/password
 POST /api/auth/miniprogram/login
+POST /api/auth/miniprogram/account-login
+GET  /api/auth/miniprogram/profile
+POST /api/auth/miniprogram/profile/complete
+PUT  /api/auth/miniprogram/name
+PUT  /api/auth/miniprogram/password
+POST / GET / DELETE /api/auth/miniprogram/avatar
 PUT  /api/auth/miniprogram/name
 POST /api/admin/users
 GET  /api/admin/users?page=0&size=20
 POST /api/admin/users/{userId}/disable
+PUT  /api/admin/users/{userId}/collector-account
+POST /api/admin/users/{userId}/reset-password
 ```
 
 ## 任务池、录音媒体与导入

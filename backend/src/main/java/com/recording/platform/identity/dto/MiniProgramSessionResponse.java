@@ -8,8 +8,11 @@ public record MiniProgramSessionResponse(
 	String token,
 	String userId,
 	String internalUserNo,
+	String account,
 	String name,
-	UserRole role
+	UserRole role,
+	boolean profileComplete,
+	boolean hasCustomAvatar
 ) {
 	public static MiniProgramSessionResponse from(MiniProgramLoginResult result) {
 		UserAccount user = result.user();
@@ -17,8 +20,11 @@ public record MiniProgramSessionResponse(
 			result.token(),
 			user.getId(),
 			user.getInternalUserNo(),
+			user.getUsername(),
 			user.getName(),
-			user.getRole()
+			user.getRole(),
+			com.recording.platform.identity.service.CollectorProfilePolicy.isComplete(user),
+			user.getAvatarPath() != null && !user.getAvatarPath().isBlank()
 		);
 	}
 }

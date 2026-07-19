@@ -5,6 +5,7 @@ import com.recording.platform.identity.model.UserAccount;
 import com.recording.platform.identity.model.UserRole;
 import com.recording.platform.identity.model.UserStatus;
 import com.recording.platform.identity.store.UserStore;
+import com.recording.platform.identity.service.CollectorProfileGuard;
 import com.recording.platform.security.PlatformPrincipal;
 import com.recording.platform.task.model.AccessRequestStatus;
 import com.recording.platform.task.model.GrantStatus;
@@ -28,6 +29,7 @@ public class TaskAccessService {
 	private final TaskGrantStore grants;
 	private final TaskAccessRequestStore requests;
 	private final Clock clock;
+	private final CollectorProfileGuard profileGuard;
 
 	public TaskAccessService(
 		TaskStore tasks,
@@ -41,10 +43,12 @@ public class TaskAccessService {
 		this.grants = grants;
 		this.requests = requests;
 		this.clock = clock;
+		this.profileGuard = new CollectorProfileGuard(users);
 	}
 
 	public TaskAccessRequest requestAccess(String taskId, PlatformPrincipal actor) {
 		requireRole(actor, UserRole.COLLECTOR);
+		profileGuard.requireComplete(actor);
 		requireTask(taskId);
 		requireActiveCollector(actor.userId());
 		if (grants.findActive(taskId, actor.userId()).isPresent()) {

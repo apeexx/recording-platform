@@ -39,3 +39,10 @@ test('鉴权媒体先下载为临时文件再交给播放器', async () => {
   assert.equal(await api.media('media-1'), 'wxfile://media')
   assert.equal(captured.header.Authorization, 'Bearer opaque-token')
 })
+
+test('自定义头像通过鉴权上传到后端持久化', async () => {
+  let captured
+  const api=loadApi({getStorageSync:()=>({token:'opaque-token'}),uploadFile:options=>{captured=options;options.success({statusCode:200,data:'{"hasCustomAvatar":true}'})}})
+  const result=await api.uploadAvatar('wxfile://avatar.png')
+  assert.equal(captured.name,'avatar');assert.equal(captured.header.Authorization,'Bearer opaque-token');assert.equal(result.hasCustomAvatar,true)
+})

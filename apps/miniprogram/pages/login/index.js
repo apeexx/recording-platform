@@ -1,7 +1,9 @@
 Page({
-  data:{loading:false,needsName:false,name:'',error:''},
-  onShow(){const state=getApp().globalData.session.current();if(state?.token&&state.user?.name)wx.switchTab({url:'/pages/tasks/index'})},
-  async login(){this.setData({loading:true,error:''});try{const user=await getApp().globalData.session.login();if(user.name)wx.switchTab({url:'/pages/tasks/index'});else this.setData({needsName:true})}catch(e){this.setData({error:e.message||'登录失败'})}finally{this.setData({loading:false})}},
-  nameInput(e){this.setData({name:e.detail.value})},
-  async saveName(){const name=this.data.name.trim();if(!name){this.setData({error:'请填写真实姓名'});return}this.setData({loading:true,error:''});try{await getApp().globalData.session.setName(name);wx.switchTab({url:'/pages/tasks/index'})}catch(e){this.setData({error:e.message||'保存失败'})}finally{this.setData({loading:false})}}
+  data:{mode:'wechat',account:'',password:'',loading:false,error:''},
+  onShow(){if(getApp().globalData.session.current()?.token)wx.switchTab({url:'/pages/tasks/index'})},
+  switchMode(){this.setData({mode:this.data.mode==='wechat'?'account':'wechat',error:''})},
+  input(e){this.setData({[e.currentTarget.dataset.field]:e.detail.value})},
+  async wechatLogin(){await this.perform(()=>getApp().globalData.session.login())},
+  async accountLogin(){if(!/^[1-9][0-9]{5,11}$/.test(this.data.account)){this.setData({error:'请输入 6–12 位非零开头数字账号'});return}await this.perform(()=>getApp().globalData.session.accountLogin(this.data.account,this.data.password))},
+  async perform(action){this.setData({loading:true,error:''});try{await action();wx.switchTab({url:'/pages/tasks/index'})}catch(e){this.setData({error:e.message||'登录失败'})}finally{this.setData({loading:false})}}
 })

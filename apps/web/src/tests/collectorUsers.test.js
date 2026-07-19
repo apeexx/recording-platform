@@ -1,0 +1,2 @@
+import{describe,it,expect}from'vitest';import{readFileSync}from'node:fs';import{join}from'node:path';
+describe('collector user management',()=>{it('provides collector search, account edit and password reset',()=>{const page=readFileSync(join(process.cwd(),'src/pages/admin/system/UsersPage.vue'),'utf8'),api=readFileSync(join(process.cwd(),'src/lib/userApi.js'),'utf8');expect(page).toContain("role:'COLLECTOR'");expect(page).toContain('修改账号');expect(page).toContain('重置密码');expect(api).toContain('/collector-account')})})

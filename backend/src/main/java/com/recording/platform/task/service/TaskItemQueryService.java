@@ -3,6 +3,8 @@ package com.recording.platform.task.service;
 import com.recording.platform.api.ApiException;
 import com.recording.platform.api.PageResponse;
 import com.recording.platform.identity.model.UserRole;
+import com.recording.platform.identity.service.CollectorProfileGuard;
+import com.recording.platform.identity.store.UserStore;
 import com.recording.platform.security.PlatformPrincipal;
 import com.recording.platform.task.model.TaskItem;
 import com.recording.platform.task.store.TaskItemStore;
@@ -21,15 +23,20 @@ import org.springframework.stereotype.Service;
 public class TaskItemQueryService {
 	private final TaskItemStore items;
 	private final TaskStore tasks;
-	public TaskItemQueryService(TaskItemStore items, TaskStore tasks) {
+	private final CollectorProfileGuard profileGuard;
+	@org.springframework.beans.factory.annotation.Autowired
+	public TaskItemQueryService(TaskItemStore items, TaskStore tasks, UserStore users) {
 		this.items = items;
 		this.tasks = tasks;
+		this.profileGuard = new CollectorProfileGuard(users);
 	}
+	public TaskItemQueryService(TaskItemStore items, TaskStore tasks) { this.items=items; this.tasks=tasks; this.profileGuard=null; }
 
 	public PageResponse<CollectorTaskItemView> mine(
 		String taskId, CollectorWorkKind kind, int page, int size, PlatformPrincipal actor
 	) {
 		if (actor == null || actor.role() != UserRole.COLLECTOR) throw forbidden();
+		requireProfile(actor);
 		CollectorWorkKind normalizedKind = kind == null ? CollectorWorkKind.ALL : kind;
 		List<TaskItemStatus> statuses = switch (normalizedKind) {
 			case ALL -> List.of(TaskItemStatus.REWORK_PENDING, TaskItemStatus.RECORDING_PENDING);
@@ -56,11 +63,12 @@ public class TaskItemQueryService {
 			.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "TASK_ITEM_NOT_FOUND", "任务条目不存在"));
 		if (actor == null) throw forbidden();
 		if (actor.role() == UserRole.ADMIN || actor.role() == UserRole.REVIEWER) return item;
-		if (actor.role() == UserRole.COLLECTOR && actor.userId().equals(item.getCollectorId())) return item;
+		if (actor.role() == UserRole.COLLECTOR && actor.userId().equals(item.getCollectorId())) { requireProfile(actor); return item; }
 		throw forbidden();
 	}
 
 	private ApiException forbidden() {
 		return new ApiException(HttpStatus.FORBIDDEN, "TASK_ITEM_ACCESS_DENIED", "没有权限读取该任务条目");
 	}
+	private void requireProfile(PlatformPrincipal actor) { if (profileGuard != null) profileGuard.requireComplete(actor); }
 }

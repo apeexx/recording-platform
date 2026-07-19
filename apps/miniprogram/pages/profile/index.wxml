@@ -1,5 +1,5 @@
 <view class="page">
-  <view class="card"><view class="title">{{user.name||'采集员'}}</view><view class="subtle">用户ID：{{user.internalUserNo}}</view></view>
+  <view class="card profile-card" bindtap="openSettings"><image class="profile-avatar" src="{{avatarSrc}}"/><view class="profile-copy"><view class="title">{{user.name||'录音人员'}}</view><view class="subtle">内部编号：{{user.internalUserNo}}</view><view class="profile-state {{user.profileComplete?'complete':''}}">{{user.profileComplete?'资料已完善':'待完善资料'}}</view></view><view class="chevron">›</view></view>
   <view wx:if="{{error}}" class="error">{{error}}</view>
   <view class="grid">
     <view class="card center"><view class="metric">{{summary.cumulativeSubmissions||0}}</view><view class="subtle">累计提交</view></view>

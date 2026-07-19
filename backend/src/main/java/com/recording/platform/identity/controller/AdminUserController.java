@@ -14,6 +14,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.PutMapping;
+import com.recording.platform.identity.dto.UpdateCollectorAccountRequest;
 
 @RestController
 @RequestMapping("/api/admin/users")
@@ -58,5 +60,13 @@ public class AdminUserController {
 		@Valid @RequestBody ResetPasswordRequest request
 	) {
 		return users.resetPassword(userId, request.newPassword());
+	}
+
+	@PutMapping("/{userId}/collector-account")
+	public UserResponse updateCollectorAccount(
+		@PathVariable String userId,
+		@Valid @RequestBody UpdateCollectorAccountRequest request
+	) {
+		return users.updateCollectorAccount(userId, request.account());
 	}
 }

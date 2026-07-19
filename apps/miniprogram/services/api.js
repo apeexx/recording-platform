@@ -44,7 +44,14 @@ function multipartTextSubmit(itemId, fields) {
 module.exports = {
   operationId,
   login: body=>request('/api/auth/miniprogram/login',{method:'POST',data:body}),
+  accountLogin: body=>request('/api/auth/miniprogram/account-login',{method:'POST',data:body}),
+  profile: ()=>request('/api/auth/miniprogram/profile'),
+  completeProfile: body=>request('/api/auth/miniprogram/profile/complete',{method:'POST',data:body}),
   setName: name=>request('/api/auth/miniprogram/name',{method:'PUT',data:{name}}),
+  changePassword: body=>request('/api/auth/miniprogram/password',{method:'PUT',data:body}),
+  uploadAvatar: filePath=>new Promise((resolve,reject)=>wx.uploadFile({url:`${config.apiBaseUrl}/api/auth/miniprogram/avatar`,filePath,name:'avatar',header:{Authorization:`Bearer ${token()}`},success:res=>{let data={};try{data=JSON.parse(res.data||'{}')}catch(_){};res.statusCode>=200&&res.statusCode<300?resolve(data):reject(parseError({...res,data}))},fail:reject})),
+  avatar: ()=>downloadProtected('/api/auth/miniprogram/avatar'),
+  deleteAvatar: ()=>request('/api/auth/miniprogram/avatar',{method:'DELETE'}),
   tasks: ()=>request('/api/tasks?page=0&size=100'),
   task: id=>request(`/api/tasks/${encodeURIComponent(id)}`),
   versions: id=>request(`/api/tasks/${encodeURIComponent(id)}/versions`),
@@ -57,4 +64,8 @@ module.exports = {
   release: (id,revision,op)=>request(`/api/task-items/${encodeURIComponent(id)}/release`,{method:'POST',data:{operationId:op,expectedRevision:revision}}),
   myReport: ()=>request('/api/reports/me'),
   mySubmissions: (page=0)=>request(`/api/reports/me/submissions?page=${page}&size=20`)
+}
+
+function downloadProtected(path) {
+  return new Promise((resolve,reject)=>wx.downloadFile({url:`${config.apiBaseUrl}${path}`,header:{Authorization:`Bearer ${token()}`},success:res=>res.statusCode>=200&&res.statusCode<300?resolve(res.tempFilePath):reject(parseError({...res,data:{}})),fail:reject}))
 }

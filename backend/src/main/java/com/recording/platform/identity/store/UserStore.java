@@ -38,4 +38,35 @@ public interface UserStore {
 	}
 
 	Optional<UserAccount> updateCollectorNameIfActive(String userId, String name, Instant updatedAt);
+
+	default Optional<UserAccount> completeCollectorProfileIfActive(
+		String userId,
+		String username,
+		String name,
+		String passwordHash,
+		Instant updatedAt
+	) { return Optional.empty(); }
+
+	default Optional<UserAccount> updateCollectorPasswordIfActive(
+		String userId,
+		String expectedPasswordHash,
+		String passwordHash,
+		Instant updatedAt
+	) { return Optional.empty(); }
+
+	default Optional<UserAccount> updateCollectorAvatarIfActive(
+		String userId, String avatarPath, String contentType, Instant updatedAt
+	) { return Optional.empty(); }
+
+	default Optional<UserAccount> clearCollectorAvatarIfActive(String userId, Instant updatedAt) {
+		return Optional.empty();
+	}
+
+	default Optional<UserAccount> updateCollectorAccountIfActive(String userId, String account, Instant updatedAt) {
+		return Optional.empty();
+	}
+
+	default Optional<UserAccount> resetCollectorPasswordIfActive(String userId, String passwordHash, Instant updatedAt) {
+		return Optional.empty();
+	}
 }

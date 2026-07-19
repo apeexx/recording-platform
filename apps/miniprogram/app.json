@@ -4,7 +4,8 @@
     "pages/tasks/index",
 	"pages/work-list/index",
     "pages/work/index",
-    "pages/profile/index"
+    "pages/profile/index",
+    "pages/profile-settings/index"
   ],
   "window": {
     "navigationBarTitleText": "录音任务平台",

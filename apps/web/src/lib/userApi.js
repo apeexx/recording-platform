@@ -5,5 +5,6 @@ export const userApi = {
   search(params = {}) { return httpRequest(`/api/admin/users/search${queryString(params)}`) },
   create(data) { return httpRequest('/api/admin/users', { method: 'POST', json: data }) },
   disable(userId) { return httpRequest(`/api/admin/users/${encodeURIComponent(userId)}/disable`, { method: 'POST' }) },
-  resetPassword(userId, newPassword) { return httpRequest(`/api/admin/users/${encodeURIComponent(userId)}/reset-password`, { method: 'POST', json: { newPassword } }) }
+  resetPassword(userId, newPassword) { return httpRequest(`/api/admin/users/${encodeURIComponent(userId)}/reset-password`, { method: 'POST', json: { newPassword } }) },
+  updateCollectorAccount(userId, account) { return httpRequest(`/api/admin/users/${encodeURIComponent(userId)}/collector-account`, { method: 'PUT', json: { account } }) }
 }

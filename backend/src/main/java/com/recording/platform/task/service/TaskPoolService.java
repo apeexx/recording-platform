@@ -2,6 +2,8 @@ package com.recording.platform.task.service;
 
 import com.recording.platform.api.ApiException;
 import com.recording.platform.identity.model.UserRole;
+import com.recording.platform.identity.service.CollectorProfileGuard;
+import com.recording.platform.identity.store.UserStore;
 import com.recording.platform.security.PlatformPrincipal;
 import com.recording.platform.task.model.OperationHistory;
 import com.recording.platform.task.model.RecordingFormat;
@@ -36,23 +38,32 @@ public class TaskPoolService {
 	private final TaskGrantStore grants;
 	private final TaskItemStore items;
 	private final Clock clock;
+	private final CollectorProfileGuard profileGuard;
 
+	@org.springframework.beans.factory.annotation.Autowired
 	public TaskPoolService(
 		TaskStore tasks,
 		TaskVersionStore versions,
 		TaskGrantStore grants,
 		TaskItemStore items,
-		Clock clock
+		Clock clock,
+		UserStore users
 	) {
 		this.tasks = tasks;
 		this.versions = versions;
 		this.grants = grants;
 		this.items = items;
 		this.clock = clock;
+		this.profileGuard = new CollectorProfileGuard(users);
+	}
+
+	public TaskPoolService(TaskStore tasks, TaskVersionStore versions, TaskGrantStore grants, TaskItemStore items, Clock clock) {
+		this.tasks = tasks; this.versions = versions; this.grants = grants; this.items = items; this.clock = clock; this.profileGuard = null;
 	}
 
 	public TaskItem start(String taskId, PlatformPrincipal actor) {
 		requireCollector(actor);
+		requireProfile(actor);
 		Optional<TaskItem> existing = items.findCurrentByCollector(actor.userId());
 		if (existing.isPresent()) return existing.get();
 		TaskRecord task = requireTask(taskId);
@@ -82,6 +93,7 @@ public class TaskPoolService {
 
 	public TaskItemActionResult submit(String itemId, SubmitTaskItemCommand command, PlatformPrincipal actor) {
 		requireCollector(actor);
+		requireProfile(actor);
 		TaskItem item = requireItem(itemId);
 		TaskItemActionResult replay = replay(item, command.operationId(), actor.userId());
 		if (replay != null) return replay;
@@ -155,6 +167,7 @@ public class TaskPoolService {
 		if (actor == null || (actor.role() != UserRole.COLLECTOR && actor.role() != UserRole.ADMIN)) {
 			throw forbidden();
 		}
+		if (actor.role() == UserRole.COLLECTOR) requireProfile(actor);
 		TaskItem item = requireItem(itemId);
 		TaskItemActionResult replay = replay(item, operationId, actor.userId());
 		if (replay != null) return replay;
@@ -232,6 +245,7 @@ public class TaskPoolService {
 	private void requireCollector(PlatformPrincipal actor) {
 		if (actor == null || actor.role() != UserRole.COLLECTOR) throw forbidden();
 	}
+	private void requireProfile(PlatformPrincipal actor) { if (profileGuard != null) profileGuard.requireComplete(actor); }
 
 	private TaskRecord requireTask(String taskId) {
 		return tasks.findById(taskId)

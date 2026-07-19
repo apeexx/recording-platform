@@ -147,4 +147,86 @@ public class MongoUserStore implements UserStore {
 			UserAccount.class
 		));
 	}
+
+	@Override
+	public Optional<UserAccount> completeCollectorProfileIfActive(
+		String userId,
+		String username,
+		String name,
+		String passwordHash,
+		Instant updatedAt
+	) {
+		Query query = Query.query(Criteria.where("_id").is(userId)
+			.and("role").is(UserRole.COLLECTOR)
+			.and("status").is(UserStatus.ACTIVE)
+			.and("username").is(null)
+			.and("passwordHash").is(null));
+		Update update = new Update()
+			.set("username", username)
+			.set("name", name)
+			.set("passwordHash", passwordHash)
+			.set("updatedAt", updatedAt);
+		return Optional.ofNullable(mongoTemplate.findAndModify(
+			query, update, FindAndModifyOptions.options().returnNew(true), UserAccount.class
+		));
+	}
+
+	@Override
+	public Optional<UserAccount> updateCollectorPasswordIfActive(
+		String userId,
+		String expectedPasswordHash,
+		String passwordHash,
+		Instant updatedAt
+	) {
+		Query query = Query.query(Criteria.where("_id").is(userId)
+			.and("role").is(UserRole.COLLECTOR)
+			.and("status").is(UserStatus.ACTIVE)
+			.and("passwordHash").is(expectedPasswordHash));
+		Update update = new Update().set("passwordHash", passwordHash).set("updatedAt", updatedAt);
+		return Optional.ofNullable(mongoTemplate.findAndModify(
+			query, update, FindAndModifyOptions.options().returnNew(true), UserAccount.class
+		));
+	}
+
+	@Override
+	public Optional<UserAccount> updateCollectorAvatarIfActive(
+		String userId, String avatarPath, String contentType, Instant updatedAt
+	) {
+		Query query = activeCollector(userId);
+		Update update = new Update().set("avatarPath", avatarPath)
+			.set("avatarContentType", contentType).set("avatarUpdatedAt", updatedAt).set("updatedAt", updatedAt);
+		return Optional.ofNullable(mongoTemplate.findAndModify(
+			query, update, FindAndModifyOptions.options().returnNew(true), UserAccount.class
+		));
+	}
+
+	@Override
+	public Optional<UserAccount> clearCollectorAvatarIfActive(String userId, Instant updatedAt) {
+		Update update = new Update().unset("avatarPath").unset("avatarContentType")
+			.unset("avatarUpdatedAt").set("updatedAt", updatedAt);
+		return Optional.ofNullable(mongoTemplate.findAndModify(
+			activeCollector(userId), update, FindAndModifyOptions.options().returnNew(true), UserAccount.class
+		));
+	}
+
+	private Query activeCollector(String userId) {
+		return Query.query(Criteria.where("_id").is(userId)
+			.and("role").is(UserRole.COLLECTOR).and("status").is(UserStatus.ACTIVE));
+	}
+
+	@Override
+	public Optional<UserAccount> updateCollectorAccountIfActive(String userId, String account, Instant updatedAt) {
+		Update update = new Update().set("username", account).set("updatedAt", updatedAt);
+		return Optional.ofNullable(mongoTemplate.findAndModify(
+			activeCollector(userId), update, FindAndModifyOptions.options().returnNew(true), UserAccount.class
+		));
+	}
+
+	@Override
+	public Optional<UserAccount> resetCollectorPasswordIfActive(String userId, String passwordHash, Instant updatedAt) {
+		Update update = new Update().set("passwordHash", passwordHash).set("firstPasswordChangeRequired", false).set("updatedAt", updatedAt);
+		return Optional.ofNullable(mongoTemplate.findAndModify(
+			activeCollector(userId), update, FindAndModifyOptions.options().returnNew(true), UserAccount.class
+		));
+	}
 }
