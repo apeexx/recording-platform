@@ -6,6 +6,7 @@ Page({
   onShow(){const state=getApp().globalData.session.current();if(!state?.token){wx.reLaunch({url:'/pages/login/index'});return}this.setData({user:state.user,avatarSrc:'/assets/icons/default-collector-avatar.svg'});getApp().globalData.session.refreshProfile().then(user=>{this.setData({user});if(user.hasCustomAvatar)getApp().globalData.api.avatar().then(avatarSrc=>this.setData({avatarSrc})).catch(()=>{})});this.load()},
   onPullDownRefresh(){this.load().finally(()=>wx.stopPullDownRefresh())},
   async load(){this.setData({loading:true,error:''});try{const [summary,page]=await Promise.all([getApp().globalData.api.myReport(),getApp().globalData.api.mySubmissions(0)]);this.setData({summary,cumulativeDuration:duration(summary.cumulativeDurationMillis),currentDuration:duration(summary.currentDurationMillis),submissions:(page.items||[]).map(x=>({...x,submittedAtText:x.submittedAt?new Date(x.submittedAt).toLocaleString('zh-CN',{hour12:false}):'-',durationText:duration(x.durationMillis),resultTypeText:resultTypeText(x),statusText:statusText[x.currentItemStatus]||'-'}))})}catch(e){this.setData({error:e.message||'加载失败，请重试'})}finally{this.setData({loading:false})}},
+  copyUserId(){const{copyUserId}=require('../../services/userIdClipboard.js');copyUserId(this.data.user?.userId)},
   openSettings(){wx.navigateTo({url:'/pages/profile-settings/index'})},
   logout(){getApp().globalData.session.clear();wx.removeStorageSync('currentTaskItemId');wx.reLaunch({url:'/pages/login/index'})}
 })

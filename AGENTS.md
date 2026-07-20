@@ -297,12 +297,12 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 ```
 
 ```text
-请求方法与路径：GET /api/admin/users/search?query=&role=&page=&size=；POST /api/admin/users/{userId}/reset-password；PUT /api/admin/users/{userId}/collector-account
-请求参数：搜索支持姓名、完整前缀用户 ID 或登录名及可选角色；重置 JSON newPassword；改采集员账号 JSON account
+请求方法与路径：GET /api/admin/users/search?query=&role=&userType=&page=&size=；POST /api/admin/users/{userId}/reset-password；PUT /api/admin/users/{userId}/collector-account
+请求参数：搜索支持姓名、完整前缀用户 ID 或登录名，以及可选角色和 `userType=WEB|MINIPROGRAM`；重置 JSON newPassword；改采集员账号 JSON account
 响应结构：搜索返回 Spring Page<UserResponse>；重置密码或改采集员账号返回用户摘要
 错误码：404 USER_NOT_FOUND；409 ACCOUNT_STATE_CHANGED/USERNAME_EXISTS；422 PASSWORD_TOO_WEAK/INVALID_COLLECTOR_ACCOUNT
 权限要求：仅 ADMIN
-数据一致性要求：ADMIN 可重置 ACTIVE Web 或 Mini 用户密码；Web 用户密码 BCrypt 编码、强制下次改密并废止全部会话，Mini 用户密码 BCrypt 编码、废止全部小程序会话但不设置 Web 首改密标记；改采集员账号仅作用于 ACTIVE Mini 用户，账号在 `miniprogram_users` 内唯一并废止其会话
+数据一致性要求：`userType=WEB` 只查询 `web_users`，`userType=MINIPROGRAM` 只查询 `miniprogram_users`，省略时保持跨两集合合并搜索；与角色不匹配时返回空分页，不跨类型降级；ADMIN 可重置 ACTIVE Web 或 Mini 用户密码；Web 用户密码 BCrypt 编码、强制下次改密并废止全部会话，Mini 用户密码 BCrypt 编码、废止全部小程序会话但不设置 Web 首改密标记；改采集员账号仅作用于 ACTIVE Mini 用户，账号在 `miniprogram_users` 内唯一并废止其会话
 前端调用位置：apps/web/src/lib/userApi.js、用户管理与任务采集权限页
 ```
 

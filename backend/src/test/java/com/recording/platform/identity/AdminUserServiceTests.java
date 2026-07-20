@@ -48,8 +48,22 @@ class AdminUserServiceTests {
 	@Test void collectorSearchAndUpdatesUseOnlyMiniProgramStore(){MiniProgramUser user=new MiniProgramUser();user.setId("MINI-0123456789abcdef01234567");user.setAccount("682913");user.setStatus(UserStatus.ACTIVE);
 		when(mini.search("张",org.springframework.data.domain.PageRequest.of(0,20))).thenReturn(new PageImpl<>(java.util.List.of(user)));
 		when(mini.findById(user.getId())).thenReturn(Optional.of(user));when(mini.findByAccount("682914")).thenReturn(Optional.empty());when(mini.updateAccountIfActive(org.mockito.ArgumentMatchers.eq(user.getId()),org.mockito.ArgumentMatchers.eq("682914"),any())).thenAnswer(i->{user.setAccount("682914");return Optional.of(user);});
-		assertThat(service().search(" 张 ",UserRole.COLLECTOR,0,20).getContent()).extracting(r->r.userType()).containsExactly(UserType.MINIPROGRAM);
+		assertThat(service().search(" 张 ",UserRole.COLLECTOR,null,0,20).getContent()).extracting(r->r.userType()).containsExactly(UserType.MINIPROGRAM);
 		assertThat(service().updateCollectorAccount(user.getId(),"682914").loginName()).isEqualTo("682914");verify(sessions).revokeAll(user.getId());}
+
+	@Test void userTypeSearchUsesOnlyMatchingStore(){
+		WebUser webUser=webUser("WEB-000000000000000000000001","admin",CLOCK.instant());
+		MiniProgramUser miniUser=miniUser("MINI-000000000000000000000001","682913",CLOCK.instant());
+		when(web.search("用户",null,org.springframework.data.domain.PageRequest.of(0,20))).thenReturn(new PageImpl<>(java.util.List.of(webUser)));
+		when(mini.search("用户",org.springframework.data.domain.PageRequest.of(0,20))).thenReturn(new PageImpl<>(java.util.List.of(miniUser)));
+		assertThat(service().search("用户",null,UserType.WEB,0,20).getContent()).extracting(r->r.userType()).containsExactly(UserType.WEB);
+		assertThat(service().search("用户",null,UserType.MINIPROGRAM,0,20).getContent()).extracting(r->r.userType()).containsExactly(UserType.MINIPROGRAM);
+	}
+
+	@Test void incompatibleRoleAndUserTypeReturnsEmptyPage(){
+		assertThat(service().search("",UserRole.COLLECTOR,UserType.WEB,0,20)).isEmpty();
+		assertThat(service().search("",UserRole.ADMIN,UserType.MINIPROGRAM,0,20)).isEmpty();
+	}
 
 	@Test
 	void unfilteredSearchMergesBothStoresBeforeGlobalSortAndPagination() {
@@ -63,7 +77,7 @@ class AdminUserServiceTests {
 		when(mini.search(org.mockito.ArgumentMatchers.eq("用户"), any(Pageable.class)))
 			.thenAnswer(invocation -> new PageImpl<>(java.util.List.of(next, older), invocation.getArgument(1), 2));
 
-		var result = service().search(" 用户 ", null, 1, 2);
+		var result = service().search(" 用户 ", null, null, 1, 2);
 
 		assertThat(result.getContent()).extracting(response -> response.id()).containsExactly(middle.getId(), older.getId());
 		assertThat(result.getTotalElements()).isEqualTo(5);

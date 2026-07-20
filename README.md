@@ -129,7 +129,7 @@ Windows PowerShell 本地联调可使用一键启动脚本：
 - 小程序只向后端提交 `wx.login` 临时 `code`。后端使用 `WECHAT_APP_ID`、`WECHAT_APP_SECRET` 调用微信 `jscode2session`，不接受客户端直接提交 OpenID；兼容微信以 `text/plain` 返回 JSON 内容的实际响应，且不保存或输出 `session_key`；小程序 Bearer token 默认 30 天。
 - 微信登录和 6–12 位数字账号密码登录映射到同一个 `MINI-...` 采集员用户 ID。首次资料设置原子写入姓名、在小程序集合内唯一的数字账号和密码；任务列表允许浏览，但申请、待办、领取、继续及提交前后端均校验资料完整性。发生小程序会话占用时，登录页先提示用户确认，再以返回的短时一次性凭证调用 `POST /api/auth/miniprogram/takeover`；不得自动接管。自定义头像保存到 `AVATAR_STORAGE_DIR`，仅支持魔数有效的 JPEG/PNG/WebP、最大 5MB；MongoDB 只保存相对路径和内容类型。
 - 小程序登录页为“砚数声采”A 版，使用正式品牌图标。个人资料页的头像卡直接调用微信原生 `chooseAvatar` 面板，选择后仍需预览确认；恢复默认头像使用卡片下方独立入口。头像读取失败会静默回退本地默认头像，文件上传仍由既有后端执行 JPEG/PNG/WebP 和 5MB 限制。原生“任务”“我的”Tab 使用 81×81 本地 PNG 图标，不依赖运行时外链。
-- “我的”页面展示当前采集员的真实 userId，以及最近 20 条提交记录及其状态。
+- “我的”和资料设置页面均展示当前采集员的完整 `MINI-...` userId；点击用户 ID 会复制完整值并显示成功或失败提示，其中“我的”页点击 ID 不触发资料卡跳转。“我的”页面同时展示最近 20 条提交记录及其状态。
 - `/api/voice-generation/**` 与 `/api/admin/**` 仅 `ADMIN` 可访问；除 Web/微信登录与接管接口外，其余 `/api/**` 默认要求认证。
 - 任务管理、授权管理、任务条目管理和导入仅 `ADMIN` 可写；`COLLECTOR` 通过小程序 Bearer token 申请权限、领取、提交和释放本人条目；`REVIEWER`/`ADMIN` 可驳回待审结果。
 - Web Cookie 写请求必须携带 CSRF token。只有不含 `REC_WEB_SESSION` Cookie 的小程序 Bearer 采集写请求豁免 CSRF，夹带 Bearer 头不能绕过 Web CSRF。缺失或失效返回 `403 CSRF_TOKEN_INVALID`，Web 请求层刷新 token 后仅重试一次；真实角色越权仍返回 `403 ACCESS_DENIED`。
@@ -162,7 +162,7 @@ PUT  /api/admin/users/{userId}/collector-account
 POST /api/admin/users/{userId}/reset-password
 ```
 
-后台用户列表接口 `GET /api/admin/users` 只返回 Web 用户；统一搜索使用 `GET /api/admin/users/search?query=&role=&page=&size=`。搜索结果中的每项固定展示 `id`、`userType`、`loginName`、name、role、status：`WEB-...` / `WEB` 表示后台用户，`MINI-...` / `MINIPROGRAM` 表示采集员。搜索条件同时匹配姓名、完整前缀 ID 和登录名；未指定 `role` 时跨 `web_users`、`miniprogram_users` 合并排序并按全局 total 分页，指定 `COLLECTOR` 时只搜索采集员，指定 `ADMIN` 或 `REVIEWER` 时只搜索对应 Web 用户。ADMIN 可对 ACTIVE Web 或 Mini 用户重置密码：前者要求下次登录改密，后者只废止小程序会话；采集员登录账号可由 `PUT /api/admin/users/{userId}/collector-account` 修改。
+后台用户列表接口 `GET /api/admin/users` 只返回 Web 用户；统一搜索使用 `GET /api/admin/users/search?query=&role=&userType=&page=&size=`。搜索结果中的每项固定展示 `id`、`userType`、`loginName`、name、role、status：`WEB-...` / `WEB` 表示后台用户，`MINI-...` / `MINIPROGRAM` 表示采集员。搜索条件同时匹配姓名、完整前缀 ID 和登录名；`userType=WEB` 只查询 `web_users`，`userType=MINIPROGRAM` 只查询 `miniprogram_users`，与指定角色不匹配时返回空分页；省略 `userType` 时保持现有跨集合合并搜索，指定 `COLLECTOR` 时只搜索采集员，指定 `ADMIN` 或 `REVIEWER` 时只搜索对应 Web 用户。Web 用户管理页顶部使用“Web 端账号 / 小程序端账号”页签并按当前类型加载和搜索。ADMIN 可对 ACTIVE Web 或 Mini 用户重置密码：前者要求下次登录改密，后者只废止小程序会话；采集员登录账号可由 `PUT /api/admin/users/{userId}/collector-account` 修改。
 
 ## 任务池、录音媒体与导入
 

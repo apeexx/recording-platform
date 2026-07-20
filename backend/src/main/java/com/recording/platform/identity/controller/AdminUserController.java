@@ -4,6 +4,7 @@ import com.recording.platform.identity.dto.CreateBackendUserRequest;
 import com.recording.platform.identity.dto.UserResponse;
 import com.recording.platform.identity.dto.ResetPasswordRequest;
 import com.recording.platform.identity.model.UserRole;
+import com.recording.platform.identity.model.UserType;
 import com.recording.platform.identity.service.AdminUserService;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
@@ -43,10 +44,11 @@ public class AdminUserController {
 	public Page<UserResponse> search(
 		@RequestParam(defaultValue = "") String query,
 		@RequestParam(required = false) UserRole role,
+		@RequestParam(required = false) UserType userType,
 		@RequestParam(defaultValue = "0") int page,
 		@RequestParam(defaultValue = "20") int size
 	) {
-		return users.search(query, role, page, size);
+		return users.search(query, role, userType, page, size);
 	}
 
 	@PostMapping("/{userId}/disable")

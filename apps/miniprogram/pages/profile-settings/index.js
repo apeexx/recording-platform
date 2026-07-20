@@ -4,6 +4,7 @@ Page({
   data:{profile:{},avatarSrc:DEFAULT_AVATAR,avatarPreviewVisible:false,pendingAvatarPath:'',pendingAvatarMode:'',avatarSaving:false,name:'',account:'',password:'',confirmPassword:'',currentPassword:'',newPassword:'',error:''},
   onShow(){this.load()},
   input(e){this.setData({[e.currentTarget.dataset.field]:e.detail.value})},
+  copyUserId(){const{copyUserId}=require('../../services/userIdClipboard.js');copyUserId(this.data.profile?.userId)},
   async load(){
     this.setData({error:''})
     try{

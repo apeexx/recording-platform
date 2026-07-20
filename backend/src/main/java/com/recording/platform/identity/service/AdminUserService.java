@@ -6,6 +6,7 @@ import com.recording.platform.identity.dto.UserResponse;
 import com.recording.platform.identity.model.MiniProgramUser;
 import com.recording.platform.identity.model.UserRole;
 import com.recording.platform.identity.model.UserStatus;
+import com.recording.platform.identity.model.UserType;
 import com.recording.platform.identity.model.WebUser;
 import com.recording.platform.identity.store.IdentityDirectory;
 import com.recording.platform.identity.store.MiniProgramUserStore;
@@ -68,8 +69,16 @@ public class AdminUserService {
 		return webUsers.findAll(page(page, size)).map(UserResponse::from);
 	}
 
-	public Page<UserResponse> search(String query, UserRole role, int page, int size) {
+	public Page<UserResponse> search(String query, UserRole role, UserType userType, int page, int size) {
 		String term = query == null ? "" : query.trim(); PageRequest pageable = page(page, size);
+		if (userType == UserType.WEB) {
+			if (role == UserRole.COLLECTOR) return Page.empty(pageable);
+			return webUsers.search(term, role, pageable).map(UserResponse::from);
+		}
+		if (userType == UserType.MINIPROGRAM) {
+			if (role != null && role != UserRole.COLLECTOR) return Page.empty(pageable);
+			return miniProgramUsers.search(term, pageable).map(UserResponse::from);
+		}
 		if (role == UserRole.COLLECTOR) return miniProgramUsers.search(term, pageable).map(UserResponse::from);
 		if (role != null) return webUsers.search(term, role, pageable).map(UserResponse::from);
 		int fetchSize = (int) Math.min(Integer.MAX_VALUE, pageable.getOffset() + pageable.getPageSize());
