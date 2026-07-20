@@ -4,10 +4,11 @@ import com.recording.platform.api.ApiException;
 import com.recording.platform.identity.model.SessionRecord;
 import com.recording.platform.identity.model.SessionStatus;
 import com.recording.platform.identity.model.SessionType;
-import com.recording.platform.identity.model.UserAccount;
+import com.recording.platform.identity.model.IdentityUser;
+import com.recording.platform.identity.model.UserType;
 import com.recording.platform.identity.model.UserStatus;
+import com.recording.platform.identity.store.IdentityDirectory;
 import com.recording.platform.identity.store.SessionStore;
-import com.recording.platform.identity.store.UserStore;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -16,7 +17,7 @@ import org.springframework.http.HttpStatus;
 public class SessionService {
 	private static final Duration TAKEOVER_LIFETIME = Duration.ofMinutes(5);
 	private final SessionStore sessions;
-	private final UserStore users;
+	private final IdentityDirectory identities;
 	private final OpaqueTokenService tokens;
 	private final Clock clock;
 	private final Duration webIdleTimeout;
@@ -24,14 +25,14 @@ public class SessionService {
 
 	public SessionService(
 		SessionStore sessions,
-		UserStore users,
+		IdentityDirectory identities,
 		OpaqueTokenService tokens,
 		Clock clock,
 		Duration webIdleTimeout,
 		Duration miniProgramLifetime
 	) {
 		this.sessions = sessions;
-		this.users = users;
+		this.identities = identities;
 		this.tokens = tokens;
 		this.clock = clock;
 		this.webIdleTimeout = webIdleTimeout;
@@ -46,17 +47,39 @@ public class SessionService {
 		return issue(userId, SessionType.MINIPROGRAM, miniProgramLifetime, null);
 	}
 
-	public IssuedSession issueTakeover(String userId, String replacedSessionId) {
-		return issue(userId, SessionType.TAKEOVER, TAKEOVER_LIFETIME, replacedSessionId);
+	public IssuedSession issueWebTakeover(String userId, String replacedSessionId) {
+		return issue(userId, SessionType.WEB_TAKEOVER, TAKEOVER_LIFETIME, replacedSessionId);
 	}
 
-	public IssuedSession confirmTakeover(String rawToken) {
+	public IssuedSession issueMiniProgramTakeover(String userId, String replacedSessionId) {
+		return issue(userId, SessionType.MINIPROGRAM_TAKEOVER, TAKEOVER_LIFETIME, replacedSessionId);
+	}
+
+	public IssuedSession confirmWebTakeover(String rawToken) {
+		return confirmTakeover(rawToken, SessionType.WEB_TAKEOVER, SessionType.WEB, UserType.WEB);
+	}
+
+	public IssuedSession confirmMiniProgramTakeover(String rawToken) {
+		return confirmTakeover(rawToken, SessionType.MINIPROGRAM_TAKEOVER, SessionType.MINIPROGRAM, UserType.MINIPROGRAM);
+	}
+
+	private IssuedSession confirmTakeover(
+		String rawToken,
+		SessionType takeoverType,
+		SessionType sessionType,
+		UserType userType
+	) {
 		SessionRecord takeover = sessions.findByTokenHash(tokens.hash(rawToken))
 			.orElseThrow(this::invalidTakeover);
 		Instant now = Instant.now(clock);
-		if (takeover.getType() != SessionType.TAKEOVER
+		if (takeover.getType() != takeoverType
 			|| takeover.getStatus() != SessionStatus.ACTIVE
 			|| !takeover.getExpiresAt().isAfter(now)) {
+			throw invalidTakeover();
+		}
+		SessionRecord replaced = sessions.findById(takeover.getReplacedSessionId()).orElseThrow(this::invalidTakeover);
+		if (!takeover.getUserId().equals(replaced.getUserId()) || replaced.getType() != sessionType
+			|| replaced.getStatus() != SessionStatus.ACTIVE || !matchesUserType(takeover.getUserId(), userType)) {
 			throw invalidTakeover();
 		}
 		if (!sessions.transitionStatus(takeover.getId(), SessionStatus.ACTIVE, SessionStatus.USED)) {
@@ -69,9 +92,9 @@ public class SessionService {
 		)) {
 			throw invalidTakeover();
 		}
-		UserAccount user = activeUser(takeover.getUserId());
+		IdentityUser user = activeUser(takeover.getUserId(), userType);
 		try {
-			return issueWeb(user.getId());
+			return sessionType == SessionType.WEB ? issueWeb(user.id()) : issueMiniProgram(user.id());
 		} catch (RuntimeException exception) {
 			try {
 				sessions.transitionStatus(
@@ -103,7 +126,11 @@ public class SessionService {
 	}
 
 	public java.util.Optional<SessionRecord> activeWeb(String userId) {
-		return sessions.findActiveWebByUserId(userId).filter(this::isNotExpired);
+		return active(userId, SessionType.WEB);
+	}
+
+	public java.util.Optional<SessionRecord> active(String userId, SessionType type) {
+		return sessions.findActiveByUserIdAndType(userId, type).filter(this::isNotExpired);
 	}
 
 	private IssuedSession issue(
@@ -140,7 +167,9 @@ public class SessionService {
 			sessions.transitionStatus(session.getId(), SessionStatus.ACTIVE, SessionStatus.EXPIRED);
 			throw invalidSession();
 		}
-		UserAccount user = activeUser(session.getUserId());
+		UserType userType = expectedType == SessionType.WEB ? UserType.WEB : UserType.MINIPROGRAM;
+		if (!matchesUserType(session.getUserId(), userType)) throw invalidSession();
+		IdentityUser user = activeUser(session.getUserId(), userType);
 		Instant nextExpiry = expectedType == SessionType.WEB
 			? now.plus(webIdleTimeout)
 			: session.getExpiresAt();
@@ -153,22 +182,27 @@ public class SessionService {
 		}
 		return new SessionIdentity(
 			session.getId(),
-			user.getId(),
-			user.getUsername(),
-			user.getName(),
-			user.getRole(),
+			user.id(),
+			user.loginName(),
+			user.name(),
+			user.role(),
 			session.getType(),
-			user.isFirstPasswordChangeRequired()
+			user.firstPasswordChangeRequired()
 		);
 	}
 
-	private UserAccount activeUser(String userId) {
-		UserAccount user = users.findById(userId).orElseThrow(this::invalidSession);
-		if (user.getStatus() != UserStatus.ACTIVE) {
+	private IdentityUser activeUser(String userId, UserType expectedType) {
+		IdentityUser user = identities.findById(userId).orElseThrow(this::invalidSession);
+		if (user.userType() != expectedType) throw invalidSession();
+		if (user.status() != UserStatus.ACTIVE) {
 			revokeAll(userId);
 			throw new ApiException(HttpStatus.UNAUTHORIZED, "ACCOUNT_DISABLED", "账号已停用");
 		}
 		return user;
+	}
+
+	private boolean matchesUserType(String userId, UserType type) {
+		return userId != null && (type == UserType.WEB ? userId.startsWith("WEB-") : userId.startsWith("MINI-"));
 	}
 
 	private boolean isNotExpired(SessionRecord session) {

@@ -40,10 +40,7 @@ backend/target/
 .mvn/wrapper/maven-wrapper.jar
 
 # Local storage
-backend/storage/uploads/
-backend/storage/temp/
-backend/storage/voice-generation/
-backend/storage/recordings/
+backend/storage/*
 
 # WeChat Mini Program
 miniprogram_npm/

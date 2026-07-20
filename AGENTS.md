@@ -277,20 +277,19 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 
 ```text
 请求方法：POST / GET / PUT / DELETE
-请求路径：/api/auth/miniprogram/login、/account-login、/profile、/profile/complete、/name、/password、/avatar
+请求路径：/api/auth/miniprogram/login、/account-login、/takeover、/profile、/profile/complete、/name、/password、/avatar
 请求参数：微信登录 JSON code；账号登录 JSON account/password；首次资料 JSON name/account/password；改密 currentPassword/newPassword；头像 multipart avatar
 响应结构：登录返回不透明 Bearer token、account、profileComplete、hasCustomAvatar；资料接口返回采集员摘要；头像 GET 返回文件流
-错误码：503 WECHAT_NOT_CONFIGURED/WECHAT_UNAVAILABLE；401 WECHAT_LOGIN_FAILED/INVALID_CREDENTIALS；409 USERNAME_EXISTS；413 AVATAR_TOO_LARGE；422 INVALID_NAME/INVALID_COLLECTOR_ACCOUNT/PASSWORD_TOO_WEAK/INVALID_AVATAR_FILE
+错误码：503 WECHAT_NOT_CONFIGURED/WECHAT_UNAVAILABLE；401 WECHAT_LOGIN_FAILED/INVALID_CREDENTIALS/TAKEOVER_TOKEN_INVALID；409 ACCOUNT_IN_USE（details.takeoverToken 为短时一次性接管凭证）/USERNAME_EXISTS；413 AVATAR_TOO_LARGE；422 INVALID_NAME/INVALID_COLLECTOR_ACCOUNT/PASSWORD_TOO_WEAK/INVALID_AVATAR_FILE
 权限要求：两种登录公开；其余仅 COLLECTOR 小程序 Bearer
-数据一致性要求：微信和数字账号登录始终映射同一 users._id；首次资料设置原子写入；数字账号全局唯一；头像只保存安全相对路径，JPEG/PNG/WebP 最大 5MB 并校验魔数、原子替换
+数据一致性要求：微信和数字账号登录始终映射同一 `MINI-...` 小程序用户 ID；两种登录模式均只允许一个 ACTIVE 小程序会话，冲突后必须通过 `POST /api/auth/miniprogram/takeover` 确认接管，旧设备下次请求返回 SESSION_REPLACED；首次资料设置原子写入；数字账号仅在 `miniprogram_users` 内唯一；头像只保存安全相对路径，JPEG/PNG/WebP 最大 5MB 并校验魔数、原子替换
 前端调用位置：apps/miniprogram/services/session.js、services/api.js、pages/login、pages/profile-settings
 ```
 
 ```text
-请求方法：POST / GET / POST
-请求路径：/api/admin/users、/api/admin/users?page=&size=、/api/admin/users/{userId}/disable
+请求方法与路径：POST /api/admin/users；GET /api/admin/users?page=&size=；POST /api/admin/users/{userId}/disable
 请求参数：创建 JSON username、name、role、initialPassword；查询分页；停用路径参数
-响应结构：不含 passwordHash、OpenID 或令牌的用户摘要/分页
+响应结构：不含 passwordHash、OpenID 或令牌的用户摘要/分页；用户摘要固定包含 `id`、`userType`、`loginName`、name、role、status 等字段，其中后台用户为 `WEB-...` 与 `WEB`
 错误码：404 USER_NOT_FOUND；409 USERNAME_EXISTS；422 INVALID_BACKEND_ROLE/PASSWORD_TOO_WEAK
 权限要求：仅 ADMIN
 数据一致性要求：后台账号仅 ADMIN/REVIEWER；停用账号同时废止其活动会话
@@ -298,13 +297,12 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 ```
 
 ```text
-请求方法：GET / POST
-请求路径：/api/admin/users/search?query=&role=&page=&size=、/api/admin/users/{userId}/reset-password、/api/admin/users/{userId}/collector-account
-请求参数：搜索支持姓名、内部用户编号或后台用户名及可选角色；重置 JSON newPassword
-响应结构：Spring Page<UserResponse> 或用户摘要
-错误码：404 USER_NOT_FOUND；409 ACCOUNT_STATE_CHANGED；422 INVALID_BACKEND_ROLE/PASSWORD_TOO_WEAK
+请求方法与路径：GET /api/admin/users/search?query=&role=&page=&size=；POST /api/admin/users/{userId}/reset-password；PUT /api/admin/users/{userId}/collector-account
+请求参数：搜索支持姓名、完整前缀用户 ID 或登录名及可选角色；重置 JSON newPassword；改采集员账号 JSON account
+响应结构：搜索返回 Spring Page<UserResponse>；重置密码或改采集员账号返回用户摘要
+错误码：404 USER_NOT_FOUND；409 ACCOUNT_STATE_CHANGED/USERNAME_EXISTS；422 PASSWORD_TOO_WEAK/INVALID_COLLECTOR_ACCOUNT
 权限要求：仅 ADMIN
-数据一致性要求：重置只允许活动 ADMIN/REVIEWER，密码 BCrypt 编码，强制下次改密并废止全部会话
+数据一致性要求：ADMIN 可重置 ACTIVE Web 或 Mini 用户密码；Web 用户密码 BCrypt 编码、强制下次改密并废止全部会话，Mini 用户密码 BCrypt 编码、废止全部小程序会话但不设置 Web 首改密标记；改采集员账号仅作用于 ACTIVE Mini 用户，账号在 `miniprogram_users` 内唯一并废止其会话
 前端调用位置：apps/web/src/lib/userApi.js、用户管理与任务采集权限页
 ```
 
@@ -512,15 +510,27 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 当前集合：
 
 ```text
-集合名称：users
-字段名称：internalUserNo、username、name、passwordHash、role、status、firstPasswordChangeRequired、wechatAppId、wechatOpenId、avatarPath、avatarContentType、avatarUpdatedAt、createdAt、updatedAt
+集合名称：web_users
+字段名称：id（`WEB-` 前缀）、version、username、name、passwordHash、role、status、firstPasswordChangeRequired、createdAt、updatedAt
 字段类型：字符串、枚举、布尔值、UTC Instant
-默认值：新后台账号 ACTIVE 且 firstPasswordChangeRequired=true；微信用户角色 COLLECTOR
-唯一约束：internalUserNo；稀疏 username；测试期稀疏复合 (wechatAppId, wechatOpenId)
-索引：上述唯一索引
-数据兼容策略：后台账号与微信录音人员共用集合，以角色和身份字段区分；不得把明文密码、微信 session_key 或客户端提交的 openId 写入
-迁移步骤：本阶段为首次建立，无旧身份数据迁移
-回滚方式：回滚代码前备份集合；不要直接删除已创建用户
+默认值：新后台账号 ACTIVE 且 firstPasswordChangeRequired=true
+唯一约束：username
+索引：username 唯一索引
+数据兼容策略：仅保存后台 ADMIN/REVIEWER 身份；不得把明文密码写入
+迁移步骤：身份拆分后使用 `WEB-` 前缀 ID，旧统一身份集合不再作为当前运行集合
+回滚方式：拆分或清库前备份相关集合；不要直接删除已创建用户
+```
+
+```text
+集合名称：miniprogram_users
+字段名称：id（`MINI-` 前缀）、version、account、name、passwordHash、status、wechatAppId、wechatOpenId、avatarPath、avatarContentType、avatarUpdatedAt、createdAt、updatedAt
+字段类型：字符串、布尔值、UTC Instant
+默认值：新微信用户 ACTIVE；角色不在本集合存储，小程序身份在鉴权与响应中固定视为 COLLECTOR
+唯一约束：稀疏 account；稀疏复合 (wechatAppId, wechatOpenId)
+索引：account 唯一稀疏索引；(wechatAppId, wechatOpenId) 唯一稀疏复合索引
+数据兼容策略：仅保存小程序采集员身份；不得把明文密码、微信 session_key 或客户端提交的 openId 写入
+迁移步骤：身份拆分后使用 `MINI-` 前缀 ID，旧统一身份集合不再作为当前运行集合
+回滚方式：拆分或清库前备份相关集合；不要直接删除已创建用户
 ```
 
 ```text
@@ -528,8 +538,8 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 字段名称：userId、tokenHash、type、status、replacedSessionId、createdAt、lastAccessAt、expiresAt
 字段类型：字符串、枚举、UTC Instant
 默认值：新会话 ACTIVE；Web 空闲 12 小时；小程序 30 天；接管凭证 5 分钟
-唯一约束：tokenHash；同一用户最多一个 ACTIVE WEB 会话
-索引：expiresAt TTL；(userId, status)；ACTIVE WEB 部分唯一索引
+唯一约束：tokenHash；同一用户最多一个 ACTIVE WEB 会话，且最多一个 ACTIVE MINIPROGRAM 会话
+索引：expiresAt TTL；(userId, status)；ACTIVE WEB 部分唯一索引；ACTIVE MINIPROGRAM 部分唯一索引
 数据兼容策略：只保存 SHA-256 tokenHash，不保存原始 Cookie/Bearer/takeoverToken
 迁移步骤：本阶段为首次建立，无旧会话迁移
 回滚方式：可废止全部会话并要求重新登录，不得导出或恢复原始令牌

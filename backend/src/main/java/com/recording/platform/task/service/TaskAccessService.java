@@ -1,10 +1,11 @@
 package com.recording.platform.task.service;
 
 import com.recording.platform.api.ApiException;
-import com.recording.platform.identity.model.UserAccount;
+import com.recording.platform.identity.model.IdentityUser;
 import com.recording.platform.identity.model.UserRole;
 import com.recording.platform.identity.model.UserStatus;
-import com.recording.platform.identity.store.UserStore;
+import com.recording.platform.identity.store.IdentityDirectory;
+import com.recording.platform.identity.store.MiniProgramUserStore;
 import com.recording.platform.identity.service.CollectorProfileGuard;
 import com.recording.platform.security.PlatformPrincipal;
 import com.recording.platform.task.model.AccessRequestStatus;
@@ -25,7 +26,7 @@ import com.recording.platform.api.PageResponse;
 @Service
 public class TaskAccessService {
 	private final TaskStore tasks;
-	private final UserStore users;
+	private final IdentityDirectory users;
 	private final TaskGrantStore grants;
 	private final TaskAccessRequestStore requests;
 	private final Clock clock;
@@ -33,7 +34,8 @@ public class TaskAccessService {
 
 	public TaskAccessService(
 		TaskStore tasks,
-		UserStore users,
+		IdentityDirectory users,
+		MiniProgramUserStore miniProgramUsers,
 		TaskGrantStore grants,
 		TaskAccessRequestStore requests,
 		Clock clock
@@ -43,7 +45,7 @@ public class TaskAccessService {
 		this.grants = grants;
 		this.requests = requests;
 		this.clock = clock;
-		this.profileGuard = new CollectorProfileGuard(users);
+		this.profileGuard = new CollectorProfileGuard(miniProgramUsers);
 	}
 
 	public TaskAccessRequest requestAccess(String taskId, PlatformPrincipal actor) {
@@ -108,7 +110,7 @@ public class TaskAccessService {
 		requireRole(actor, UserRole.ADMIN);
 		var result = grants.findAllByTaskId(taskId, page(page, size));
 		var userMap = users.findAllByIdIn(result.getContent().stream().map(TaskGrant::getUserId).toList())
-			.stream().collect(java.util.stream.Collectors.toMap(UserAccount::getId, java.util.function.Function.identity()));
+			.stream().collect(java.util.stream.Collectors.toMap(IdentityUser::id, java.util.function.Function.identity()));
 		return new PageResponse<>(result.getContent().stream().map(grant -> TaskGrantView.from(grant, userMap.get(grant.getUserId()))).toList(),
 			result.getNumber(), result.getSize(), result.getTotalElements());
 	}
@@ -117,7 +119,7 @@ public class TaskAccessService {
 		requireRole(actor, UserRole.ADMIN);
 		var result = requests.findAllByTaskIdAndStatus(taskId, AccessRequestStatus.PENDING, page(page, size));
 		var userMap = users.findAllByIdIn(result.getContent().stream().map(TaskAccessRequest::getUserId).toList())
-			.stream().collect(java.util.stream.Collectors.toMap(UserAccount::getId, java.util.function.Function.identity()));
+			.stream().collect(java.util.stream.Collectors.toMap(IdentityUser::id, java.util.function.Function.identity()));
 		return new PageResponse<>(result.getContent().stream().map(request -> TaskAccessRequestView.from(request, userMap.get(request.getUserId()))).toList(),
 			result.getNumber(), result.getSize(), result.getTotalElements());
 	}
@@ -178,9 +180,9 @@ public class TaskAccessService {
 	}
 
 	private void requireActiveCollector(String userId) {
-		UserAccount user = users.findById(userId)
+		IdentityUser user = users.findById(userId)
 			.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "USER_NOT_FOUND", "用户不存在"));
-		if (user.getRole() != UserRole.COLLECTOR || user.getStatus() != UserStatus.ACTIVE) {
+		if (user.role() != UserRole.COLLECTOR || user.status() != UserStatus.ACTIVE) {
 			throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "INVALID_COLLECTOR", "录音人员不可用");
 		}
 	}

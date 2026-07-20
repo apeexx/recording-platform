@@ -29,7 +29,7 @@ $env:RECORDING_LOCAL_RESET_ENABLED = 'true'
 $env:RECORDING_LOCAL_RESET_CONFIRMATION = $ConfirmDatabase
 Push-Location (Join-Path $repositoryRoot 'backend')
 try {
-    & .\mvnw.cmd spring-boot:run '-Dspring-boot.run.arguments=--spring.main.web-application-type=none'
+    & .\mvnw.cmd spring-boot:run '-Dspring-boot.run.arguments=--spring.main.web-application-type=none --spring.data.mongodb.auto-index-creation=false'
     if ($LASTEXITCODE -ne 0) { throw "Local data reset failed with exit code $LASTEXITCODE" }
 } finally {
     Pop-Location

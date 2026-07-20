@@ -44,6 +44,11 @@ public class MongoSessionStore implements SessionStore {
 	}
 
 	@Override
+	public Optional<SessionRecord> findActiveByUserIdAndType(String userId, SessionType type) {
+		return repository.findFirstByUserIdAndTypeAndStatus(userId, type, SessionStatus.ACTIVE);
+	}
+
+	@Override
 	public List<SessionRecord> findActiveByUserId(String userId) {
 		return repository.findAllByUserIdAndStatus(userId, SessionStatus.ACTIVE);
 	}

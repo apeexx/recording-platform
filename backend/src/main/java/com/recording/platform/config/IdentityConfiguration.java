@@ -3,7 +3,7 @@ package com.recording.platform.config;
 import com.recording.platform.identity.service.OpaqueTokenService;
 import com.recording.platform.identity.service.SessionService;
 import com.recording.platform.identity.store.SessionStore;
-import com.recording.platform.identity.store.UserStore;
+import com.recording.platform.identity.store.IdentityDirectory;
 import com.recording.platform.identity.wechat.DefaultWeChatClient;
 import com.recording.platform.identity.wechat.WeChatClient;
 import com.recording.platform.identity.wechat.WeChatSettings;
@@ -25,7 +25,7 @@ public class IdentityConfiguration {
 	@Bean
 	SessionService sessionService(
 		SessionStore sessions,
-		UserStore users,
+		IdentityDirectory identities,
 		OpaqueTokenService tokens,
 		Clock clock,
 		@Value("${recording.web-session.idle-hours:12}") long webIdleHours,
@@ -33,7 +33,7 @@ public class IdentityConfiguration {
 	) {
 		return new SessionService(
 			sessions,
-			users,
+			identities,
 			tokens,
 			clock,
 			Duration.ofHours(Math.max(webIdleHours, 1)),

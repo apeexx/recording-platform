@@ -1,14 +1,13 @@
 package com.recording.platform.identity;
 
-import com.recording.platform.identity.model.UserAccount;
+import com.recording.platform.identity.model.WebUser;
 import com.recording.platform.identity.model.UserRole;
 import com.recording.platform.identity.model.UserStatus;
 import com.recording.platform.identity.service.BcryptPasswordPolicy;
-import com.recording.platform.identity.store.UserStore;
+import com.recording.platform.identity.store.WebUserStore;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Locale;
-import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
@@ -21,14 +20,14 @@ import org.springframework.util.StringUtils;
 @Component
 @Order(0)
 public class InitialAdminInitializer implements ApplicationRunner {
-	private final UserStore users;
+	private final WebUserStore users;
 	private final PasswordEncoder passwordEncoder;
 	private final Clock clock;
 	private final String username;
 	private final String password;
 
 	public InitialAdminInitializer(
-		UserStore users,
+		WebUserStore users,
 		PasswordEncoder passwordEncoder,
 		Clock clock,
 		@Value("${recording.initial-admin.username:}") String username,
@@ -57,10 +56,8 @@ public class InitialAdminInitializer implements ApplicationRunner {
 			throw new IllegalStateException("首管理员初始化密码不符合安全要求");
 		}
 		Instant now = Instant.now(clock);
-		UserAccount admin = new UserAccount();
-		admin.setId("initial-admin");
-		admin.setInternalUserNo("USR-" + UUID.randomUUID().toString().replace("-", "")
-			.substring(0, 12).toUpperCase(Locale.ROOT));
+		WebUser admin = new WebUser();
+		admin.setId(com.recording.platform.identity.service.IdentityIds.web());
 		admin.setUsername(username.trim().toLowerCase(Locale.ROOT));
 		admin.setName("首管理员");
 		admin.setPasswordHash(passwordEncoder.encode(password));
@@ -73,7 +70,7 @@ public class InitialAdminInitializer implements ApplicationRunner {
 			users.save(admin);
 		} catch (DuplicateKeyException ignored) {
 			if (!users.existsByRole(UserRole.ADMIN)) {
-				throw new IllegalStateException("首管理员初始化失败：用户名或内部编号冲突");
+				throw new IllegalStateException("首管理员初始化失败：用户名冲突");
 			}
 		}
 	}

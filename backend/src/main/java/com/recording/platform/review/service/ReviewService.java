@@ -30,8 +30,8 @@ import java.util.ArrayList;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import com.recording.platform.identity.store.UserStore;
-import com.recording.platform.identity.model.UserAccount;
+import com.recording.platform.identity.store.IdentityDirectory;
+import com.recording.platform.identity.model.IdentityUser;
 import com.recording.platform.identity.model.UserStatus;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -40,19 +40,19 @@ public class ReviewService {
 	private final TaskItemStore items;
 	private final TaskVersionStore versions;
 	private final Clock clock;
-	private final UserStore users;
+	private final IdentityDirectory users;
 	private final TaskStore tasks;
 
 	public ReviewService(TaskItemStore items, TaskVersionStore versions, Clock clock) {
 		this(items, versions, null, null, clock);
 	}
 
-	public ReviewService(TaskItemStore items, TaskVersionStore versions, UserStore users, Clock clock) {
+	public ReviewService(TaskItemStore items, TaskVersionStore versions, IdentityDirectory users, Clock clock) {
 		this(items, versions, users, null, clock);
 	}
 
 	@Autowired
-	public ReviewService(TaskItemStore items, TaskVersionStore versions, UserStore users, TaskStore tasks, Clock clock) {
+	public ReviewService(TaskItemStore items, TaskVersionStore versions, IdentityDirectory users, TaskStore tasks, Clock clock) {
 		this.items = items;
 		this.versions = versions;
 		this.users = users;
@@ -86,9 +86,9 @@ public class ReviewService {
 		Page<TaskItem> pool = items.findReviewPoolByTaskId(
 			taskId, actor.role() == UserRole.ADMIN, actor.role() == UserRole.REVIEWER ? actor.userId() : null, pageable
 		);
-		Map<String, UserAccount> collectors = users == null ? Map.of() : users.findAllByIdIn(
+		Map<String, IdentityUser> collectors = users == null ? Map.of() : users.findAllByIdIn(
 			pool.getContent().stream().map(TaskItem::getCollectorId).filter(java.util.Objects::nonNull).distinct().toList()
-		).stream().collect(Collectors.toMap(UserAccount::getId, Function.identity()));
+		).stream().collect(Collectors.toMap(IdentityUser::id, Function.identity()));
 		return pool.map(item -> ReviewPoolItemView.from(item, collectors.get(item.getCollectorId())));
 	}
 
@@ -128,15 +128,15 @@ public class ReviewService {
 			throw new ApiException(HttpStatus.FORBIDDEN, "ACCESS_DENIED", "没有权限执行此操作");
 		}
 		if (users == null) throw new IllegalStateException("user store required");
-		UserAccount reviewer = users.findById(reviewerId).orElse(null);
-		if (reviewer == null || reviewer.getRole() != UserRole.REVIEWER || reviewer.getStatus() != UserStatus.ACTIVE) {
+		IdentityUser reviewer = users.findById(reviewerId).orElse(null);
+		if (reviewer == null || reviewer.role() != UserRole.REVIEWER || reviewer.status() != UserStatus.ACTIVE) {
 			throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "INVALID_REVIEWER", "只能分配给启用状态的审核员");
 		}
 		TaskItem item = requireItem(itemId);
 		if (item.getStatus() != TaskItemStatus.REVIEW_PENDING || item.getReviewerId() != null
 			|| item.getRevision() != expectedRevision) throw stale();
 		ReviewAssignMutation mutation = new ReviewAssignMutation(
-			itemId, reviewerId, reviewer.getName(), actor.userId(), actorName(actor), UUID.randomUUID().toString(),
+			itemId, reviewerId, reviewer.name(), actor.userId(), actorName(actor), UUID.randomUUID().toString(),
 			expectedRevision, requiredOperationId(operationId), Instant.now(clock)
 		);
 		return items.assignReviewIfCurrent(mutation).orElseThrow(this::stale);

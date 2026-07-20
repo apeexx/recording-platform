@@ -20,6 +20,12 @@ import org.springframework.data.mongodb.core.mapping.Document;
 		def = "{'userId': 1, 'type': 1}",
 		unique = true,
 		partialFilter = "{'status': 'ACTIVE', 'type': 'WEB'}"
+	),
+	@CompoundIndex(
+		name = "unique_active_miniprogram_session",
+		def = "{'userId': 1, 'type': 1}",
+		unique = true,
+		partialFilter = "{'status': 'ACTIVE', 'type': 'MINIPROGRAM'}"
 	)
 })
 public class SessionRecord {

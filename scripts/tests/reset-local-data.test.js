@@ -21,3 +21,7 @@ test('本地重置在启动 Java 前校验管理员凭证和数据库 URI', () =
   assert.ok(credentialCheck >= 0 && databaseCheck >= 0)
   assert.ok(credentialCheck < javaStart && databaseCheck < javaStart)
 })
+
+test('本地重置启动时关闭自动索引创建以兼容旧库中的冲突数据', () => {
+  assert.match(powershell, /--spring\.data\.mongodb\.auto-index-creation=false/)
+})

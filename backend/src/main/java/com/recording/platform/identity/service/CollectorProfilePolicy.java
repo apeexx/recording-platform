@@ -1,6 +1,6 @@
 package com.recording.platform.identity.service;
 
-import com.recording.platform.identity.model.UserAccount;
+import com.recording.platform.identity.model.MiniProgramUser;
 import java.util.regex.Pattern;
 import org.springframework.util.StringUtils;
 
@@ -13,10 +13,10 @@ public final class CollectorProfilePolicy {
 		return account != null && ACCOUNT.matcher(account.trim()).matches();
 	}
 
-	public static boolean isComplete(UserAccount user) {
+	public static boolean isComplete(MiniProgramUser user) {
 		return user != null
 			&& StringUtils.hasText(user.getName())
-			&& isValidAccount(user.getUsername())
+			&& isValidAccount(user.getAccount())
 			&& StringUtils.hasText(user.getPasswordHash());
 	}
 }

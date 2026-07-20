@@ -122,12 +122,12 @@ Windows PowerShell 本地联调可使用一键启动脚本：
 
 ## 身份、会话与接口边界
 
-- 固定角色为 `ADMIN`、`REVIEWER`、`COLLECTOR`。后台账号使用 BCrypt 密码；所有新编码密码至少 8 个字符且 UTF-8 不超过 72 字节。首管理员仅在数据库没有 `ADMIN` 且同时配置 `INITIAL_ADMIN_USERNAME`、`INITIAL_ADMIN_PASSWORD` 时创建；首次登录必须改密。
+- 身份数据分为 `web_users` 与 `miniprogram_users`：后台账号 ID 使用 `WEB-...` 前缀并保存 ADMIN/REVIEWER 角色，小程序采集员 ID 使用 `MINI-...` 前缀且不在文档中存储角色（鉴权与响应中固定为 COLLECTOR）。两类账号可使用相同登录名，因为唯一约束分别属于各自集合。后台账号使用 BCrypt 密码；所有新编码密码至少 8 个字符且 UTF-8 不超过 72 字节。首管理员仅在 `web_users` 没有 `ADMIN` 且同时配置 `INITIAL_ADMIN_USERNAME`、`INITIAL_ADMIN_PASSWORD` 时创建；首次登录必须改密。
 - Web 登录使用 HttpOnly、SameSite=Lax Cookie `REC_WEB_SESSION`。服务端只保存不透明令牌的 SHA-256 哈希，默认空闲 12 小时；生产 HTTPS 可设置 `WEB_SESSION_COOKIE_SECURE=true`。
 - 已登录 Web 用户先调用 `GET /api/auth/web/csrf` 获取可读的 `XSRF-TOKEN` Cookie；执行退出、改密或管理员写操作等非安全方法时，同时通过 `X-XSRF-TOKEN` 请求头回传该值。首次登录待改密账号也允许获取 CSRF token。
-- 同一后台账号只允许一个活动 Web 会话。重复登录返回 `409 ACCOUNT_IN_USE` 和短时一次性 `takeoverToken`；确认接管后旧会话返回 `401 SESSION_REPLACED`。
+- 每个后台账号只允许一个活动 Web 会话，每个小程序采集员也只允许一个活动小程序会话。任一端重复登录均返回 `409 ACCOUNT_IN_USE` 和短时一次性 `takeoverToken`；必须调用对应端的 takeover 接口确认接管，接管后旧设备下次请求返回 `401 SESSION_REPLACED`。
 - 小程序只向后端提交 `wx.login` 临时 `code`。后端使用 `WECHAT_APP_ID`、`WECHAT_APP_SECRET` 调用微信 `jscode2session`，不接受客户端直接提交 OpenID；兼容微信以 `text/plain` 返回 JSON 内容的实际响应，且不保存或输出 `session_key`；小程序 Bearer token 默认 30 天。
-- 微信登录和 6–12 位数字账号密码登录映射到同一个采集员用户 ID。首次资料设置原子写入姓名、唯一数字账号和密码；任务列表允许浏览，但申请、待办、领取、继续及提交前后端均校验资料完整性。自定义头像保存到 `AVATAR_STORAGE_DIR`，仅支持魔数有效的 JPEG/PNG/WebP、最大 5MB；MongoDB 只保存相对路径和内容类型。
+- 微信登录和 6–12 位数字账号密码登录映射到同一个 `MINI-...` 采集员用户 ID。首次资料设置原子写入姓名、在小程序集合内唯一的数字账号和密码；任务列表允许浏览，但申请、待办、领取、继续及提交前后端均校验资料完整性。发生小程序会话占用时，登录页先提示用户确认，再以返回的短时一次性凭证调用 `POST /api/auth/miniprogram/takeover`；不得自动接管。自定义头像保存到 `AVATAR_STORAGE_DIR`，仅支持魔数有效的 JPEG/PNG/WebP、最大 5MB；MongoDB 只保存相对路径和内容类型。
 - 小程序登录页为“砚数声采”A 版，使用正式品牌图标。个人资料页的头像卡直接调用微信原生 `chooseAvatar` 面板，选择后仍需预览确认；恢复默认头像使用卡片下方独立入口。头像读取失败会静默回退本地默认头像，文件上传仍由既有后端执行 JPEG/PNG/WebP 和 5MB 限制。原生“任务”“我的”Tab 使用 81×81 本地 PNG 图标，不依赖运行时外链。
 - “我的”页面展示当前采集员的真实 userId，以及最近 20 条提交记录及其状态。
 - `/api/voice-generation/**` 与 `/api/admin/**` 仅 `ADMIN` 可访问；除 Web/微信登录与接管接口外，其余 `/api/**` 默认要求认证。
@@ -148,6 +148,7 @@ POST /api/auth/web/logout
 PUT  /api/auth/web/password
 POST /api/auth/miniprogram/login
 POST /api/auth/miniprogram/account-login
+POST /api/auth/miniprogram/takeover
 GET  /api/auth/miniprogram/profile
 POST /api/auth/miniprogram/profile/complete
 PUT  /api/auth/miniprogram/name
@@ -160,6 +161,8 @@ POST /api/admin/users/{userId}/disable
 PUT  /api/admin/users/{userId}/collector-account
 POST /api/admin/users/{userId}/reset-password
 ```
+
+后台用户列表接口 `GET /api/admin/users` 只返回 Web 用户；统一搜索使用 `GET /api/admin/users/search?query=&role=&page=&size=`。搜索结果中的每项固定展示 `id`、`userType`、`loginName`、name、role、status：`WEB-...` / `WEB` 表示后台用户，`MINI-...` / `MINIPROGRAM` 表示采集员。搜索条件同时匹配姓名、完整前缀 ID 和登录名；未指定 `role` 时跨 `web_users`、`miniprogram_users` 合并排序并按全局 total 分页，指定 `COLLECTOR` 时只搜索采集员，指定 `ADMIN` 或 `REVIEWER` 时只搜索对应 Web 用户。ADMIN 可对 ACTIVE Web 或 Mini 用户重置密码：前者要求下次登录改密，后者只废止小程序会话；采集员登录账号可由 `PUT /api/admin/users/{userId}/collector-account` 修改。
 
 ## 任务池、录音媒体与导入
 
@@ -175,7 +178,7 @@ POST /api/admin/users/{userId}/reset-password
 
 ## 本地数据全量重置
 
-仅在确认需要丢弃本地开发数据时运行 `scripts\reset-local-data.cmd recording_platform`。脚本读取未提交的根目录 `.env`，只有精确确认词、有效的 `INITIAL_ADMIN_USERNAME`、`INITIAL_ADMIN_PASSWORD` 和精确指向 `recording_platform` 的 `MONGODB_URI` 同时满足时才启用一次性重置。后端还会再次校验确认词、数据库真实名称及存储目录必须是受限的 recordings/recording-data/voice-generation 运行目录，然后清空数据并重建首管理员。不要在生产环境运行，脚本不会备份数据。
+仅在确认需要丢弃本地开发数据时运行 `scripts\reset-local-data.cmd recording_platform`。脚本读取未提交的根目录 `.env`，只有精确确认词、有效的 `INITIAL_ADMIN_USERNAME`、`INITIAL_ADMIN_PASSWORD` 和精确指向 `recording_platform` 的 `MONGODB_URI` 同时满足时才启用一次性重置。后端还会再次校验确认词、数据库真实名称及存储目录必须是受限的 recordings/recording-data/voice-generation 运行目录，然后完整删除本地开发数据库（包含旧 `users`、当前 `web_users` 与 `miniprogram_users` 等全部集合）并清理受限运行存储，随后按初始化配置重建首个 `WEB-...` 管理员。不要在生产环境运行，脚本不会备份数据。
 
 ## 一次性旧录音路径迁移
 
@@ -239,8 +242,9 @@ GET                 /api/media/{mediaId}
 
 MongoDB 当前集合：
 
-- `users`：后台用户名、内部用户编号和测试期 `(wechatAppId, wechatOpenId)` 唯一身份。
-- `sessions`：仅保存令牌哈希，包含状态、最后访问时间和 TTL 到期时间。
+- `web_users`：后台 ADMIN/REVIEWER 身份，ID 为 `WEB-...`，用户名仅在本集合唯一。
+- `miniprogram_users`：小程序采集员身份，ID 为 `MINI-...`，数字账号及微信 `(wechatAppId, wechatOpenId)` 身份仅在本集合唯一，文档不存储角色。
+- `sessions`：仅保存令牌哈希，包含状态、最后访问时间和 TTL 到期时间；Web 与小程序各自有一条 ACTIVE 会话部分唯一索引。
 - `voice_generation_records`：语音生成记录。
 - `voice_generation_configs`：默认声音配置。
 - `sequences`、`tasks`、`task_versions`：原子编号序列、任务生命周期和不可变版本快照。

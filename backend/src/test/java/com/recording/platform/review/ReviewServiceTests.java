@@ -22,9 +22,10 @@ import com.recording.platform.task.store.TaskItemStore;
 import com.recording.platform.task.store.TaskVersionStore;
 import com.recording.platform.task.model.TaskVersion;
 import com.recording.platform.task.model.TaskResultType;
-import com.recording.platform.identity.model.UserAccount;
+import com.recording.platform.identity.model.IdentityUser;
+import com.recording.platform.identity.model.UserType;
 import com.recording.platform.identity.model.UserStatus;
-import com.recording.platform.identity.store.UserStore;
+import com.recording.platform.identity.store.IdentityDirectory;
 import com.recording.platform.task.store.ReviewAssignMutation;
 import com.recording.platform.task.store.AdminReviewApproveMutation;
 import com.recording.platform.task.store.AdminReviewDecisionMutation;
@@ -209,24 +210,20 @@ class ReviewServiceTests {
 	@Test
 	void reviewerTaskPoolIncludesOwnAssignmentsAndCollectorIdentity() {
 		TaskItemStore items = mock(TaskItemStore.class);
-		UserStore users = mock(UserStore.class);
+		IdentityDirectory users = mock(IdentityDirectory.class);
 		PageRequest page = PageRequest.of(0, 20);
 		TaskItem own = assigned("item-own", 2);
 		own.setTaskId("task-1");
 		own.setItemCode("T000001-0000001");
 		when(items.findReviewPoolByTaskId("task-1", false, "reviewer-1", page))
 			.thenReturn(new PageImpl<>(List.of(own), page, 1));
-		UserAccount collector = new UserAccount();
-		collector.setId("collector-1");
-		collector.setInternalUserNo("U000001");
-		collector.setName("采集员一");
+		IdentityUser collector = new IdentityUser("collector-1",UserType.MINIPROGRAM,null,"采集员一",UserRole.COLLECTOR,UserStatus.ACTIVE,false,null,null);
 		when(users.findAllByIdIn(List.of("collector-1"))).thenReturn(List.of(collector));
 		ReviewService service = new ReviewService(items, mock(TaskVersionStore.class), users, CLOCK);
 
 		var result = service.pool("task-1", page, reviewer());
 
 		assertThat(result.getContent()).singleElement().satisfies(view -> {
-			assertThat(view.collectorUserNo()).isEqualTo("U000001");
 			assertThat(view.collectorName()).isEqualTo("采集员一");
 		});
 		verify(items).findReviewPoolByTaskId("task-1", false, "reviewer-1", page);
@@ -245,14 +242,10 @@ class ReviewServiceTests {
 	@Test
 	void adminAssignsAPendingItemToAnActiveReviewer() {
 		TaskItemStore items = mock(TaskItemStore.class);
-		UserStore users = mock(UserStore.class);
+		IdentityDirectory users = mock(IdentityDirectory.class);
 		TaskItem existing = pending("item-1", 3);
 		when(items.findById("item-1")).thenReturn(Optional.of(existing));
-		UserAccount reviewerAccount = new UserAccount();
-		reviewerAccount.setId("reviewer-2");
-		reviewerAccount.setRole(UserRole.REVIEWER);
-		reviewerAccount.setStatus(UserStatus.ACTIVE);
-		reviewerAccount.setName("审核员二");
+		IdentityUser reviewerAccount = new IdentityUser("reviewer-2",UserType.WEB,"reviewer-2","审核员二",UserRole.REVIEWER,UserStatus.ACTIVE,false,null,null);
 		when(users.findById("reviewer-2")).thenReturn(Optional.of(reviewerAccount));
 		TaskItem assigned = pending("item-1", 4);
 		assigned.setReviewerId("reviewer-2");
@@ -269,11 +262,8 @@ class ReviewServiceTests {
 	@Test
 	void adminCannotAssignDisabledOrNonReviewerAccount() {
 		TaskItemStore items = mock(TaskItemStore.class);
-		UserStore users = mock(UserStore.class);
-		UserAccount disabled = new UserAccount();
-		disabled.setId("reviewer-disabled");
-		disabled.setRole(UserRole.REVIEWER);
-		disabled.setStatus(UserStatus.DISABLED);
+		IdentityDirectory users = mock(IdentityDirectory.class);
+		IdentityUser disabled = new IdentityUser("reviewer-disabled",UserType.WEB,"reviewer-disabled","禁用审核员",UserRole.REVIEWER,UserStatus.DISABLED,false,null,null);
 		when(users.findById("reviewer-disabled")).thenReturn(Optional.of(disabled));
 		ReviewService service = new ReviewService(items, mock(TaskVersionStore.class), users, CLOCK);
 
@@ -299,7 +289,7 @@ class ReviewServiceTests {
 		when(items.adminApproveReviewIfCurrent(any()))
 			.thenReturn(Optional.of(completed))
 			.thenReturn(Optional.empty());
-		ReviewService service = new ReviewService(items, versions, mock(UserStore.class), CLOCK);
+		ReviewService service = new ReviewService(items, versions, mock(IdentityDirectory.class), CLOCK);
 
 		List<BatchReviewResult> results = service.batchApprove(
 			"batch-approve",
@@ -327,7 +317,7 @@ class ReviewServiceTests {
 		completed.setStatus(TaskItemStatus.COMPLETED);
 		completed.setCurrentResult(new TaskItemResult(null, "管理员修订文本"));
 		when(items.adminDecideReviewIfCurrent(any())).thenReturn(Optional.of(completed));
-		ReviewService service = new ReviewService(items, versions, mock(UserStore.class), CLOCK);
+		ReviewService service = new ReviewService(items, versions, mock(IdentityDirectory.class), CLOCK);
 
 		TaskItem result = service.approve(
 			"item-admin", "admin-single-approve", 6, "管理员修订文本", admin()
@@ -349,7 +339,7 @@ class ReviewServiceTests {
 		TaskItem rejected = pending("item-admin", 7);
 		rejected.setStatus(TaskItemStatus.RECORDING_PENDING);
 		when(items.adminDecideReviewIfCurrent(any())).thenReturn(Optional.of(rejected));
-		ReviewService service = new ReviewService(items, versions, mock(UserStore.class), CLOCK);
+		ReviewService service = new ReviewService(items, versions, mock(IdentityDirectory.class), CLOCK);
 
 		TaskItem result = service.reject(
 			"item-admin", "admin-single-reject", 6, List.of("空音频"), "返修", admin()
@@ -362,7 +352,7 @@ class ReviewServiceTests {
 	@Test
 	void reviewerCannotBatchApprove() {
 		ReviewService service = new ReviewService(
-			mock(TaskItemStore.class), mock(TaskVersionStore.class), mock(UserStore.class), CLOCK
+			mock(TaskItemStore.class), mock(TaskVersionStore.class), mock(IdentityDirectory.class), CLOCK
 		);
 
 		assertThatThrownBy(() -> service.batchApprove(

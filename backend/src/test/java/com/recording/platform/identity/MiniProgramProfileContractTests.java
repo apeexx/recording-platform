@@ -6,7 +6,7 @@ import com.recording.platform.identity.dto.CollectorAccountLoginRequest;
 import com.recording.platform.identity.dto.CompleteCollectorProfileRequest;
 import com.recording.platform.identity.dto.MiniProgramSessionResponse;
 import com.recording.platform.identity.dto.UpdateCollectorPasswordRequest;
-import com.recording.platform.identity.model.UserAccount;
+import com.recording.platform.identity.model.MiniProgramUser;
 import com.recording.platform.identity.model.UserRole;
 import com.recording.platform.identity.model.UserStatus;
 import com.recording.platform.identity.service.MiniProgramLoginResult;
@@ -25,15 +25,13 @@ class MiniProgramProfileContractTests {
 
 	@Test
 	void miniProgramSessionIncludesProfileAndAvatarStateWithoutStoragePaths() {
-		UserAccount user = new UserAccount();
+		MiniProgramUser user = new MiniProgramUser();
 		user.setId("collector-1");
-		user.setInternalUserNo("USR-000001");
-		user.setUsername("682913");
+		user.setAccount("682913");
 		user.setName("张三");
 		user.setPasswordHash("bcrypt-hash");
 		user.setAvatarPath("collector-1.png");
 		user.setAvatarContentType("image/png");
-		user.setRole(UserRole.COLLECTOR);
 		user.setStatus(UserStatus.ACTIVE);
 
 		MiniProgramSessionResponse response = MiniProgramSessionResponse.from(
@@ -43,7 +41,7 @@ class MiniProgramProfileContractTests {
 		assertThat(response.account()).isEqualTo("682913");
 		assertThat(response.profileComplete()).isTrue();
 		assertThat(response.hasCustomAvatar()).isTrue();
-		assertThat(components(MiniProgramSessionResponse.class)).doesNotContain("avatarPath", "passwordHash");
+		assertThat(components(MiniProgramSessionResponse.class)).doesNotContain("internalUserNo", "avatarPath", "passwordHash");
 	}
 
 	private java.util.List<String> components(Class<?> type) {

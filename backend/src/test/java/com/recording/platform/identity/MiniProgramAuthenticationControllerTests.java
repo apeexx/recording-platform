@@ -8,7 +8,7 @@ import com.recording.platform.identity.dto.CollectorAccountLoginRequest;
 import com.recording.platform.identity.dto.CompleteCollectorProfileRequest;
 import com.recording.platform.identity.dto.UpdateCollectorPasswordRequest;
 import com.recording.platform.identity.model.SessionType;
-import com.recording.platform.identity.model.UserAccount;
+import com.recording.platform.identity.model.MiniProgramUser;
 import com.recording.platform.identity.model.UserRole;
 import com.recording.platform.identity.model.UserStatus;
 import com.recording.platform.identity.service.CollectorIdentityService;
@@ -23,7 +23,7 @@ class MiniProgramAuthenticationControllerTests {
 	void exposesAccountLoginAndProfileLifecycleThroughMiniProgramResponses() {
 		WeChatAuthenticationService wechat = org.mockito.Mockito.mock(WeChatAuthenticationService.class);
 		CollectorIdentityService collectors = org.mockito.Mockito.mock(CollectorIdentityService.class);
-		UserAccount user = collector();
+		MiniProgramUser user = collector();
 		when(collectors.login("682913", "Password-1"))
 			.thenReturn(new MiniProgramLoginResult("opaque", "session-1", user));
 		when(collectors.profile("collector-1")).thenReturn(user);
@@ -46,14 +46,12 @@ class MiniProgramAuthenticationControllerTests {
 		).profileComplete()).isTrue();
 	}
 
-	private UserAccount collector() {
-		UserAccount user = new UserAccount();
+	private MiniProgramUser collector() {
+		MiniProgramUser user = new MiniProgramUser();
 		user.setId("collector-1");
-		user.setInternalUserNo("USR-000001");
-		user.setUsername("682913");
+		user.setAccount("682913");
 		user.setName("张三");
 		user.setPasswordHash("bcrypt-hash");
-		user.setRole(UserRole.COLLECTOR);
 		user.setStatus(UserStatus.ACTIVE);
 		user.setCreatedAt(Instant.parse("2026-07-19T08:00:00Z"));
 		user.setUpdatedAt(Instant.parse("2026-07-19T08:00:00Z"));

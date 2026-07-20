@@ -1,10 +1,9 @@
 package com.recording.platform.identity.service;
 
 import com.recording.platform.api.ApiException;
-import com.recording.platform.identity.model.UserAccount;
-import com.recording.platform.identity.model.UserRole;
+import com.recording.platform.identity.model.MiniProgramUser;
 import com.recording.platform.identity.model.UserStatus;
-import com.recording.platform.identity.store.UserStore;
+import com.recording.platform.identity.store.MiniProgramUserStore;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Optional;
@@ -13,16 +12,17 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
+import java.util.Map;
 
 @Service
 public class CollectorIdentityService {
-	private final UserStore users;
+	private final MiniProgramUserStore users;
 	private final SessionService sessions;
 	private final PasswordEncoder passwordEncoder;
 	private final Clock clock;
 
 	public CollectorIdentityService(
-		UserStore users,
+		MiniProgramUserStore users,
 		SessionService sessions,
 		PasswordEncoder passwordEncoder,
 		Clock clock
@@ -35,34 +35,39 @@ public class CollectorIdentityService {
 
 	public MiniProgramLoginResult login(String account, String password) {
 		String normalized = normalizeAccount(account);
-		UserAccount user = users.findByUsername(normalized).orElseThrow(this::invalidCredentials);
-		if (user.getRole() != UserRole.COLLECTOR
-			|| user.getStatus() != UserStatus.ACTIVE
+		MiniProgramUser user = users.findByAccount(normalized).orElseThrow(this::invalidCredentials);
+		if (user.getStatus() != UserStatus.ACTIVE
 			|| !passwordEncoder.matches(nullToEmpty(password), nullToEmpty(user.getPasswordHash()))) {
 			throw invalidCredentials();
 		}
-		IssuedSession issued = sessions.issueMiniProgram(user.getId());
+		IssuedSession issued = issueSession(user);
 		return new MiniProgramLoginResult(issued.token(), issued.session().getId(), user);
 	}
 
-	public UserAccount profile(String userId) {
+	public MiniProgramLoginResult takeover(String takeoverToken) {
+		IssuedSession issued = sessions.confirmMiniProgramTakeover(takeoverToken);
+		MiniProgramUser user = users.findById(issued.session().getUserId()).orElseThrow(this::invalidCredentials);
+		return new MiniProgramLoginResult(issued.token(), issued.session().getId(), user);
+	}
+
+	public MiniProgramUser profile(String userId) {
 		return requireCollector(userId);
 	}
 
-	public UserAccount completeProfile(String userId, String name, String account, String password) {
-		UserAccount current = requireCollector(userId);
+	public MiniProgramUser completeProfile(String userId, String name, String account, String password) {
+		MiniProgramUser current = requireCollector(userId);
 		validateName(name);
 		String normalized = validateAccount(account);
 		validatePassword(password);
-		if (StringUtils.hasText(current.getUsername()) || StringUtils.hasText(current.getPasswordHash())) {
+		if (StringUtils.hasText(current.getAccount()) || StringUtils.hasText(current.getPasswordHash())) {
 			throw new ApiException(HttpStatus.CONFLICT, "PROFILE_ALREADY_COMPLETED", "登录账号已设置");
 		}
-		Optional<UserAccount> existing = users.findByUsername(normalized);
+		Optional<MiniProgramUser> existing = users.findByAccount(normalized);
 		if (existing.isPresent() && !userId.equals(existing.get().getId())) {
 			throw usernameExists();
 		}
 		try {
-			return users.completeCollectorProfileIfActive(
+			return users.completeProfileIfActive(
 				userId,
 				normalized,
 				name.trim(),
@@ -76,19 +81,19 @@ public class CollectorIdentityService {
 		}
 	}
 
-	public UserAccount setName(String userId, String name) {
+	public MiniProgramUser setName(String userId, String name) {
 		validateName(name);
-		return users.updateCollectorNameIfActive(userId, name.trim(), Instant.now(clock))
+		return users.updateNameIfActive(userId, name.trim(), Instant.now(clock))
 			.orElseThrow(() -> new ApiException(HttpStatus.CONFLICT, "ACCOUNT_STATE_CHANGED", "账号状态已变化，请重试"));
 	}
 
-	public UserAccount changePassword(String userId, String currentPassword, String newPassword) {
-		UserAccount user = requireCollector(userId);
+	public MiniProgramUser changePassword(String userId, String currentPassword, String newPassword) {
+		MiniProgramUser user = requireCollector(userId);
 		if (!passwordEncoder.matches(nullToEmpty(currentPassword), nullToEmpty(user.getPasswordHash()))) {
 			throw invalidCredentials();
 		}
 		validatePassword(newPassword);
-		UserAccount saved = users.updateCollectorPasswordIfActive(
+		MiniProgramUser saved = users.updatePasswordIfActive(
 			userId,
 			user.getPasswordHash(),
 			passwordEncoder.encode(newPassword),
@@ -100,16 +105,31 @@ public class CollectorIdentityService {
 		return saved;
 	}
 
-	private UserAccount requireCollector(String userId) {
-		UserAccount user = users.findById(userId)
+	private MiniProgramUser requireCollector(String userId) {
+		MiniProgramUser user = users.findById(userId)
 			.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "USER_NOT_FOUND", "用户不存在"));
-		if (user.getRole() != UserRole.COLLECTOR) {
-			throw new ApiException(HttpStatus.FORBIDDEN, "COLLECTOR_REQUIRED", "仅录音人员可以管理个人资料");
-		}
 		if (user.getStatus() != UserStatus.ACTIVE) {
 			throw new ApiException(HttpStatus.UNAUTHORIZED, "ACCOUNT_DISABLED", "账号已停用");
 		}
 		return user;
+	}
+
+	private IssuedSession issueSession(MiniProgramUser user) {
+		var active = sessions.active(user.getId(), com.recording.platform.identity.model.SessionType.MINIPROGRAM);
+		if (active.isPresent()) {
+			IssuedSession takeover = sessions.issueMiniProgramTakeover(user.getId(), active.get().getId());
+			throw new ApiException(HttpStatus.CONFLICT, "ACCOUNT_IN_USE", "账号已在其他设备登录，确认后可接管",
+				Map.of("takeoverToken", takeover.token()));
+		}
+		try {
+			return sessions.issueMiniProgram(user.getId());
+		} catch (DuplicateKeyException exception) {
+			String activeId = sessions.active(user.getId(), com.recording.platform.identity.model.SessionType.MINIPROGRAM)
+				.map(session -> session.getId()).orElseThrow(() -> new ApiException(HttpStatus.CONFLICT, "ACCOUNT_IN_USE", "账号登录状态已变化，请重试"));
+			IssuedSession takeover = sessions.issueMiniProgramTakeover(user.getId(), activeId);
+			throw new ApiException(HttpStatus.CONFLICT, "ACCOUNT_IN_USE", "账号已在其他设备登录，确认后可接管",
+				Map.of("takeoverToken", takeover.token()));
+		}
 	}
 
 	private void validateName(String name) {

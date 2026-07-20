@@ -3,13 +3,35 @@ const { STORAGE_KEY } = require('./session.js')
 
 function token() { return wx.getStorageSync(STORAGE_KEY)?.token || '' }
 function operationId(prefix='mp') { return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}` }
-function parseError(response) { const data=response.data||{};const error=new Error(data.message||`请求失败（HTTP ${response.statusCode}）`);error.code=data.code||`HTTP_${response.statusCode}`;error.status=response.statusCode;error.details=data.details;return error }
+function responseData(response) {
+  if (typeof response.data !== 'string') return response.data || {}
+  try { return JSON.parse(response.data || '{}') } catch (_) { return {} }
+}
+
+function parseError(response) {
+  const data=responseData(response)
+  const error=new Error(data.message||`请求失败（HTTP ${response.statusCode}）`)
+  error.code=data.code||`HTTP_${response.statusCode}`
+  error.status=response.statusCode
+  error.details=data.details
+  return error
+}
+
+function requestError(response, authenticated) {
+  const error=parseError(response)
+  if (authenticated && response.statusCode===401 && error.code==='SESSION_REPLACED') wx.removeStorageSync(STORAGE_KEY)
+  return error
+}
 
 function request(path, options={}) {
+  const authenticated=!options.noAuth
+  const authorization=authenticated&&token()?{Authorization:`Bearer ${token()}`} : {}
   return new Promise((resolve,reject)=>wx.request({
-    url:`${config.apiBaseUrl}${path}`,method:options.method||'GET',data:options.data,
-    header:{...(token()?{Authorization:`Bearer ${token()}`} : {}),...(options.idempotencyKey?{'Idempotency-Key':options.idempotencyKey}:{}),...(options.header||{})},
-    success:res=>res.statusCode>=200&&res.statusCode<300?resolve(res.data):reject(parseError(res)),
+    url:`${config.apiBaseUrl}${path}`,
+    method:options.method||'GET',
+    data:options.data,
+    header:{...authorization,...(options.idempotencyKey?{'Idempotency-Key':options.idempotencyKey}:{}),...(options.header||{})},
+    success:res=>res.statusCode>=200&&res.statusCode<300?resolve(res.data):reject(requestError(res,authenticated)),
     fail:reason=>{const error=new Error(reason.errMsg||'网络请求失败');error.network=true;reject(error)}
   }))
 }
@@ -19,7 +41,7 @@ function downloadMedia(mediaId) {
   return new Promise((resolve,reject)=>wx.downloadFile({
     url:`${config.apiBaseUrl}/api/media/${encodeURIComponent(mediaId)}`,
     header:{Authorization:`Bearer ${token()}`},
-    success:res=>res.statusCode>=200&&res.statusCode<300?resolve(res.tempFilePath):reject(parseError({...res,data:{}})),
+    success:res=>res.statusCode>=200&&res.statusCode<300?resolve(res.tempFilePath):reject(requestError(res,true)),
     fail:reason=>{const error=new Error(reason.errMsg||'媒体下载失败');error.network=true;reject(error)}
   }))
 }
@@ -30,7 +52,7 @@ function uploadSubmission(itemId, payload) {
   return new Promise((resolve,reject)=>wx.uploadFile({
     url:`${config.apiBaseUrl}/api/task-items/${encodeURIComponent(itemId)}/submit`,filePath:payload.audioPath,name:'audio',formData,
     header:{Authorization:`Bearer ${token()}`},
-    success:res=>{let data={};try{data=JSON.parse(res.data||'{}')}catch(_){data={}};res.statusCode>=200&&res.statusCode<300?resolve(data):reject(parseError({...res,data}))},
+    success:res=>res.statusCode>=200&&res.statusCode<300?resolve(responseData(res)):reject(requestError(res,true)),
     fail:reason=>{const error=new Error(reason.errMsg||'上传失败');error.network=true;reject(error)}
   }))
 }
@@ -45,11 +67,19 @@ module.exports = {
   operationId,
   login: body=>request('/api/auth/miniprogram/login',{method:'POST',data:body}),
   accountLogin: body=>request('/api/auth/miniprogram/account-login',{method:'POST',data:body}),
+  takeover: takeoverToken=>request('/api/auth/miniprogram/takeover',{method:'POST',data:{takeoverToken},noAuth:true}),
   profile: ()=>request('/api/auth/miniprogram/profile'),
   completeProfile: body=>request('/api/auth/miniprogram/profile/complete',{method:'POST',data:body}),
   setName: name=>request('/api/auth/miniprogram/name',{method:'PUT',data:{name}}),
   changePassword: body=>request('/api/auth/miniprogram/password',{method:'PUT',data:body}),
-  uploadAvatar: filePath=>new Promise((resolve,reject)=>wx.uploadFile({url:`${config.apiBaseUrl}/api/auth/miniprogram/avatar`,filePath,name:'avatar',header:{Authorization:`Bearer ${token()}`},success:res=>{let data={};try{data=JSON.parse(res.data||'{}')}catch(_){};res.statusCode>=200&&res.statusCode<300?resolve(data):reject(parseError({...res,data}))},fail:reject})),
+  uploadAvatar: filePath=>new Promise((resolve,reject)=>wx.uploadFile({
+    url:`${config.apiBaseUrl}/api/auth/miniprogram/avatar`,
+    filePath,
+    name:'avatar',
+    header:{Authorization:`Bearer ${token()}`},
+    success:res=>res.statusCode>=200&&res.statusCode<300?resolve(responseData(res)):reject(requestError(res,true)),
+    fail:reject
+  })),
   avatar: ()=>downloadProtected('/api/auth/miniprogram/avatar'),
   deleteAvatar: ()=>request('/api/auth/miniprogram/avatar',{method:'DELETE'}),
   tasks: ()=>request('/api/tasks?page=0&size=100'),
@@ -67,5 +97,10 @@ module.exports = {
 }
 
 function downloadProtected(path) {
-  return new Promise((resolve,reject)=>wx.downloadFile({url:`${config.apiBaseUrl}${path}`,header:{Authorization:`Bearer ${token()}`},success:res=>res.statusCode>=200&&res.statusCode<300?resolve(res.tempFilePath):reject(parseError({...res,data:{}})),fail:reject}))
+  return new Promise((resolve,reject)=>wx.downloadFile({
+    url:`${config.apiBaseUrl}${path}`,
+    header:{Authorization:`Bearer ${token()}`},
+    success:res=>res.statusCode>=200&&res.statusCode<300?resolve(res.tempFilePath):reject(requestError(res,true)),
+    fail:reject
+  }))
 }

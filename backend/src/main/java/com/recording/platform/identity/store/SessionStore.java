@@ -12,7 +12,16 @@ public interface SessionStore {
 
 	Optional<SessionRecord> findByTokenHash(String tokenHash);
 
-	Optional<SessionRecord> findActiveWebByUserId(String userId);
+	default Optional<SessionRecord> findActiveWebByUserId(String userId) {
+		return findActiveByUserIdAndType(userId, com.recording.platform.identity.model.SessionType.WEB);
+	}
+
+	default Optional<SessionRecord> findActiveByUserIdAndType(
+		String userId,
+		com.recording.platform.identity.model.SessionType type
+	) {
+		return findActiveByUserId(userId).stream().filter(session -> session.getType() == type).findFirst();
+	}
 
 	List<SessionRecord> findActiveByUserId(String userId);
 

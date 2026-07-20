@@ -18,6 +18,10 @@ import com.recording.platform.identity.model.SessionType;
 import com.recording.platform.identity.model.UserRole;
 import com.recording.platform.identity.service.SessionIdentity;
 import com.recording.platform.identity.service.SessionService;
+import com.recording.platform.identity.service.CollectorIdentityService;
+import com.recording.platform.identity.service.MiniProgramLoginResult;
+import com.recording.platform.identity.model.MiniProgramUser;
+import com.recording.platform.identity.model.UserStatus;
 import com.recording.platform.identity.service.WeChatAuthenticationService;
 import com.recording.platform.identity.service.WebAuthenticationService;
 import jakarta.servlet.http.Cookie;
@@ -66,6 +70,18 @@ class SecurityAuthorizationTests {
 
 	@MockitoBean
 	private WeChatAuthenticationService weChatAuthenticationService;
+
+	@MockitoBean
+	private CollectorIdentityService collectorIdentityService;
+
+	@Test
+	void miniProgramTakeoverIsPublicAndCsrfExempt() throws Exception {
+		MiniProgramUser user = new MiniProgramUser(); user.setId("MINI-0123456789abcdef01234567"); user.setAccount("682913"); user.setStatus(UserStatus.ACTIVE);
+		when(collectorIdentityService.takeover("takeover-token")).thenReturn(new MiniProgramLoginResult("new-token", "new-session", user));
+		mockMvc.perform(post("/api/auth/miniprogram/takeover").contentType("application/json")
+			.content("{\"takeoverToken\":\"takeover-token\"}"))
+			.andExpect(status().isOk()).andExpect(jsonPath("$.token").value("new-token"));
+	}
 
 	@Test
 	void onlyAdminCanAccessUserManagementAndVoiceGeneration() throws Exception {
@@ -254,7 +270,7 @@ class SecurityAuthorizationTests {
 			HttpStatus.UNPROCESSABLE_ENTITY,
 			"INVALID_NAME",
 			"姓名不能为空且不能超过 64 个字符"
-		)).when(weChatAuthenticationService).setName("collector-1", "   ");
+		)).when(collectorIdentityService).setName("collector-1", "   ");
 
 		mockMvc.perform(put("/api/auth/miniprogram/name")
 				.with(authentication(new TestingAuthenticationToken(principal, null, "ROLE_COLLECTOR")))

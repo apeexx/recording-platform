@@ -8,6 +8,7 @@ import com.recording.platform.identity.dto.SetCollectorNameRequest;
 import com.recording.platform.identity.dto.UserResponse;
 import com.recording.platform.identity.dto.UpdateCollectorPasswordRequest;
 import com.recording.platform.identity.dto.WeChatLoginRequest;
+import com.recording.platform.identity.dto.TakeoverRequest;
 import com.recording.platform.identity.service.CollectorIdentityService;
 import com.recording.platform.identity.service.WeChatAuthenticationService;
 import com.recording.platform.security.PlatformPrincipal;
@@ -42,6 +43,11 @@ public class MiniProgramAuthenticationController {
 	@PostMapping("/account-login")
 	public MiniProgramSessionResponse accountLogin(@Valid @RequestBody CollectorAccountLoginRequest request) {
 		return MiniProgramSessionResponse.from(collectors.login(request.account(), request.password()));
+	}
+
+	@PostMapping("/takeover")
+	public MiniProgramSessionResponse takeover(@Valid @RequestBody TakeoverRequest request) {
+		return MiniProgramSessionResponse.from(collectors.takeover(request.takeoverToken()));
 	}
 
 	@GetMapping("/profile")

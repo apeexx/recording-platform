@@ -8,13 +8,14 @@ import com.recording.platform.api.ApiException;
 import com.recording.platform.identity.model.SessionRecord;
 import com.recording.platform.identity.model.SessionStatus;
 import com.recording.platform.identity.model.SessionType;
-import com.recording.platform.identity.model.UserAccount;
+import com.recording.platform.identity.model.IdentityUser;
 import com.recording.platform.identity.model.UserRole;
 import com.recording.platform.identity.model.UserStatus;
+import com.recording.platform.identity.model.UserType;
 import com.recording.platform.identity.service.OpaqueTokenService;
 import com.recording.platform.identity.service.SessionService;
 import com.recording.platform.identity.store.SessionStore;
-import com.recording.platform.identity.store.UserStore;
+import com.recording.platform.identity.store.IdentityDirectory;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -32,7 +33,7 @@ class SessionConcurrencyTests {
 		OpaqueTokenService.TokenPair token = tokens.issue();
 		SessionRecord persisted = new SessionRecord();
 		persisted.setId("session-1");
-		persisted.setUserId("admin-1");
+		persisted.setUserId("WEB-0123456789abcdef01234567");
 		persisted.setTokenHash(token.hash());
 		persisted.setType(SessionType.WEB);
 		persisted.setStatus(SessionStatus.ACTIVE);
@@ -40,13 +41,9 @@ class SessionConcurrencyTests {
 		persisted.setLastAccessAt(Instant.now(clock));
 		persisted.setExpiresAt(Instant.now(clock).plus(Duration.ofHours(12)));
 		LogoutDuringTouchStore sessions = new LogoutDuringTouchStore(persisted);
-		UserStore users = org.mockito.Mockito.mock(UserStore.class);
-		UserAccount admin = new UserAccount();
-		admin.setId("admin-1");
-		admin.setUsername("admin");
-		admin.setRole(UserRole.ADMIN);
-		admin.setStatus(UserStatus.ACTIVE);
-		when(users.findById("admin-1")).thenReturn(Optional.of(admin));
+		IdentityDirectory users = org.mockito.Mockito.mock(IdentityDirectory.class);
+		IdentityUser admin = new IdentityUser(persisted.getUserId(),UserType.WEB,"admin","管理员",UserRole.ADMIN,UserStatus.ACTIVE,false,null,null);
+		when(users.findById(persisted.getUserId())).thenReturn(Optional.of(admin));
 		SessionService service = new SessionService(
 			sessions,
 			users,

@@ -3,169 +3,91 @@ package com.recording.platform.identity;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.recording.platform.api.ApiException;
 import com.recording.platform.identity.dto.CreateBackendUserRequest;
-import com.recording.platform.identity.model.UserAccount;
+import com.recording.platform.identity.model.IdentityUser;
+import com.recording.platform.identity.model.MiniProgramUser;
 import com.recording.platform.identity.model.UserRole;
 import com.recording.platform.identity.model.UserStatus;
+import com.recording.platform.identity.model.UserType;
+import com.recording.platform.identity.model.WebUser;
 import com.recording.platform.identity.service.AdminUserService;
 import com.recording.platform.identity.service.SessionService;
-import com.recording.platform.identity.store.UserStore;
+import com.recording.platform.identity.store.IdentityDirectory;
+import com.recording.platform.identity.store.MiniProgramUserStore;
+import com.recording.platform.identity.store.WebUserStore;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Optional;
-import java.util.List;
-import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.PageRequest;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
 class AdminUserServiceTests {
-	private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-07-11T12:00:00Z"), ZoneOffset.UTC);
+	private static final Clock CLOCK=Clock.fixed(Instant.parse("2026-07-20T02:00:00Z"),ZoneOffset.UTC);
+	private final WebUserStore web=mock(WebUserStore.class); private final MiniProgramUserStore mini=mock(MiniProgramUserStore.class);
+	private final IdentityDirectory directory=mock(IdentityDirectory.class); private final SessionService sessions=mock(SessionService.class);
+	private final BCryptPasswordEncoder passwords=new BCryptPasswordEncoder();
+	private AdminUserService service(){return new AdminUserService(web,mini,directory,sessions,passwords,CLOCK);}
+
+	@Test void createsOnlyWebRolesWithPrefixedIds(){when(web.findByUsername("reviewer")).thenReturn(Optional.empty());when(web.save(any())).thenAnswer(i->i.getArgument(0));
+		var response=service().create(new CreateBackendUserRequest("reviewer","审核员",UserRole.REVIEWER,"Password-1"));
+		assertThat(response.id()).matches("WEB-[0-9a-f]{24}");assertThat(response.userType()).isEqualTo(UserType.WEB);assertThat(response.loginName()).isEqualTo("reviewer");
+		assertThatThrownBy(()->service().create(new CreateBackendUserRequest("collector","采集员",UserRole.COLLECTOR,"Password-1")))
+			.isInstanceOfSatisfying(ApiException.class,e->assertThat(e.getCode()).isEqualTo("INVALID_BACKEND_ROLE"));}
+
+	@Test void rejectsWebPasswordsOutsideBcryptBoundary(){assertThatThrownBy(()->service().create(new CreateBackendUserRequest("reviewer","审核员",UserRole.REVIEWER,"x".repeat(73))))
+		.isInstanceOfSatisfying(ApiException.class,e->assertThat(e.getCode()).isEqualTo("PASSWORD_TOO_WEAK"));}
+
+	@Test void collectorSearchAndUpdatesUseOnlyMiniProgramStore(){MiniProgramUser user=new MiniProgramUser();user.setId("MINI-0123456789abcdef01234567");user.setAccount("682913");user.setStatus(UserStatus.ACTIVE);
+		when(mini.search("张",org.springframework.data.domain.PageRequest.of(0,20))).thenReturn(new PageImpl<>(java.util.List.of(user)));
+		when(mini.findById(user.getId())).thenReturn(Optional.of(user));when(mini.findByAccount("682914")).thenReturn(Optional.empty());when(mini.updateAccountIfActive(org.mockito.ArgumentMatchers.eq(user.getId()),org.mockito.ArgumentMatchers.eq("682914"),any())).thenAnswer(i->{user.setAccount("682914");return Optional.of(user);});
+		assertThat(service().search(" 张 ",UserRole.COLLECTOR,0,20).getContent()).extracting(r->r.userType()).containsExactly(UserType.MINIPROGRAM);
+		assertThat(service().updateCollectorAccount(user.getId(),"682914").loginName()).isEqualTo("682914");verify(sessions).revokeAll(user.getId());}
 
 	@Test
-	void createsReviewerWithBcryptAndRejectsCollectorAsABackgroundAccount() {
-		UserStore users = org.mockito.Mockito.mock(UserStore.class);
-		SessionService sessions = org.mockito.Mockito.mock(SessionService.class);
-		when(users.findByUsername("reviewer-1")).thenReturn(Optional.empty());
-		when(users.save(any())).thenAnswer((invocation) -> invocation.getArgument(0));
-		BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
-		AdminUserService service = new AdminUserService(users, sessions, encoder, CLOCK);
+	void unfilteredSearchMergesBothStoresBeforeGlobalSortAndPagination() {
+		WebUser newest = webUser("WEB-000000000000000000000001", "admin", Instant.parse("2026-07-20T04:00:00Z"));
+		MiniProgramUser next = miniUser("MINI-000000000000000000000001", "682913", Instant.parse("2026-07-20T03:00:00Z"));
+		WebUser middle = webUser("WEB-000000000000000000000002", "reviewer", Instant.parse("2026-07-20T02:00:00Z"));
+		MiniProgramUser older = miniUser("MINI-000000000000000000000002", "682914", Instant.parse("2026-07-20T01:00:00Z"));
+		WebUser oldest = webUser("WEB-000000000000000000000003", "auditor", Instant.parse("2026-07-20T00:00:00Z"));
+		when(web.search(org.mockito.ArgumentMatchers.eq("用户"), org.mockito.ArgumentMatchers.isNull(), any(Pageable.class)))
+			.thenAnswer(invocation -> new PageImpl<>(java.util.List.of(newest, middle, oldest), invocation.getArgument(2), 3));
+		when(mini.search(org.mockito.ArgumentMatchers.eq("用户"), any(Pageable.class)))
+			.thenAnswer(invocation -> new PageImpl<>(java.util.List.of(next, older), invocation.getArgument(1), 2));
 
-		service.create(new CreateBackendUserRequest(
-			"reviewer-1",
-			"一审员",
-			UserRole.REVIEWER,
-			"ReviewerPassword-1"
-		));
+		var result = service().search(" 用户 ", null, 1, 2);
 
-		ArgumentCaptor<UserAccount> captor = ArgumentCaptor.forClass(UserAccount.class);
-		verify(users).save(captor.capture());
-		assertThat(captor.getValue().getRole()).isEqualTo(UserRole.REVIEWER);
-		assertThat(captor.getValue().isFirstPasswordChangeRequired()).isTrue();
-		assertThat(encoder.matches("ReviewerPassword-1", captor.getValue().getPasswordHash())).isTrue();
-		assertThatThrownBy(() -> service.create(new CreateBackendUserRequest(
-			"collector-1",
-			"录音员",
-			UserRole.COLLECTOR,
-			"CollectorPassword-1"
-		))).isInstanceOfSatisfying(ApiException.class, (exception) -> {
-			assertThat(exception.getStatus().value()).isEqualTo(422);
-			assertThat(exception.getCode()).isEqualTo("INVALID_BACKEND_ROLE");
-		});
+		assertThat(result.getContent()).extracting(response -> response.id()).containsExactly(middle.getId(), older.getId());
+		assertThat(result.getTotalElements()).isEqualTo(5);
+		assertThat(result.getNumber()).isEqualTo(1);
+		assertThat(result.getSize()).isEqualTo(2);
 	}
 
-	@Test
-	void initialPasswordBeyondTheBcryptLimitUsesTheWeakPasswordContract() {
-		UserStore users = org.mockito.Mockito.mock(UserStore.class);
-		AdminUserService service = new AdminUserService(
-			users,
-			org.mockito.Mockito.mock(SessionService.class),
-			new BCryptPasswordEncoder(),
-			CLOCK
-		);
+	@Test void resetsPasswordThroughDirectoryAndMatchingWriteStore(){MiniProgramUser user=new MiniProgramUser();user.setId("MINI-0123456789abcdef01234567");user.setStatus(UserStatus.ACTIVE);
+		when(directory.findById(user.getId())).thenReturn(Optional.of(new IdentityUser(user.getId(),UserType.MINIPROGRAM,null,null,UserRole.COLLECTOR,UserStatus.ACTIVE,false,null,null)));
+		when(mini.resetPasswordIfActive(org.mockito.ArgumentMatchers.eq(user.getId()),any(),any())).thenReturn(Optional.of(user));service().resetPassword(user.getId(),"Password-2");verify(sessions).revokeAll(user.getId());}
 
-		assertThatThrownBy(() -> service.create(new CreateBackendUserRequest(
-			"reviewer-1",
-			"一审员",
-			UserRole.REVIEWER,
-			"x".repeat(73)
-		))).isInstanceOfSatisfying(ApiException.class, (exception) -> {
-			assertThat(exception.getStatus().value()).isEqualTo(422);
-			assertThat(exception.getCode()).isEqualTo("PASSWORD_TOO_WEAK");
-		});
+	@Test void disablesOnlyWebUsersAndRevokesTheirSessions(){WebUser user=new WebUser();user.setId("WEB-0123456789abcdef01234567");user.setRole(UserRole.REVIEWER);user.setStatus(UserStatus.ACTIVE);
+		WebUser disabled=new WebUser();disabled.setId(user.getId());disabled.setRole(UserRole.REVIEWER);disabled.setStatus(UserStatus.DISABLED);
+		when(web.findById(user.getId())).thenReturn(Optional.of(user));when(web.disableIfActive(org.mockito.ArgumentMatchers.eq(user.getId()),any())).thenReturn(Optional.of(disabled));
+		assertThat(service().disable(user.getId()).status()).isEqualTo(UserStatus.DISABLED);verify(sessions).revokeAll(user.getId());}
+
+	private WebUser webUser(String id, String username, Instant createdAt) {
+		WebUser user = new WebUser(); user.setId(id); user.setUsername(username); user.setName("用户");
+		user.setRole(UserRole.REVIEWER); user.setStatus(UserStatus.ACTIVE); user.setCreatedAt(createdAt); user.setUpdatedAt(createdAt);
+		return user;
 	}
 
-	@Test
-	void disablingAnAccountRevokesItsSessions() {
-		UserStore users = org.mockito.Mockito.mock(UserStore.class);
-		SessionService sessions = org.mockito.Mockito.mock(SessionService.class);
-		UserAccount reviewer = new UserAccount();
-		reviewer.setId("reviewer-1");
-		reviewer.setStatus(UserStatus.ACTIVE);
-		when(users.findById("reviewer-1")).thenReturn(Optional.of(reviewer));
-		when(users.disableBackendIfActive(org.mockito.ArgumentMatchers.eq("reviewer-1"), any()))
-			.thenAnswer((invocation) -> {
-				reviewer.setStatus(UserStatus.DISABLED);
-				return Optional.of(reviewer);
-			});
-		AdminUserService service = new AdminUserService(users, sessions, new BCryptPasswordEncoder(), CLOCK);
-
-		service.disable("reviewer-1");
-
-		assertThat(reviewer.getStatus()).isEqualTo(UserStatus.DISABLED);
-		verify(sessions).revokeAll("reviewer-1");
-	}
-
-	@Test
-	void backendAccountListAndDisableDoNotCrossIntoCollectorAccounts() {
-		UserStore users = org.mockito.Mockito.mock(UserStore.class);
-		SessionService sessions = org.mockito.Mockito.mock(SessionService.class);
-		UserAccount reviewer = new UserAccount();
-		reviewer.setId("reviewer-1");
-		reviewer.setRole(UserRole.REVIEWER);
-		reviewer.setStatus(UserStatus.ACTIVE);
-		UserAccount collector = new UserAccount();
-		collector.setId("collector-1");
-		collector.setRole(UserRole.COLLECTOR);
-		collector.setStatus(UserStatus.ACTIVE);
-		when(users.findAllBackend(PageRequest.of(0, 20)))
-			.thenReturn(new PageImpl<>(List.of(reviewer)));
-		when(users.findById("collector-1")).thenReturn(Optional.of(collector));
-		AdminUserService service = new AdminUserService(users, sessions, new BCryptPasswordEncoder(), CLOCK);
-
-		assertThat(service.list(0, 20).getContent())
-			.extracting((user) -> user.role())
-			.containsExactly(UserRole.REVIEWER);
-		assertThatThrownBy(() -> service.disable("collector-1"))
-			.isInstanceOfSatisfying(ApiException.class, (exception) ->
-				assertThat(exception.getCode()).isEqualTo("INVALID_BACKEND_ROLE")
-			);
-	}
-
-	@Test
-	void searchesCollectorsAndResetsBackendPasswordWithSessionRevocation() {
-		UserStore users = org.mockito.Mockito.mock(UserStore.class);
-		SessionService sessions = org.mockito.Mockito.mock(SessionService.class);
-		BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
-		UserAccount collector = new UserAccount();
-		collector.setId("collector-1");
-		collector.setRole(UserRole.COLLECTOR);
-		collector.setStatus(UserStatus.ACTIVE);
-		UserAccount reviewer = new UserAccount();
-		reviewer.setId("reviewer-1");
-		reviewer.setRole(UserRole.REVIEWER);
-		reviewer.setStatus(UserStatus.ACTIVE);
-		when(users.search("张", UserRole.COLLECTOR, PageRequest.of(0, 20)))
-			.thenReturn(new PageImpl<>(List.of(collector)));
-		when(users.findById("reviewer-1")).thenReturn(Optional.of(reviewer));
-		when(users.resetBackendPasswordIfActive(org.mockito.ArgumentMatchers.eq("reviewer-1"), any(), any()))
-			.thenReturn(Optional.of(reviewer));
-		when(users.findById("collector-1")).thenReturn(Optional.of(collector));
-		when(users.resetCollectorPasswordIfActive(org.mockito.ArgumentMatchers.eq("collector-1"), any(), any()))
-			.thenReturn(Optional.of(collector));
-		AdminUserService service = new AdminUserService(users, sessions, encoder, CLOCK);
-
-		assertThat(service.search(" 张 ", UserRole.COLLECTOR, 0, 20).getContent()).hasSize(1);
-		service.resetPassword("reviewer-1", "NewPassword-1");
-		service.resetPassword("collector-1", "CollectorPassword-1");
-
-		verify(users).resetBackendPasswordIfActive(
-			org.mockito.ArgumentMatchers.eq("reviewer-1"),
-			org.mockito.ArgumentMatchers.argThat((String hash) -> encoder.matches("NewPassword-1", hash)),
-			org.mockito.ArgumentMatchers.eq(Instant.parse("2026-07-11T12:00:00Z"))
-		);
-		verify(sessions).revokeAll("reviewer-1");
-		verify(users).resetCollectorPasswordIfActive(
-			org.mockito.ArgumentMatchers.eq("collector-1"),
-			org.mockito.ArgumentMatchers.argThat((String hash) -> encoder.matches("CollectorPassword-1", hash)),
-			org.mockito.ArgumentMatchers.eq(Instant.parse("2026-07-11T12:00:00Z"))
-		);
-		verify(sessions).revokeAll("collector-1");
+	private MiniProgramUser miniUser(String id, String account, Instant createdAt) {
+		MiniProgramUser user = new MiniProgramUser(); user.setId(id); user.setAccount(account); user.setName("用户");
+		user.setStatus(UserStatus.ACTIVE); user.setCreatedAt(createdAt); user.setUpdatedAt(createdAt); return user;
 	}
 }

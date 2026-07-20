@@ -1,5 +1,21 @@
 # AI 修改日志
 
+## 2026-07-20 同步用户分表文档与运行存储忽略边界
+
+- 时间：2026-07-20
+- commit ID：见本次 Git 提交
+- 修改内容：
+  - 将当前身份说明更新为 `web_users` 与 `miniprogram_users`，明确 `WEB-...` / `MINI-...` ID、各自的唯一约束，以及小程序用户文档不保存角色。
+  - 补充后台用户响应的 `id`、`userType`、`loginName` 契约、小程序 `POST /api/auth/miniprogram/takeover` 及两端单会话确认接管规则。
+  - 更新本地重置说明，明确完整删除本地开发数据库会移除旧 `users` 与新身份集合，且无备份后重建首个 `WEB-...` 管理员。
+  - 当前无已跟踪的存储占位文件；将 `backend/storage/` 运行内容整体忽略，不保留占位文件例外规则。
+- 验证结果：
+  - `backend\mvnw.cmd test`：256/256 通过，0 failures、0 errors、0 skipped，`BUILD SUCCESS`。
+  - Web `npm test`：Node 9/9、Vitest 28/28 通过；`npm run build` 成功。小程序 `npm test`：50/50 通过。
+  - 首次执行重置时，旧会话数据先触发新唯一索引冲突；新增脚本回归测试，并让重置进程临时关闭自动索引创建后再次执行成功。普通服务启动仍保持自动创建索引。
+  - 已按确认无备份清空 `recording_platform` 及关联录音、头像、导入临时和语音生成文件；重建后旧 `users` 不存在，`web_users` 为 1、`miniprogram_users` 为 0，首管理员 ID 符合 `WEB-{24位十六进制}` 且不存在 `internalUserNo`。
+  - 重启后 `GET /api/health/ready` 的 `overall`、`mongo`、`storage` 全部为 `UP`；首管理员登录返回 200 并保持首次改密状态。运行存储三个目录均为空。
+
 ## 2026-07-16 增加批量导入部分失败测试数据
 
 - 时间：2026-07-16

@@ -30,4 +30,10 @@ describe('审核页面 API', () => {
     expect(workbench).toContain('v-if="isOwnReviewerAssignment" class="button-secondary" @click="release"')
     expect(workbench).toContain('v-if="canDecide" class="business-actions"')
   })
+
+  it('审核池展示采集员 prefixed ID，不读取旧 collectorUserNo',()=>{
+    const queue=readFileSync(join(process.cwd(),'src/pages/admin/review/ReviewQueuePage.vue'),'utf8')
+    expect(queue).toContain('r.collectorId')
+    expect(queue).not.toContain('collectorUserNo')
+  })
 })

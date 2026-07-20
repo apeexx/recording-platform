@@ -4,7 +4,7 @@ import com.recording.platform.api.ApiException;
 import com.recording.platform.api.PageResponse;
 import com.recording.platform.identity.model.UserRole;
 import com.recording.platform.identity.service.CollectorProfileGuard;
-import com.recording.platform.identity.store.UserStore;
+import com.recording.platform.identity.store.MiniProgramUserStore;
 import com.recording.platform.security.PlatformPrincipal;
 import com.recording.platform.task.model.TaskItem;
 import com.recording.platform.task.store.TaskItemStore;
@@ -25,7 +25,7 @@ public class TaskItemQueryService {
 	private final TaskStore tasks;
 	private final CollectorProfileGuard profileGuard;
 	@org.springframework.beans.factory.annotation.Autowired
-	public TaskItemQueryService(TaskItemStore items, TaskStore tasks, UserStore users) {
+	public TaskItemQueryService(TaskItemStore items, TaskStore tasks, MiniProgramUserStore users) {
 		this.items = items;
 		this.tasks = tasks;
 		this.profileGuard = new CollectorProfileGuard(users);

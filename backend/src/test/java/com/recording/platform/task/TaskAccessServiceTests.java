@@ -5,10 +5,13 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 
 import com.recording.platform.identity.model.SessionType;
-import com.recording.platform.identity.model.UserAccount;
+import com.recording.platform.identity.model.IdentityUser;
+import com.recording.platform.identity.model.MiniProgramUser;
+import com.recording.platform.identity.model.UserType;
 import com.recording.platform.identity.model.UserRole;
 import com.recording.platform.identity.model.UserStatus;
-import com.recording.platform.identity.store.UserStore;
+import com.recording.platform.identity.store.IdentityDirectory;
+import com.recording.platform.identity.store.MiniProgramUserStore;
 import com.recording.platform.security.PlatformPrincipal;
 import com.recording.platform.task.model.AccessRequestStatus;
 import com.recording.platform.task.model.GrantStatus;
@@ -43,24 +46,22 @@ class TaskAccessServiceTests {
 	@BeforeEach
 	void setUp() {
 		TaskStore tasks = org.mockito.Mockito.mock(TaskStore.class);
-		UserStore users = org.mockito.Mockito.mock(UserStore.class);
+		IdentityDirectory users = org.mockito.Mockito.mock(IdentityDirectory.class);
+		MiniProgramUserStore miniUsers = org.mockito.Mockito.mock(MiniProgramUserStore.class);
 		TaskRecord task = new TaskRecord();
 		task.setId("task-1");
 		task.setLifecycle(TaskLifecycle.RUNNING);
 		when(tasks.findById("task-1")).thenReturn(Optional.of(task));
-		UserAccount user = new UserAccount();
-		user.setId("collector-1");
-		user.setRole(UserRole.COLLECTOR);
-		user.setStatus(UserStatus.ACTIVE);
-		user.setUsername("123456");
-		user.setName("采集员");
-		user.setPasswordHash("encoded");
+		IdentityUser user = new IdentityUser("collector-1",UserType.MINIPROGRAM,"123456","采集员",UserRole.COLLECTOR,UserStatus.ACTIVE,false,null,null);
+		MiniProgramUser mini = new MiniProgramUser(); mini.setId("collector-1"); mini.setAccount("123456"); mini.setName("采集员"); mini.setPasswordHash("encoded"); mini.setStatus(UserStatus.ACTIVE);
 		when(users.findById("collector-1")).thenReturn(Optional.of(user));
+		when(miniUsers.findById("collector-1")).thenReturn(Optional.of(mini));
 		grants = new InMemoryGrantStore();
 		requests = new InMemoryAccessRequestStore();
 		service = new TaskAccessService(
 			tasks,
 			users,
+			miniUsers,
 			grants,
 			requests,
 			Clock.fixed(Instant.parse("2026-07-11T12:00:00Z"), ZoneOffset.UTC)

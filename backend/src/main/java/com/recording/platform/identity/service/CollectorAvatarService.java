@@ -2,10 +2,9 @@ package com.recording.platform.identity.service;
 
 import com.recording.platform.api.ApiException;
 import com.recording.platform.config.StoragePathResolver;
-import com.recording.platform.identity.model.UserAccount;
-import com.recording.platform.identity.model.UserRole;
+import com.recording.platform.identity.model.MiniProgramUser;
 import com.recording.platform.identity.model.UserStatus;
-import com.recording.platform.identity.store.UserStore;
+import com.recording.platform.identity.store.MiniProgramUserStore;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.AtomicMoveNotSupportedException;
@@ -25,22 +24,22 @@ import org.springframework.web.multipart.MultipartFile;
 @Service
 public class CollectorAvatarService {
 	public static final long MAX_AVATAR_BYTES = 5L * 1024 * 1024;
-	private final UserStore users;
+	private final MiniProgramUserStore users;
 	private final Path root;
 	private final Clock clock;
 
 	@Autowired
-	public CollectorAvatarService(UserStore users, @Value("${recording.avatar-storage-dir:backend/storage/avatars}") String root, Clock clock) {
+	public CollectorAvatarService(MiniProgramUserStore users, @Value("${recording.avatar-storage-dir:backend/storage/avatars}") String root, Clock clock) {
 		this(users, StoragePathResolver.resolve(root), clock);
 	}
 
-	public CollectorAvatarService(UserStore users, Path root, Clock clock) {
+	public CollectorAvatarService(MiniProgramUserStore users, Path root, Clock clock) {
 		this.users = users; this.root = root.toAbsolutePath().normalize(); this.clock = clock;
 	}
 	public Path rootPath() { return root; }
 
-	public UserAccount upload(String userId, MultipartFile upload) {
-		UserAccount current = requireCollector(userId);
+	public MiniProgramUser upload(String userId, MultipartFile upload) {
+		MiniProgramUser current = requireCollector(userId);
 		if (upload == null || upload.isEmpty()) throw invalid("头像文件不能为空");
 		if (upload.getSize() > MAX_AVATAR_BYTES) throw tooLarge();
 		AvatarType type = detect(upload);
@@ -58,7 +57,7 @@ public class CollectorAvatarService {
 				atomicMove(target, backup);
 			}
 			atomicMove(temporary, target);
-			UserAccount saved = users.updateCollectorAvatarIfActive(userId, relative, type.contentType, Instant.now(clock))
+			MiniProgramUser saved = users.updateAvatarIfActive(userId, relative, type.contentType, Instant.now(clock))
 				.orElseThrow(() -> new ApiException(HttpStatus.CONFLICT, "ACCOUNT_STATE_CHANGED", "账号状态已变化，请重试"));
 			if (current.getAvatarPath() != null && !current.getAvatarPath().equals(relative)) Files.deleteIfExists(resolve(current.getAvatarPath()));
 			if (backup != null) Files.deleteIfExists(backup);
@@ -72,7 +71,7 @@ public class CollectorAvatarService {
 	}
 
 	public AvatarFile read(String userId) {
-		UserAccount user = requireCollector(userId);
+		MiniProgramUser user = requireCollector(userId);
 		if (user.getAvatarPath() == null || user.getAvatarPath().isBlank())
 			throw new ApiException(HttpStatus.NOT_FOUND, "AVATAR_NOT_FOUND", "尚未设置自定义头像");
 		Path path = resolve(user.getAvatarPath());
@@ -80,9 +79,9 @@ public class CollectorAvatarService {
 		return new AvatarFile(path, user.getAvatarContentType());
 	}
 
-	public UserAccount delete(String userId) {
-		UserAccount current = requireCollector(userId);
-		UserAccount saved = users.clearCollectorAvatarIfActive(userId, Instant.now(clock))
+	public MiniProgramUser delete(String userId) {
+		MiniProgramUser current = requireCollector(userId);
+		MiniProgramUser saved = users.clearAvatarIfActive(userId, Instant.now(clock))
 			.orElseThrow(() -> new ApiException(HttpStatus.CONFLICT, "ACCOUNT_STATE_CHANGED", "账号状态已变化，请重试"));
 		if (current.getAvatarPath() != null) {
 			try { Files.deleteIfExists(resolve(current.getAvatarPath())); }
@@ -91,9 +90,9 @@ public class CollectorAvatarService {
 		return saved;
 	}
 
-	private UserAccount requireCollector(String id) {
-		UserAccount user = users.findById(id).orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "USER_NOT_FOUND", "用户不存在"));
-		if (user.getRole() != UserRole.COLLECTOR || user.getStatus() != UserStatus.ACTIVE)
+	private MiniProgramUser requireCollector(String id) {
+		MiniProgramUser user = users.findById(id).orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "USER_NOT_FOUND", "用户不存在"));
+		if (user.getStatus() != UserStatus.ACTIVE)
 			throw new ApiException(HttpStatus.FORBIDDEN, "COLLECTOR_REQUIRED", "仅录音人员可以管理头像");
 		return user;
 	}

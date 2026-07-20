@@ -19,7 +19,7 @@ describe('任务页面 API', () => {
 	  expect(source).toContain('v-if="form.humanReviewEnabled"')
 	  expect(source).toContain("rejectionReasons: form.humanReviewEnabled")
 	})
-	it('任务数据池完全不显示或提交外部编号', () => {
+  it('任务数据池完全不显示或提交外部编号', () => {
 	  const detail = fs.readFileSync(path.resolve('src/pages/admin/tasks/TaskDetailPage.vue'), 'utf8')
 	  const pool = fs.readFileSync(path.resolve('src/pages/admin/tasks/TaskPoolPage.vue'), 'utf8')
 	  expect(detail).not.toContain('externalItemId')
@@ -36,6 +36,14 @@ describe('任务页面 API', () => {
     expect(httpRequest).toHaveBeenNthCalledWith(2, '/api/tasks/t1/items?page=2&size=30')
     expect(httpRequest).toHaveBeenNthCalledWith(3, '/api/tasks/t1/versions')
   })
+	it('采集权限只展示带前缀的用户 ID，不使用旧用户编号字段',()=>{
+	  const source=fs.readFileSync(path.resolve('src/pages/admin/tasks/TaskPermissionsPage.vue'),'utf8')
+	  expect(source).toContain('u.id')
+	  expect(source).toContain('r.userId')
+	  expect(source).toContain('g.userId')
+	  expect(source).not.toContain('internalUserNo')
+	  expect(source).not.toContain('userNo')
+	})
   it('导入使用 multipart 且不手写内容类型', async () => {
     httpRequest.mockResolvedValue({ importJobId: 'j1' })
     const file = new File(['a'], 'items.csv')

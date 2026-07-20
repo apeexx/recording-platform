@@ -1,10 +1,10 @@
 package com.recording.platform.identity.service;
 
 import com.recording.platform.api.ApiException;
-import com.recording.platform.identity.model.UserAccount;
+import com.recording.platform.identity.model.WebUser;
 import com.recording.platform.identity.model.UserRole;
 import com.recording.platform.identity.model.UserStatus;
-import com.recording.platform.identity.store.UserStore;
+import com.recording.platform.identity.store.WebUserStore;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Map;
@@ -16,13 +16,13 @@ import org.springframework.util.StringUtils;
 
 @Service
 public class WebAuthenticationService {
-	private final UserStore users;
+	private final WebUserStore users;
 	private final SessionService sessions;
 	private final PasswordEncoder passwordEncoder;
 	private final Clock clock;
 
 	public WebAuthenticationService(
-		UserStore users,
+		WebUserStore users,
 		SessionService sessions,
 		PasswordEncoder passwordEncoder,
 		Clock clock
@@ -34,20 +34,19 @@ public class WebAuthenticationService {
 	}
 
 	public WebLoginResult login(String username, String password) {
-		UserAccount user = users.findByUsername(normalizeUsername(username)).orElseThrow(this::invalidCredentials);
+		WebUser user = users.findByUsername(normalizeUsername(username)).orElseThrow(this::invalidCredentials);
 		if (user.getStatus() != UserStatus.ACTIVE
-			|| user.getRole() == UserRole.COLLECTOR
 			|| !passwordEncoder.matches(nullToEmpty(password), nullToEmpty(user.getPasswordHash()))) {
 			throw invalidCredentials();
 		}
-		var activeSession = sessions.activeWeb(user.getId());
+		var activeSession = sessions.active(user.getId(), com.recording.platform.identity.model.SessionType.WEB);
 		if (activeSession.isPresent()) {
 			throw accountInUse(user, activeSession.get().getId());
 		}
 		try {
 			return toResult(user, sessions.issueWeb(user.getId()));
 		} catch (DuplicateKeyException exception) {
-			String activeSessionId = sessions.activeWeb(user.getId())
+			String activeSessionId = sessions.active(user.getId(), com.recording.platform.identity.model.SessionType.WEB)
 				.map((session) -> session.getId())
 				.orElseThrow(() -> new ApiException(
 					HttpStatus.CONFLICT,
@@ -59,8 +58,8 @@ public class WebAuthenticationService {
 	}
 
 	public WebLoginResult takeover(String takeoverToken) {
-		IssuedSession issued = sessions.confirmTakeover(takeoverToken);
-		UserAccount user = users.findById(issued.session().getUserId()).orElseThrow(this::invalidCredentials);
+		IssuedSession issued = sessions.confirmWebTakeover(takeoverToken);
+		WebUser user = users.findById(issued.session().getUserId()).orElseThrow(this::invalidCredentials);
 		return toResult(user, issued);
 	}
 
@@ -69,7 +68,7 @@ public class WebAuthenticationService {
 	}
 
 	public void changePassword(String userId, String currentPassword, String newPassword) {
-		UserAccount user = users.findById(userId)
+		WebUser user = users.findById(userId)
 			.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "USER_NOT_FOUND", "用户不存在"));
 		if (!passwordEncoder.matches(nullToEmpty(currentPassword), nullToEmpty(user.getPasswordHash()))) {
 			throw invalidCredentials();
@@ -88,7 +87,7 @@ public class WebAuthenticationService {
 			nextPasswordHash,
 			Instant.now(clock)
 		)) {
-			UserAccount current = users.findById(userId)
+			WebUser current = users.findById(userId)
 				.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "USER_NOT_FOUND", "用户不存在"));
 			if (current.getStatus() != UserStatus.ACTIVE) {
 				throw new ApiException(HttpStatus.UNAUTHORIZED, "ACCOUNT_DISABLED", "账号已停用");
@@ -98,7 +97,7 @@ public class WebAuthenticationService {
 		sessions.revokeAll(userId);
 	}
 
-	private WebLoginResult toResult(UserAccount user, IssuedSession issued) {
+	private WebLoginResult toResult(WebUser user, IssuedSession issued) {
 		return new WebLoginResult(
 			issued.token(),
 			issued.session().getId(),
@@ -122,8 +121,8 @@ public class WebAuthenticationService {
 		return new ApiException(HttpStatus.UNAUTHORIZED, "INVALID_CREDENTIALS", "用户名或密码错误");
 	}
 
-	private ApiException accountInUse(UserAccount user, String activeSessionId) {
-		IssuedSession takeover = sessions.issueTakeover(user.getId(), activeSessionId);
+	private ApiException accountInUse(WebUser user, String activeSessionId) {
+		IssuedSession takeover = sessions.issueWebTakeover(user.getId(), activeSessionId);
 		return new ApiException(
 			HttpStatus.CONFLICT,
 			"ACCOUNT_IN_USE",
