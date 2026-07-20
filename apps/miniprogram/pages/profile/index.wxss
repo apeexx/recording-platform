@@ -1,4 +1,4 @@
 .section-title{font-size:34rpx;margin:32rpx 0 18rpx}
 .profile-card{display:flex;align-items:center;gap:24rpx}.profile-avatar{width:112rpx;height:112rpx;border-radius:56rpx;background:#eee7df}.profile-copy{flex:1}.profile-copy .title{font-size:36rpx}.profile-state{display:inline-block;margin-top:10rpx;padding:6rpx 14rpx;border-radius:999rpx;background:#fff2df;color:#a46720;font-size:22rpx}.profile-state.complete{background:#e8f6ed;color:#247447}.chevron{font-size:52rpx;color:#aaa09a}
-.user-id-copy{display:flex;align-items:center;flex-wrap:wrap;gap:10rpx;margin-top:6rpx;color:#756b64;font-size:25rpx;line-height:1.5;word-break:break-all}.copy-hint{flex:none;color:#2563eb;font-size:22rpx}
+.user-id-copy{display:flex;align-items:center;flex-wrap:wrap;gap:10rpx;margin-top:6rpx;color:#756b64;font-size:25rpx;line-height:1.5;word-break:break-all}
 .records-state{text-align:center;padding:44rpx 24rpx;color:#81766d}.record-card{margin-bottom:18rpx}.record-detail{margin-top:10rpx;color:#756b64;font-size:26rpx;line-height:1.6}
