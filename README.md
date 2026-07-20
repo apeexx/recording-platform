@@ -162,7 +162,7 @@ PUT  /api/admin/users/{userId}/collector-account
 POST /api/admin/users/{userId}/reset-password
 ```
 
-后台用户列表接口 `GET /api/admin/users` 只返回 Web 用户；统一搜索使用 `GET /api/admin/users/search?query=&role=&userType=&page=&size=`。搜索结果中的每项固定展示 `id`、`userType`、`loginName`、name、role、status：`WEB-...` / `WEB` 表示后台用户，`MINI-...` / `MINIPROGRAM` 表示采集员。搜索条件同时匹配姓名、完整前缀 ID 和登录名；`userType=WEB` 只查询 `web_users`，`userType=MINIPROGRAM` 只查询 `miniprogram_users`，与指定角色不匹配时返回空分页；省略 `userType` 时保持现有跨集合合并搜索，指定 `COLLECTOR` 时只搜索采集员，指定 `ADMIN` 或 `REVIEWER` 时只搜索对应 Web 用户。Web 用户管理页顶部使用“Web 端账号 / 小程序端账号”页签并按当前类型加载和搜索。ADMIN 可对 ACTIVE Web 或 Mini 用户重置密码：前者要求下次登录改密，后者只废止小程序会话；采集员登录账号可由 `PUT /api/admin/users/{userId}/collector-account` 修改。
+后台用户列表接口 `GET /api/admin/users` 只返回 Web 用户；统一搜索使用 `GET /api/admin/users/search?query=&role=&userType=&page=&size=`。搜索结果中的每项固定展示 `id`、`userType`、`loginName`、name、role、status：`WEB-...` / `WEB` 表示后台用户，`MINI-...` / `MINIPROGRAM` 表示采集员。搜索条件同时匹配姓名、完整前缀 ID 和登录名；`userType=WEB` 只查询 `web_users`，`userType=MINIPROGRAM` 只查询 `miniprogram_users`，与指定角色不匹配时返回空分页；省略 `userType` 时保持现有跨集合合并搜索，指定 `COLLECTOR` 时只搜索采集员，指定 `ADMIN` 或 `REVIEWER` 时只搜索对应 Web 用户。Web 用户管理页顶部使用“Web 端账号 / 小程序端账号”页签并按当前类型加载和搜索；Web 页签的搜索栏右侧提供“创建后台账号”按钮，点击后在四字段弹窗中创建，成功关闭并刷新列表，失败保留输入。ADMIN 可对 ACTIVE Web 或 Mini 用户重置密码：前者要求下次登录改密，后者只废止小程序会话；采集员登录账号可由 `PUT /api/admin/users/{userId}/collector-account` 修改。
 
 ## 任务池、录音媒体与导入
 

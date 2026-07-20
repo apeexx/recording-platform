@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import PageActions from '../../../components/admin/PageActions.vue'
 import AsyncState from '../../../components/admin/AsyncState.vue'
 import { useNotifications } from '../../../composables/useNotifications.js'
@@ -12,6 +12,10 @@ const loading = ref(false)
 const error = ref('')
 const query = ref('')
 const view = ref('WEB')
+const createOpen = ref(false)
+const creating = ref(false)
+const createTrigger = ref(null)
+const createPanel = ref(null)
 const form = reactive({ username: '', name: '', role: 'REVIEWER', initialPassword: '' })
 let loadSequence = 0
 
@@ -31,21 +35,61 @@ async function load() {
 
 function switchView(next) {
   if (view.value === next) return
+  closeCreate()
   view.value = next
   query.value = ''
   rows.value = []
   load()
 }
 
+function resetCreateForm() {
+  Object.assign(form, { username: '', name: '', role: 'REVIEWER', initialPassword: '' })
+}
+
+function openCreate() {
+  createOpen.value = true
+}
+
+function closeCreate() {
+  if (creating.value) return
+  createOpen.value = false
+  resetCreateForm()
+}
+
+function handleCreateKeydown(event) {
+  if (!createOpen.value) return
+  if (event.key === 'Escape') {
+    closeCreate()
+    return
+  }
+  if (event.key !== 'Tab') return
+  const controls = [...(createPanel.value?.querySelectorAll('input:not(:disabled), select:not(:disabled), button:not(:disabled)') || [])]
+  if (!controls.length) return
+  const first = controls[0]
+  const last = controls[controls.length - 1]
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault()
+    last.focus()
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault()
+    first.focus()
+  }
+}
+
 async function create() {
+  if (creating.value) return
+  creating.value = true
   try {
     await userApi.create({ ...form })
-    Object.keys(form).forEach((key) => { form[key] = key === 'role' ? 'REVIEWER' : '' })
+    createOpen.value = false
+    resetCreateForm()
     notifications.success('后台账号已创建')
     await load()
   } catch (exception) {
     error.value = exception.message
     notifications.error(exception.message)
+  } finally {
+    creating.value = false
   }
 }
 
@@ -84,7 +128,22 @@ async function editAccount(row) {
   }
 }
 
+watch(createOpen, async (open) => {
+  document.body.style.overflow = open ? 'hidden' : ''
+  if (open) {
+    await nextTick()
+    createPanel.value?.querySelector('input')?.focus()
+  } else {
+    createTrigger.value?.focus()
+  }
+})
+
 onMounted(load)
+onMounted(() => window.addEventListener('keydown', handleCreateKeydown))
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleCreateKeydown)
+  document.body.style.overflow = ''
+})
 </script>
 
 <template>
@@ -96,13 +155,7 @@ onMounted(load)
     <div class="toolbar">
       <input v-model="query" placeholder="按姓名、完整用户 ID 或登录名搜索" @keyup.enter="load">
       <button class="primary" @click="load">搜索</button>
-    </div>
-    <div v-if="view === 'WEB'" class="panel create">
-      <input v-model="form.username" placeholder="用户名">
-      <input v-model="form.name" placeholder="姓名">
-      <select v-model="form.role"><option value="REVIEWER">审核员</option><option value="ADMIN">管理员</option></select>
-      <input v-model="form.initialPassword" type="password" placeholder="初始密码">
-      <button class="primary" @click="create">创建后台账号</button>
+      <button v-if="view === 'WEB'" ref="createTrigger" data-testid="open-create-user" class="primary create-trigger" @click="openCreate">创建后台账号</button>
     </div>
     <AsyncState :loading="loading" :error="error" :empty="!rows.length">
       <div class="panel">
@@ -124,9 +177,26 @@ onMounted(load)
         </table>
       </div>
     </AsyncState>
+    <Teleport to="body">
+      <div v-if="createOpen" data-testid="create-user-modal" class="create-modal-backdrop" @click.self="closeCreate">
+        <section ref="createPanel" class="create-modal" role="dialog" aria-modal="true" aria-label="创建后台账号">
+          <h2>创建后台账号</h2>
+          <form class="create-modal-form" @submit.prevent="create">
+            <label>用户名<input v-model.trim="form.username" required autocomplete="off" placeholder="请输入用户名"></label>
+            <label>姓名<input v-model.trim="form.name" required autocomplete="off" placeholder="请输入姓名"></label>
+            <label>角色<select v-model="form.role"><option value="REVIEWER">审核员</option><option value="ADMIN">管理员</option></select></label>
+            <label>初始密码<input v-model="form.initialPassword" type="password" required minlength="8" autocomplete="new-password" placeholder="至少 8 个字符"></label>
+            <div class="create-modal-actions">
+              <button type="button" data-testid="create-user-cancel" class="modal-secondary" :disabled="creating" @click="closeCreate">取消</button>
+              <button type="submit" class="primary" :disabled="creating">{{ creating ? '创建中…' : '确定创建' }}</button>
+            </div>
+          </form>
+        </section>
+      </div>
+    </Teleport>
   </section>
 </template>
 
 <style scoped>
-.tab{border:1px solid var(--border);background:var(--card);color:var(--foreground);padding:10px 18px;border-radius:12px}.tab.active,.primary{background:var(--primary);color:#fff;border-color:var(--primary)}.toolbar,.create{display:flex;gap:12px;margin-bottom:18px}.toolbar input{min-width:320px}.panel{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:20px}.create input,.create select,.toolbar input{border:1px solid var(--border);border-radius:10px;padding:10px 12px}.primary{border:0;border-radius:10px;padding:10px 18px}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:14px;border-bottom:1px solid var(--border)}.link{border:0;background:transparent;color:var(--primary);margin-right:12px}.danger{color:#dc2626}
+.tab{border:1px solid var(--border);background:var(--card);color:var(--foreground);padding:10px 18px;border-radius:12px}.tab.active,.primary{background:var(--primary);color:#fff;border-color:var(--primary)}.toolbar{display:flex;gap:12px;margin-bottom:18px}.toolbar input{min-width:320px;border:1px solid var(--border);border-radius:10px;padding:10px 12px}.create-trigger{margin-left:auto}.panel{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:20px}.primary{border:0;border-radius:10px;padding:10px 18px}.primary:disabled,.modal-secondary:disabled{opacity:.65;cursor:not-allowed}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:14px;border-bottom:1px solid var(--border)}.link{border:0;background:transparent;color:var(--primary);margin-right:12px}.danger{color:#dc2626}.create-modal-backdrop{position:fixed;inset:0;z-index:2900;display:grid;place-items:center;padding:24px;background:rgba(15,23,42,.48);backdrop-filter:blur(4px)}.create-modal{width:min(480px,100%);padding:26px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--foreground);box-shadow:0 24px 70px rgba(15,23,42,.22)}.create-modal h2{margin:0 0 22px}.create-modal-form{display:grid;gap:16px}.create-modal-form label{display:grid;gap:8px;font-weight:700}.create-modal-form input,.create-modal-form select{width:100%;border:1px solid var(--border);border-radius:10px;background:var(--background);color:var(--foreground);padding:11px 12px}.create-modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:8px}.modal-secondary{border:1px solid var(--border);border-radius:10px;background:var(--card);color:var(--foreground);padding:10px 18px}@media(max-width:640px){.toolbar{flex-wrap:wrap}.toolbar input{min-width:0;flex:1 1 100%}.create-trigger{margin-left:0}.create-modal-backdrop{padding:16px}}
 </style>
