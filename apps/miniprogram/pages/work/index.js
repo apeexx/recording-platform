@@ -12,15 +12,10 @@ const statusText = {
 const editableStatuses = new Set(['RECORDING_PENDING', 'REWORK_PENDING', 'SUBMITTED'])
 const readOnlyStatuses = new Set(['REVIEW_PENDING', 'COMPLETED', 'AI_PROCESSING'])
 
-function durationText(ms) {
-  const seconds = Math.round((ms || 0) / 1000)
-  return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
-}
-
 Page({
   data: {
     item: {}, version: {}, loading: true, error: '', referenceAudioPath: '', referenceVideoPath: '',
-    audioPath: '', audioDuration: 0, audioDurationText: '00:00', text: '', recordState: 'idle',
+    audioPath: '', audioDuration: 0, text: '', recordState: 'idle',
     levelBars: [0, 0, 0, 0, 0, 0, 0], submitting: false, releasing: false,
     statusText: '待录制', editable: true, readOnly: false, canRelease: true, submitLabel: '提交作业',
   },
@@ -39,10 +34,10 @@ Page({
         this.setData({ levelBars: this.data.levelBars.map((_, i) => i < active ? Math.max(18, Math.round(level * 100)) : 8) })
       },
       onState: recordState => this.setData({ recordState }),
-      onComplete: result => this.setData({ audioPath: result.filePath, audioDuration: result.durationMillis, audioDurationText: durationText(result.durationMillis) }),
+      onComplete: result => this.setData({ audioPath: result.filePath, audioDuration: result.durationMillis }),
       onError: error => {
         const message = error.message || '录音保存失败'
-        this.setData({ error: message, audioPath: '', audioDuration: 0, audioDurationText: '00:00' })
+        this.setData({ error: message, audioPath: '', audioDuration: 0 })
         feedback.error(message)
       },
     })
@@ -70,7 +65,7 @@ Page({
         editable, readOnly, canRelease: item.status === 'RECORDING_PENDING' || item.status === 'REWORK_PENDING',
         submitLabel: item.status === 'SUBMITTED' ? '保存修改' : '提交作业',
         referenceAudioPath, referenceVideoPath, audioPath: resultAudioPath,
-        audioDuration: resultDuration, audioDurationText: durationText(resultDuration),
+        audioDuration: resultDuration,
         recordState: resultAudioPath ? 'stopped' : 'idle',
       })
       if (editable) this.setupRecorder()
@@ -82,7 +77,7 @@ Page({
   },
   startRecord() {
     if (!this.data.editable || !this.session) return
-    this.setData({ error: '', audioPath: '', audioDuration: 0, audioDurationText: '00:00' })
+    this.setData({ error: '', audioPath: '', audioDuration: 0 })
     this.session.start()
   },
   pauseRecord() { if (this.data.editable) this.session?.pause() },
@@ -91,10 +86,13 @@ Page({
     if (!this.data.editable || !this.session) return
     try {
       const result = await this.session.stop()
-      this.setData({ audioPath: result.filePath, audioDuration: result.durationMillis, audioDurationText: durationText(result.durationMillis) })
+      this.setData({ audioPath: result.filePath, audioDuration: result.durationMillis })
     } catch (error) { this.setData({ error: error.message || '录音保存失败' }) }
   },
   textInput(event) { if (this.data.editable) this.setData({ text: event.detail.value }) },
+  audioPlaybackError(event) {
+    feedback.error(event.detail?.message || '音频播放失败')
+  },
   async submit() {
     if (!this.data.editable) return
     const validation = validateSubmission(this.data.version, { audio: this.data.audioPath, text: this.data.text })
@@ -142,5 +140,4 @@ Page({
       },
     })
   },
-  durationText,
 })

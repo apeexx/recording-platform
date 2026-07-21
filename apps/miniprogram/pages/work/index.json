@@ -1,1 +1,1 @@
-{"navigationBarTitleText":"录音作业","disableScroll":false}
+{"navigationBarTitleText":"录音作业","disableScroll":false,"usingComponents":{"audio-player":"../../components/audio-player/index"}}

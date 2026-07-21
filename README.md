@@ -31,7 +31,7 @@ recording-platform/
 ## 模块用途
 
 - `apps/web`：管理员 Web 端和审核 Web 端，已实现真实后台身份流程、角色路由和语音生成生产台。
-- `apps/miniprogram`：原生微信小程序录音采集端。
+- `apps/miniprogram`：原生微信小程序录音采集端；录音作业页使用固定状态卡片、本地 Iconfont SVG 和可拖动的自定义互斥播放器。
 - `backend`：Spring Boot 后端服务，提供身份、会话、用户管理、任务池、录音媒体、导入和语音生成接口。
 - `scripts`：后续放置本地开发、数据处理或运维辅助脚本。
 - `AGENTS.md`：Codex 长期执行规则，同时记录接口和数据库说明入口。

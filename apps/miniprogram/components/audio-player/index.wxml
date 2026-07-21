@@ -1,0 +1,10 @@
+<view class="audio-player">
+  <view class="audio-header"><text class="audio-label">{{label}}</text><text class="audio-time">{{timeText}}</text></view>
+  <view class="audio-controls">
+    <button class="play-button" aria-label="{{playing?'暂停播放':'播放音频'}}" bindtap="toggle">
+      <image wx:if="{{playing}}" class="play-icon" src="/assets/icons/iconfont/pause.svg" mode="aspectFit" />
+      <image wx:else class="play-icon" src="/assets/icons/iconfont/play.svg" mode="aspectFit" />
+    </button>
+    <slider class="audio-slider" min="0" max="100" value="{{progress}}" activeColor="#2563EB" backgroundColor="#E2E8F0" block-color="#2563EB" block-size="16" bindchange="seek" />
+  </view>
+</view>

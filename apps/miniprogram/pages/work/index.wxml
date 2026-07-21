@@ -2,34 +2,50 @@
   <view wx:if="{{loading}}" class="empty">正在加载作业…</view>
   <block wx:else>
     <view wx:if="{{error}}" class="error">{{error}}</view>
-    <view class="card">
-      <view class="row">
-        <view><view class="title work-title">数据 {{item.itemCode}}</view><view class="subtle">任务版本 v{{item.taskVersionNumber}}</view></view>
-        <view class="row status-actions"><view class="tag">{{statusText}}</view><button wx:if="{{canRelease}}" class="trash-button" loading="{{releasing}}" aria-label="释放任务" bindtap="release"><image src="../../assets/icons/iconfont/trash.svg" mode="aspectFit" /></button></view>
+    <view class="card task-card">
+      <view class="task-heading">
+        <view class="task-identity"><view class="title work-title">数据 {{item.itemCode}}</view><view class="subtle">任务版本 v{{item.taskVersionNumber}}</view></view>
+        <view class="status-actions"><view class="tag">{{statusText}}</view><button wx:if="{{canRelease}}" class="trash-button" loading="{{releasing}}" aria-label="释放任务" bindtap="release"><image src="../../assets/icons/iconfont/trash.svg" mode="aspectFit" /></button></view>
       </view>
       <view wx:if="{{item.currentRejection}}" class="rejection-box"><text>驳回原因：</text><text wx:for="{{item.currentRejection.reasons}}" wx:key="*this">{{item}} </text><text>{{item.currentRejection.note}}</text></view>
       <view wx:if="{{item.referenceText}}" class="reference-text">{{item.referenceText}}</view>
-      <audio wx:if="{{referenceAudioPath}}" class="media" src="{{referenceAudioPath}}" controls />
+      <audio-player wx:if="{{referenceAudioPath}}" class="reference-player" src="{{referenceAudioPath}}" label="参考音频" duration-millis="0" binderror="audioPlaybackError" />
       <video wx:if="{{referenceVideoPath}}" class="media" src="{{referenceVideoPath}}" controls />
     </view>
 
     <view wx:if="{{editable}}" class="card recorder-card">
-      <button wx:if="{{recordState==='idle'||recordState==='error'}}" class="mic-button" aria-label="开始录音" bindtap="startRecord"><image src="../../assets/icons/iconfont/microphone.svg" mode="aspectFit" /></button>
-      <view wx:if="{{recordState==='recording'||recordState==='paused'}}" class="wave"><view wx:for="{{levelBars}}" wx:key="index" class="wave-bar" style="height:{{recordState==='paused'?8:item}}rpx" /></view>
-      <view wx:if="{{recordState==='recording'}}" class="record-actions"><button class="control-button" bindtap="pauseRecord">Ⅱ<text>暂停</text></button><button class="stop-button" bindtap="stopRecord">■<text>结束</text></button></view>
-      <view wx:if="{{recordState==='paused'}}" class="record-actions"><button class="control-button" bindtap="resumeRecord"><image src="../../assets/icons/iconfont/microphone.svg" mode="aspectFit" /><text>继续</text></button><button class="stop-button" bindtap="stopRecord">■<text>结束</text></button></view>
-      <view wx:if="{{recordState==='stopping'}}" class="subtle">正在生成音频…</view>
-      <view wx:if="{{audioPath&&recordState==='stopped'}}" class="recording-result"><view><strong>录制音频</strong><text>{{audioDurationText}}</text></view><audio class="media" src="{{audioPath}}" controls /><button class="button secondary" bindtap="startRecord">重新录制</button></view>
+      <view class="recorder-stage">
+        <view wx:if="{{recordState==='idle'||recordState==='error'}}" class="recorder-state idle-state">
+          <button class="mic-button" aria-label="开始录音" bindtap="startRecord"><image src="../../assets/icons/iconfont/microphone.svg" mode="aspectFit" /></button>
+          <view class="recorder-hint">点击开始录音</view>
+        </view>
+
+        <view wx:elif="{{recordState==='recording'||recordState==='paused'}}" class="recorder-state active-state">
+          <view class="recording-status"><view class="status-dot {{recordState==='paused'?'paused':''}}"></view><text>{{recordState==='paused'?'已暂停':'录音中'}}</text></view>
+          <view class="wave"><view wx:for="{{levelBars}}" wx:key="index" class="wave-bar" style="height:{{recordState==='paused'?8:item}}rpx" /></view>
+          <view class="record-actions">
+            <button wx:if="{{recordState==='recording'}}" class="record-control" bindtap="pauseRecord"><image src="../../assets/icons/iconfont/pause.svg" mode="aspectFit" /><text>暂停</text></button>
+            <button wx:else class="record-control" bindtap="resumeRecord"><image src="../../assets/icons/iconfont/resume.svg" mode="aspectFit" /><text>继续</text></button>
+            <button class="record-control stop-control" bindtap="stopRecord"><image src="../../assets/icons/iconfont/stop.svg" mode="aspectFit" /><text>结束</text></button>
+          </view>
+        </view>
+
+        <view wx:elif="{{recordState==='stopping'}}" class="recorder-state processing-state"><view class="processing-ring"></view><view class="recorder-hint">正在生成音频…</view></view>
+
+        <view wx:elif="{{audioPath&&recordState==='stopped'}}" class="recorder-state completed-state">
+          <audio-player src="{{audioPath}}" label="录制音频" duration-millis="{{audioDuration}}" binderror="audioPlaybackError" />
+          <button class="rerecord-button" bindtap="startRecord">重新录制</button>
+        </view>
+      </view>
     </view>
 
     <view wx:if="{{readOnly}}" class="card readonly-result">
-      <view class="section-title">已提交录音</view>
-      <audio wx:if="{{audioPath}}" class="media" src="{{audioPath}}" controls />
+      <audio-player wx:if="{{audioPath}}" src="{{audioPath}}" label="已提交录音" duration-millis="{{audioDuration}}" binderror="audioPlaybackError" />
       <view wx:else class="subtle">暂无可播放录音</view>
     </view>
 
-    <view wx:if="{{version.resultType==='TEXT'&&editable}}" class="card"><view>文本结果</view><textarea class="textarea" maxlength="-1" placeholder="请输入文本" value="{{text}}" bindinput="textInput" /></view>
+    <view wx:if="{{version.resultType==='TEXT'&&editable}}" class="card"><view class="section-title">文本结果</view><textarea class="textarea" maxlength="-1" placeholder="请输入文本" value="{{text}}" bindinput="textInput" /></view>
     <view wx:if="{{version.resultType==='TEXT'&&readOnly}}" class="card"><view class="section-title">文本结果</view><view class="readonly-text">{{text||'暂无文本'}}</view></view>
-    <view wx:if="{{editable}}" class="card"><button class="button" loading="{{submitting}}" disabled="{{submitting||recordState==='recording'||recordState==='paused'||recordState==='stopping'}}" bindtap="submit">{{submitLabel}}</button></view>
+    <view wx:if="{{editable}}" class="card submit-card"><button class="button submit-button" loading="{{submitting}}" disabled="{{submitting||recordState==='recording'||recordState==='paused'||recordState==='stopping'}}" bindtap="submit">{{submitLabel}}</button></view>
   </block>
 </view>
