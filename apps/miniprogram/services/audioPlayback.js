@@ -33,7 +33,7 @@ function createAudioPlayback({ createContext, onState = () => {}, onError = () =
 			durationMillis = Math.max(0, Number(nextDurationMillis) || 0)
 			currentMillis = 0
 			playing = false
-			context.src = source
+			if (source) context.src = source
 			emit()
 		},
 		play() {

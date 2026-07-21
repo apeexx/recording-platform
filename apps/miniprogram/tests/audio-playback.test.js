@@ -9,8 +9,8 @@ try {
 
 function fakeContext() {
 	const handlers = {}
-	return {
-		src: '', currentTime: 0, duration: 0, playCount: 0, pauseCount: 0, destroyCount: 0, seekValues: [],
+	const context = {
+		_src: '', srcWrites: [], currentTime: 0, duration: 0, playCount: 0, pauseCount: 0, destroyCount: 0, seekValues: [],
 		play() { this.playCount += 1; handlers.play?.() },
 		pause() { this.pauseCount += 1; handlers.pause?.() },
 		seek(value) { this.seekValues.push(value); this.currentTime = value },
@@ -21,12 +21,26 @@ function fakeContext() {
 		onError(fn) { handlers.error = fn },
 		emit(name, value) { handlers[name]?.(value) },
 	}
+	Object.defineProperty(context, 'src', {
+		get() { return this._src },
+		set(value) { this._src = value; this.srcWrites.push(value) },
+	})
+	return context
 }
 
 test('音频播放模块提供稳定的时间格式', () => {
 	assert.equal(typeof formatDuration, 'function')
 	assert.equal(formatDuration(0), '00:00')
 	assert.equal(formatDuration(65_000), '01:05')
+})
+
+test('空音频源不会写入 InnerAudioContext 触发解码', () => {
+	const context = fakeContext()
+	const player = createAudioPlayback({ createContext: () => context })
+	player.setSource('', 0)
+	player.setSource(null, 0)
+	assert.deepEqual(context.srcWrites, [])
+	player.dispose()
 })
 
 test('播放器更新进度、允许拖动并在结束后复位', () => {
