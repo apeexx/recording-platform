@@ -1,6 +1,6 @@
 # 录音任务平台
 
-录音任务平台用于管理录音任务的创建、领取、录制、上传和审核流程。当前仓库已具备管理员/审核员 Web 管理闭环、MongoDB 任务与审核后端闭环，以及原生微信小程序的微信/数字账号双登录、独立个人资料、头像、授权申请、任务领取、录音/文字提交、释放、自动下一条和个人统计页面。
+录音任务平台用于管理录音任务的创建、领取、录制、上传和审核流程。当前仓库已具备管理员/审核员 Web 管理闭环、MongoDB 任务与审核后端闭环，以及原生微信小程序的微信/数字账号双登录、独立个人资料、头像、授权申请、任务领取、录音/文字提交、审核领取前修改、只读查看和个人统计页面。
 
 ## 项目定位
 
@@ -198,12 +198,14 @@ $env:RECORDING_PATH_MIGRATION_ENABLED='true'
 
 ## 人工审核与状态管理
 
-- `/api/reviews/tasks` 先列出有待审数据的任务，再通过 `/api/reviews/tasks/{taskId}/pool|claim|claim-batch` 进入指定任务审核池。审核员必须先领取并只能处理本人占用；管理员可查看全部待审条目并直接处理。
+- 人工审核任务提交后进入 `SUBMITTED`，采集员在审核领取前可覆盖保存录音和文本；管理员或审核员通过 `/api/reviews/{itemId}/claim` 领取、或管理员分配后原子进入 `REVIEW_PENDING`，此后采集端只读。审核释放回到 `SUBMITTED`；关闭人工审核的任务仍直接进入 `COMPLETED`。
+- `/api/reviews/tasks` 先列出有已提交或待审核数据的任务，再通过 `/api/reviews/tasks/{taskId}/pool|claim|claim-batch` 进入指定任务审核池。管理员和审核员决定前都必须先领取或分配；审核员只能处理本人占用。
 - 启用人工审核时，驳回使用任务版本配置的原因多选加补充说明并进入原采集员的返修队列；通过时仅文本成果允许补改文字，录音文件保持不变并进入已完成。
-- ADMIN 可单条或批量调整状态、释放、软废弃和恢复；普通状态调整不能进入待领取，返回池只能使用释放。
+- ADMIN 可单条或批量调整状态、释放、软废弃和恢复；普通状态调整不能进入待领取或人工审核任务的已完成状态，返回池只能使用释放，人工审核完成必须走领取/分配后的审核决定。
 - 未启用的审核或 AI 阶段不可进入；废弃保留归属、当前结果、文件和历史，恢复回废弃前状态。
 - 所有写接口使用 operationId、持久化幂等快照及 revision/CAS；批量操作逐条返回成功或冲突结果。
-- 审核领取在同一次原子更新中递增 revision；接口返回的条目 revision 与追加操作记录的 resultRevision 使用同一更新后修订号。
+- 提交修改、审核领取、释放和决定均使用状态与 revision/CAS；并发时先成功者生效，另一方返回 `STALE_STATE`。审核领取在同一次原子更新中递增 revision；接口返回的条目 revision 与追加操作记录的 resultRevision 使用同一更新后修订号。
+- 应用启动会幂等地把 reviewerId 与 reviewAssignmentId 均为空的旧 `REVIEW_PENDING` 改为 `SUBMITTED`；已领取记录不修改，日志只记录数量，不需要清空数据库。
 
 ## 操作记录与统计
 
@@ -224,11 +226,11 @@ POST                /api/tasks/{taskId}/access-requests/{requestId}/approve|reje
 POST/GET            /api/tasks/{taskId}/items
 POST                /api/tasks/{taskId}/items/start
 GET                 /api/task-items/{itemId}
-GET                 /api/task-items/mine?kind=ALL|ORDINARY|REWORK
+GET                 /api/task-items/mine?kind=PENDING|SUBMITTED|FINISHED
 POST                /api/task-items/{itemId}/submit|release|reject
 GET                 /api/reviews/tasks
 GET/POST            /api/reviews/tasks/{taskId}/pool|claim|claim-batch
-GET/POST            /api/reviews/{itemId}|release|approve|reject
+GET/POST            /api/reviews/{itemId}|claim|release|approve|reject
 POST                /api/reviews/batch/approve
 POST                /api/task-items/{itemId}/status|discard|restore
 POST                /api/task-items/batch/status|release|discard|restore

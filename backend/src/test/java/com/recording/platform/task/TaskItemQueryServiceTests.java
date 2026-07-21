@@ -9,10 +9,15 @@ import com.recording.platform.identity.model.SessionType;
 import com.recording.platform.identity.model.UserRole;
 import com.recording.platform.security.PlatformPrincipal;
 import com.recording.platform.task.model.TaskItem;
+import com.recording.platform.task.model.TaskItemStatus;
+import com.recording.platform.task.service.CollectorWorkKind;
 import com.recording.platform.task.service.TaskItemQueryService;
 import com.recording.platform.task.store.TaskItemStore;
 import com.recording.platform.task.store.TaskStore;
 import java.util.Optional;
+import java.util.List;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import org.junit.jupiter.api.Test;
 
 class TaskItemQueryServiceTests {
@@ -33,6 +38,28 @@ class TaskItemQueryServiceTests {
 				assertThat(exception.getStatus().value()).isEqualTo(403);
 				assertThat(exception.getCode()).isEqualTo("TASK_ITEM_ACCESS_DENIED");
 			});
+	}
+
+	@Test
+	void submittedAndFinishedKindsUseTheNewWorkflowGroups() {
+		TaskItemStore items = org.mockito.Mockito.mock(TaskItemStore.class);
+		TaskStore tasks = org.mockito.Mockito.mock(TaskStore.class);
+		when(items.findAllByCollectorIdAndStatusIn(
+			org.mockito.ArgumentMatchers.eq("collector-1"),
+			org.mockito.ArgumentMatchers.isNull(),
+			org.mockito.ArgumentMatchers.eq(List.of(TaskItemStatus.SUBMITTED)),
+			org.mockito.ArgumentMatchers.any(Pageable.class)
+		)).thenReturn(new PageImpl<>(List.of()));
+		when(items.findAllByCollectorIdAndStatusIn(
+			org.mockito.ArgumentMatchers.eq("collector-1"),
+			org.mockito.ArgumentMatchers.isNull(),
+			org.mockito.ArgumentMatchers.eq(List.of(TaskItemStatus.REVIEW_PENDING, TaskItemStatus.COMPLETED)),
+			org.mockito.ArgumentMatchers.any(Pageable.class)
+		)).thenReturn(new PageImpl<>(List.of()));
+		TaskItemQueryService service = new TaskItemQueryService(items, tasks);
+
+		service.mine(null, CollectorWorkKind.SUBMITTED, 0, 20, principal("collector-1"));
+		service.mine(null, CollectorWorkKind.FINISHED, 0, 20, principal("collector-1"));
 	}
 
 	private PlatformPrincipal principal(String userId) {

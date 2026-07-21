@@ -124,7 +124,7 @@ class TaskPoolServiceTests {
 		TaskItemActionResult first = service.submit("item-1", command, collector);
 		TaskItemActionResult replay = service.submit("item-1", command, collector);
 
-		assertThat(first.status()).isEqualTo(TaskItemStatus.REVIEW_PENDING);
+		assertThat(first.status()).isEqualTo(TaskItemStatus.SUBMITTED);
 		assertThat(replay).isEqualTo(first);
 		assertThat(items.findById("item-1").orElseThrow().getSubmissions()).hasSize(1);
 		verifyNoInteractions(grants);
@@ -178,7 +178,26 @@ class TaskPoolServiceTests {
 		TaskItemActionResult result = service.submit(
 			"item-text", new SubmitTaskItemCommand("text-audio", "assignment-1", 1, "文本", recording()), collector
 		);
-		assertThat(result.status()).isEqualTo(TaskItemStatus.REVIEW_PENDING);
+		assertThat(result.status()).isEqualTo(TaskItemStatus.SUBMITTED);
+	}
+
+	@Test
+	void submittedItemCanBeReplacedBeforeReviewClaim() {
+		TaskItem submitted = item("task-1", "item-submitted", TaskItemStatus.SUBMITTED);
+		submitted.setCollectorId("collector-1");
+		submitted.setAssignmentId("assignment-1");
+		submitted.setRevision(2);
+		items.save(submitted);
+		when(versions.findById("version-1")).thenReturn(Optional.of(version(true, true)));
+
+		TaskItemActionResult result = service.submit(
+			"item-submitted",
+			new SubmitTaskItemCommand("submit-replace", "assignment-1", 2, "修改版", recording()),
+			collector
+		);
+
+		assertThat(result.status()).isEqualTo(TaskItemStatus.SUBMITTED);
+		assertThat(items.findById("item-submitted").orElseThrow().getSubmissions()).hasSize(1);
 	}
 
 	@Test
@@ -194,6 +213,10 @@ class TaskPoolServiceTests {
 			new SubmitTaskItemCommand("submit-1", "assignment-1", 1, "第一版", recording()),
 			collector
 		);
+		TaskItem waitingReview = items.findById("item-1").orElseThrow();
+		waitingReview.setStatus(TaskItemStatus.REVIEW_PENDING);
+		waitingReview.setReviewerId("reviewer-1");
+		waitingReview.setReviewAssignmentId("review-assignment-1");
 		PlatformPrincipal reviewer = principal("reviewer-1", "李审", UserRole.REVIEWER, SessionType.WEB);
 
 		TaskItemActionResult rejected = service.reject("item-1", "reject-1", submitted.revision(), "噪音过大", reviewer);
@@ -292,7 +315,8 @@ class TaskPoolServiceTests {
 		@Override public synchronized Optional<TaskItem> submitIfCurrent(SubmitMutation mutation) {
 			TaskItem item = data.get(mutation.itemId());
 			if (item == null || (item.getStatus() != TaskItemStatus.RECORDING_PENDING
-				&& item.getStatus() != TaskItemStatus.REWORK_PENDING)
+				&& item.getStatus() != TaskItemStatus.REWORK_PENDING
+				&& item.getStatus() != TaskItemStatus.SUBMITTED)
 				|| !mutation.collectorId().equals(item.getCollectorId())
 				|| !mutation.assignmentId().equals(item.getAssignmentId())
 				|| item.getRevision() != mutation.expectedRevision()) return Optional.empty();

@@ -39,9 +39,11 @@ public class TaskItemQueryService {
 		requireProfile(actor);
 		CollectorWorkKind normalizedKind = kind == null ? CollectorWorkKind.ALL : kind;
 		List<TaskItemStatus> statuses = switch (normalizedKind) {
-			case ALL -> List.of(TaskItemStatus.REWORK_PENDING, TaskItemStatus.RECORDING_PENDING);
+			case ALL, PENDING -> List.of(TaskItemStatus.RECORDING_PENDING, TaskItemStatus.REWORK_PENDING);
 			case RECORDING -> List.of(TaskItemStatus.RECORDING_PENDING);
 			case REWORK -> List.of(TaskItemStatus.REWORK_PENDING);
+			case SUBMITTED -> List.of(TaskItemStatus.SUBMITTED);
+			case FINISHED -> List.of(TaskItemStatus.REVIEW_PENDING, TaskItemStatus.COMPLETED);
 		};
 		PageRequest pageable = PageRequest.of(
 			Math.max(page, 0), Math.min(Math.max(size, 1), 100),

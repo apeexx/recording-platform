@@ -10,6 +10,7 @@ import com.recording.platform.task.model.TaskVersion;
 import com.recording.platform.task.model.TaskResultType;
 import com.recording.platform.task.model.CurrentRejection;
 import com.recording.platform.task.store.ReviewClaimMutation;
+import com.recording.platform.task.store.ReviewItemClaimMutation;
 import com.recording.platform.task.store.ReviewDecisionMutation;
 import com.recording.platform.task.store.ReviewAssignMutation;
 import com.recording.platform.task.store.AdminReviewApproveMutation;
@@ -65,10 +66,24 @@ public class ReviewService {
 	}
 
 	public TaskItem claim(String taskId, String operationId, PlatformPrincipal actor) {
-		requireReviewer(actor);
+		requireReviewAccess(actor);
 		return claimOptional(taskId, requiredOperationId(operationId), actor).orElseThrow(() ->
 			new ApiException(HttpStatus.NOT_FOUND, "NO_REVIEW_ITEM", "当前没有可领取的待审核数据")
 		);
+	}
+
+	public TaskItem claimItem(
+		String itemId, String operationId, long expectedRevision, PlatformPrincipal actor
+	) {
+		requireReviewAccess(actor);
+		TaskItem item = requireItem(itemId);
+		if (item.getStatus() != TaskItemStatus.SUBMITTED || item.getRevision() != expectedRevision) throw stale();
+		ReviewItemClaimMutation mutation = new ReviewItemClaimMutation(
+			itemId, actor.userId(), actorName(actor), UUID.randomUUID().toString(),
+			item.getAssignmentId(), item.getCurrentResult(), expectedRevision,
+			requiredOperationId(operationId), Instant.now(clock)
+		);
+		return items.claimReviewItem(mutation).orElseThrow(this::stale);
 	}
 
 	public List<ReviewTaskSummary> tasks(PlatformPrincipal actor) {
@@ -133,7 +148,7 @@ public class ReviewService {
 			throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "INVALID_REVIEWER", "只能分配给启用状态的审核员");
 		}
 		TaskItem item = requireItem(itemId);
-		if (item.getStatus() != TaskItemStatus.REVIEW_PENDING || item.getReviewerId() != null
+		if (item.getStatus() != TaskItemStatus.SUBMITTED || item.getReviewerId() != null
 			|| item.getRevision() != expectedRevision) throw stale();
 		ReviewAssignMutation mutation = new ReviewAssignMutation(
 			itemId, reviewerId, reviewer.name(), actor.userId(), actorName(actor), UUID.randomUUID().toString(),
@@ -158,6 +173,7 @@ public class ReviewService {
 			try {
 				TaskItem item = requireItem(command.itemId());
 				if (item.getStatus() != TaskItemStatus.REVIEW_PENDING
+					|| item.getReviewerId() == null || item.getReviewAssignmentId() == null
 					|| item.getRevision() != command.expectedRevision()) throw stale();
 				TaskItemResult current = item.getCurrentResult();
 				TaskItemResult result = reviewResult(requireVersion(item.getTaskVersionId()), current, command.text());
@@ -188,7 +204,7 @@ public class ReviewService {
 		long expectedRevision,
 		PlatformPrincipal actor
 	) {
-		requireReviewer(actor);
+		requireReviewAccess(actor);
 		TaskItem item = requireItem(itemId);
 		if (item.getStatus() != TaskItemStatus.REVIEW_PENDING
 			|| item.getRevision() != expectedRevision
@@ -284,7 +300,8 @@ public class ReviewService {
 	private TaskItem requireDecisionItem(String itemId, long expectedRevision, PlatformPrincipal actor) {
 		requireReviewAccess(actor);
 		TaskItem item = requireItem(itemId);
-		if (item.getStatus() != TaskItemStatus.REVIEW_PENDING || item.getRevision() != expectedRevision) {
+		if (item.getStatus() != TaskItemStatus.REVIEW_PENDING || item.getRevision() != expectedRevision
+			|| item.getReviewerId() == null || item.getReviewAssignmentId() == null) {
 			throw stale();
 		}
 		if (actor.role() == UserRole.REVIEWER

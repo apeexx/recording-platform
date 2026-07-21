@@ -3,5 +3,8 @@ package com.recording.platform.task.service;
 public enum CollectorWorkKind {
 	ALL,
 	RECORDING,
-	REWORK
+	REWORK,
+	PENDING,
+	SUBMITTED,
+	FINISHED
 }

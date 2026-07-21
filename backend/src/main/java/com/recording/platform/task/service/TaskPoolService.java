@@ -97,7 +97,9 @@ public class TaskPoolService {
 		TaskItem item = requireItem(itemId);
 		TaskItemActionResult replay = replay(item, command.operationId(), actor.userId());
 		if (replay != null) return replay;
-		if ((item.getStatus() != TaskItemStatus.RECORDING_PENDING && item.getStatus() != TaskItemStatus.REWORK_PENDING)
+		if ((item.getStatus() != TaskItemStatus.RECORDING_PENDING
+			&& item.getStatus() != TaskItemStatus.REWORK_PENDING
+			&& item.getStatus() != TaskItemStatus.SUBMITTED)
 			|| !actor.userId().equals(item.getCollectorId())
 			|| !safeEquals(command.assignmentId(), item.getAssignmentId())
 			|| command.expectedRevision() != item.getRevision()) {
@@ -107,7 +109,7 @@ public class TaskPoolService {
 		String text = trimToNull(command.text());
 		validateSubmission(version, text, command.audio());
 		TaskItemStatus target = version.isHumanReviewEnabled()
-			? TaskItemStatus.REVIEW_PENDING : TaskItemStatus.COMPLETED;
+			? TaskItemStatus.SUBMITTED : TaskItemStatus.COMPLETED;
 		SubmitMutation mutation = new SubmitMutation(
 			itemId,
 			actor.userId(),
@@ -135,7 +137,9 @@ public class TaskPoolService {
 		TaskItem item = requireItem(itemId);
 		TaskItemActionResult replay = replay(item, operationId, actor.userId());
 		if (replay != null) return replay;
-		if (item.getStatus() != TaskItemStatus.REVIEW_PENDING || item.getRevision() != expectedRevision) {
+		if (item.getStatus() != TaskItemStatus.REVIEW_PENDING || item.getRevision() != expectedRevision
+			|| item.getReviewerId() == null || item.getReviewAssignmentId() == null
+			|| actor.role() == UserRole.REVIEWER && !actor.userId().equals(item.getReviewerId())) {
 			throw stale();
 		}
 		String normalizedReason = trimToNull(reason);

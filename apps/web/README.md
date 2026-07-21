@@ -10,6 +10,7 @@
 - `/first-password` 处理首次登录强制改密，成功后清会话并要求重新登录。
 - `httpClient.js` 统一处理 Cookie、CSRF、JSON/multipart、Idempotency-Key、统一错误与 `SESSION_REPLACED`；每次受保护的写请求都重新获取当前 CSRF，避免会话或 Cookie 轮换后复用旧 token。
 - ADMIN 默认进入 `/admin/dashboard`；REVIEWER 默认进入 `/admin/review`，先选择任务再进入审核池。
+- 审核池同时展示 `SUBMITTED`（已提交）与 `REVIEW_PENDING`（待审核）；管理员和审核员必须先领取指定已提交条目，或由管理员分配审核员，才可进入审核决定。审核释放后回到已提交，管理员批量通过也只接受已领取/已分配条目。
 - 侧边栏和路由按角色保护，未业务化静态原型已从生产导航和路由隐藏。
 - 左侧侧边栏、顶部栏和主内容区已经搭建。
 - 侧边栏大分类支持展开和收缩，多个分类可以同时展开。

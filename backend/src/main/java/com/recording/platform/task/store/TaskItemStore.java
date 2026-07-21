@@ -16,6 +16,7 @@ public interface TaskItemStore {
 	Optional<TaskItem> findCurrentByCollector(String collectorId);
 	Optional<TaskItem> claimAvailable(ClaimMutation mutation);
 	default Optional<TaskItem> claimReview(ReviewClaimMutation mutation) { return Optional.empty(); }
+	default Optional<TaskItem> claimReviewItem(ReviewItemClaimMutation mutation) { return Optional.empty(); }
 	default long countReviewPendingByTaskId(String taskId) { return 0; }
 	default Page<TaskItem> findReviewPoolByTaskId(String taskId, boolean includeAssigned, String reviewerId, Pageable pageable) {
 		return Page.empty(pageable);

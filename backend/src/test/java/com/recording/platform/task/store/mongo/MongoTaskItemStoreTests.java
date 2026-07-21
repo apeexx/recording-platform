@@ -13,6 +13,7 @@ import com.recording.platform.task.store.ClaimMutation;
 import com.recording.platform.task.store.ReleaseMutation;
 import com.recording.platform.task.store.RejectMutation;
 import com.recording.platform.task.store.ReviewClaimMutation;
+import com.recording.platform.task.store.ReviewItemClaimMutation;
 import com.recording.platform.task.store.SubmitMutation;
 import java.time.Instant;
 import java.util.List;
@@ -26,6 +27,7 @@ import org.springframework.data.mongodb.core.aggregation.AggregationUpdate;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.data.mongodb.core.query.UpdateDefinition;
+import org.springframework.data.domain.PageRequest;
 
 class MongoTaskItemStoreTests {
 	@Test
@@ -102,6 +104,35 @@ class MongoTaskItemStoreTests {
 	}
 
 	@Test
+	void specificReviewClaimCompetesWithCollectorResubmissionByStatusAndRevision() {
+		SpringDataTaskItemRepository repository = org.mockito.Mockito.mock(SpringDataTaskItemRepository.class);
+		MongoTemplate template = org.mockito.Mockito.mock(MongoTemplate.class);
+		when(template.findAndModify(any(Query.class), any(Update.class), any(FindAndModifyOptions.class), eq(TaskItem.class)))
+			.thenReturn(new TaskItem());
+		MongoTaskItemStore store = new MongoTaskItemStore(repository, template);
+
+		store.claimReviewItem(new ReviewItemClaimMutation(
+			"item-1", "reviewer-1", "审核员", "review-assignment-1", "collector-assignment-1",
+			new TaskItemResult(null, "文本"), 7, "claim-item-1", Instant.parse("2026-07-21T04:00:00Z")
+		));
+
+		ArgumentCaptor<Query> query = ArgumentCaptor.forClass(Query.class);
+		ArgumentCaptor<Update> update = ArgumentCaptor.forClass(Update.class);
+		org.mockito.Mockito.verify(template).findAndModify(
+			query.capture(), update.capture(), any(FindAndModifyOptions.class), eq(TaskItem.class)
+		);
+		assertThat(query.getValue().getQueryObject())
+			.containsEntry("_id", "item-1")
+			.containsEntry("status", TaskItemStatus.SUBMITTED)
+			.containsEntry("revision", 7L);
+		assertThat(update.getValue().getUpdateObject().toString())
+			.contains("REVIEW_PENDING", "reviewer-1", "review-assignment-1");
+		Document push = (Document) update.getValue().getUpdateObject().get("$push");
+		OperationHistory operation = (OperationHistory) push.get("operations");
+		assertThat(operation.getResultAssignmentId()).isEqualTo("collector-assignment-1");
+	}
+
+	@Test
 	void submitConditionsTheAtomicUpdateOnOwnerAssignmentStateAndRevision() {
 		SpringDataTaskItemRepository repository = org.mockito.Mockito.mock(SpringDataTaskItemRepository.class);
 		MongoTemplate template = org.mockito.Mockito.mock(MongoTemplate.class);
@@ -125,7 +156,7 @@ class MongoTaskItemStoreTests {
 			.containsEntry("revision", 7L);
 		assertThat((Document) query.getValue().getQueryObject().get("status"))
 			.extracting("$in")
-			.isEqualTo(List.of(TaskItemStatus.RECORDING_PENDING, TaskItemStatus.REWORK_PENDING));
+			.isEqualTo(List.of(TaskItemStatus.RECORDING_PENDING, TaskItemStatus.REWORK_PENDING, TaskItemStatus.SUBMITTED));
 		assertThat(query.getValue().getQueryObject()).containsKey("operations.operationId");
 		assertThat((Document) query.getValue().getQueryObject().get("operations.operationId"))
 			.containsEntry("$ne", "submit-1");
@@ -181,6 +212,37 @@ class MongoTaskItemStoreTests {
 			assertThat(operation.getResultSnapshot()).isSameAs(currentResult);
 			assertThat(operation.getResultStatus()).isEqualTo(TaskItemStatus.REWORK_PENDING);
 		});
+	}
+
+	@Test
+	void collectorWorkSortsByWorkflowRankBeforePaging() {
+		SpringDataTaskItemRepository repository = org.mockito.Mockito.mock(SpringDataTaskItemRepository.class);
+		MongoTemplate template = org.mockito.Mockito.mock(MongoTemplate.class);
+		TaskItem rework = item("rework", TaskItemStatus.REWORK_PENDING, "2026-07-21T12:00:00Z", 1);
+		TaskItem recordingOlder = item("recording-older", TaskItemStatus.RECORDING_PENDING, "2026-07-21T10:00:00Z", 2);
+		TaskItem recordingNewer = item("recording-newer", TaskItemStatus.RECORDING_PENDING, "2026-07-21T11:00:00Z", 3);
+		when(template.find(any(Query.class), eq(TaskItem.class)))
+			.thenReturn(List.of(rework, recordingOlder, recordingNewer));
+		MongoTaskItemStore store = new MongoTaskItemStore(repository, template);
+
+		var page = store.findAllByCollectorIdAndStatusIn(
+			"collector-1", null,
+			List.of(TaskItemStatus.RECORDING_PENDING, TaskItemStatus.REWORK_PENDING),
+			PageRequest.of(0, 2)
+		);
+
+		assertThat(page.getContent()).extracting(TaskItem::getId)
+			.containsExactly("recording-newer", "recording-older");
+		assertThat(page.getTotalElements()).isEqualTo(3);
+	}
+
+	private TaskItem item(String id, TaskItemStatus status, String updatedAt, long sequence) {
+		TaskItem item = new TaskItem();
+		item.setId(id);
+		item.setStatus(status);
+		item.setUpdatedAt(Instant.parse(updatedAt));
+		item.setSequence(sequence);
+		return item;
 	}
 
 	private Document setStage(List<Document> stages, String field) {

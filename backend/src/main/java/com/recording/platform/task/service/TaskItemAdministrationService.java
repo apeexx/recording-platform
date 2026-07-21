@@ -40,6 +40,9 @@ public class TaskItemAdministrationService {
 		if (target == TaskItemStatus.AVAILABLE) throw invalid("RELEASE_REQUIRED", "返回待领取必须使用释放操作");
 		if (target == TaskItemStatus.DISCARDED) throw invalid("DISCARD_REQUIRED", "废弃数据必须使用废弃操作");
 		if (item.getStatus() == TaskItemStatus.DISCARDED) throw stale();
+		if (target == TaskItemStatus.COMPLETED && requireVersion(item).isHumanReviewEnabled()) {
+			throw invalid("REVIEW_DECISION_REQUIRED", "启用人工审核的任务必须通过审核决定完成");
+		}
 		validateEnabled(item, target);
 		String targetCollector = item.getCollectorId();
 		String assignmentId = item.getAssignmentId();
@@ -124,12 +127,19 @@ public class TaskItemAdministrationService {
 	}
 
 	private void validateEnabled(TaskItem item, TaskItemStatus target) {
-		TaskVersion version = versions.findById(item.getTaskVersionId())
-			.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "TASK_VERSION_NOT_FOUND", "任务版本不存在"));
-		if (target == TaskItemStatus.REVIEW_PENDING && !version.isHumanReviewEnabled()
+		TaskVersion version = requireVersion(item);
+		if (target == TaskItemStatus.REVIEW_PENDING) {
+			throw invalid("REVIEW_CLAIM_REQUIRED", "待审核状态只能通过审核领取或分配进入");
+		}
+		if (target == TaskItemStatus.SUBMITTED && !version.isHumanReviewEnabled()
 			|| target == TaskItemStatus.AI_PROCESSING && !version.isAiEnabled()) {
 			throw invalid("STATUS_NOT_ENABLED", "任务版本未启用该状态阶段");
 		}
+	}
+
+	private TaskVersion requireVersion(TaskItem item) {
+		return versions.findById(item.getTaskVersionId())
+			.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "TASK_VERSION_NOT_FOUND", "任务版本不存在"));
 	}
 
 	private AdminItemTransitionMutation mutation(

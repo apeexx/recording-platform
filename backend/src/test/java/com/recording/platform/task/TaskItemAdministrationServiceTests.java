@@ -42,6 +42,8 @@ class TaskItemAdministrationServiceTests {
 		assertCode(() -> service.changeStatus("item-1", TaskItemStatus.AVAILABLE, null, "op-1", 5, admin()),
 			"RELEASE_REQUIRED");
 		assertCode(() -> service.changeStatus("item-1", TaskItemStatus.REVIEW_PENDING, null, "op-2", 5, admin()),
+			"REVIEW_CLAIM_REQUIRED");
+		assertCode(() -> service.changeStatus("item-1", TaskItemStatus.SUBMITTED, null, "op-4", 5, admin()),
 			"STATUS_NOT_ENABLED");
 		assertCode(() -> service.changeStatus("item-1", TaskItemStatus.AI_PROCESSING, null, "op-3", 5, admin()),
 			"STATUS_NOT_ENABLED");
@@ -54,15 +56,15 @@ class TaskItemAdministrationServiceTests {
 		TaskItem item = item(TaskItemStatus.COMPLETED, 5);
 		when(items.findById("item-1")).thenReturn(Optional.of(item));
 		when(versions.findById("version-1")).thenReturn(Optional.of(version(true)));
-		TaskItem updated = item(TaskItemStatus.REVIEW_PENDING, 6);
+		TaskItem updated = item(TaskItemStatus.SUBMITTED, 6);
 		when(items.adminTransitionIfCurrent(any())).thenReturn(Optional.of(updated));
 		TaskItemAdministrationService service = new TaskItemAdministrationService(items, versions, CLOCK);
 
 		TaskItem result = service.changeStatus(
-			"item-1", TaskItemStatus.REVIEW_PENDING, null, "op-status", 5, admin()
+			"item-1", TaskItemStatus.SUBMITTED, null, "op-status", 5, admin()
 		);
 
-		assertThat(result.getStatus()).isEqualTo(TaskItemStatus.REVIEW_PENDING);
+		assertThat(result.getStatus()).isEqualTo(TaskItemStatus.SUBMITTED);
 		assertThat(result.getRevision()).isEqualTo(6);
 	}
 
@@ -134,7 +136,7 @@ class TaskItemAdministrationServiceTests {
 		TaskItemAdministrationService service = new TaskItemAdministrationService(items, versions, CLOCK);
 
 		List<BatchItemResult> results = service.batchChangeStatus(
-			"batch-status", TaskItemStatus.REVIEW_PENDING,
+			"batch-status", TaskItemStatus.SUBMITTED,
 			List.of(new BatchItemCommand("item-1", 5, null)), admin()
 		);
 
@@ -142,6 +144,20 @@ class TaskItemAdministrationServiceTests {
 			assertThat(result.success()).isFalse();
 			assertThat(result.code()).isEqualTo("STATUS_NOT_ENABLED");
 		});
+	}
+
+	@Test
+	void humanReviewItemsCannotBypassReviewDecisionToComplete() {
+		TaskItemStore items = mock(TaskItemStore.class);
+		TaskVersionStore versions = mock(TaskVersionStore.class);
+		TaskItem item = item(TaskItemStatus.SUBMITTED, 5);
+		when(items.findById("item-1")).thenReturn(Optional.of(item));
+		when(versions.findById("version-1")).thenReturn(Optional.of(version(true)));
+		TaskItemAdministrationService service = new TaskItemAdministrationService(items, versions, CLOCK);
+
+		assertCode(() -> service.changeStatus(
+			"item-1", TaskItemStatus.COMPLETED, null, "op-complete", 5, admin()
+		), "REVIEW_DECISION_REQUIRED");
 	}
 
 	private TaskItem item(TaskItemStatus status, long revision) {

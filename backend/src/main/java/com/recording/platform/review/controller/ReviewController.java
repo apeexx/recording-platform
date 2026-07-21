@@ -49,6 +49,16 @@ public class ReviewController {
 		return execute("review:claim:" + taskId, operationId, TaskItem.class, () -> reviews.claim(taskId, operationId, actor));
 	}
 
+	@PostMapping("/{itemId}/claim")
+	public TaskItem claimItem(
+		@PathVariable String itemId,
+		@Valid @RequestBody ItemOperationRequest request,
+		@AuthenticationPrincipal PlatformPrincipal actor
+	) {
+		return execute("review:claim-item:" + itemId, request.operationId(), TaskItem.class,
+			() -> reviews.claimItem(itemId, request.operationId(), request.expectedRevision(), actor));
+	}
+
 	@GetMapping("/tasks")
 	public List<com.recording.platform.review.service.ReviewTaskSummary> tasks(
 		@AuthenticationPrincipal PlatformPrincipal actor

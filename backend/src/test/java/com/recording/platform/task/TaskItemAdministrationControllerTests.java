@@ -25,17 +25,17 @@ class TaskItemAdministrationControllerTests {
 			service, mock(TaskItemActionService.class)
 		);
 		PlatformPrincipal admin = admin();
-		TaskItem reviewPending = item(TaskItemStatus.REVIEW_PENDING, 6);
+		TaskItem reviewPending = item(TaskItemStatus.SUBMITTED, 6);
 		when(service.changeStatus(
-			"item-1", TaskItemStatus.REVIEW_PENDING, null, "status-1", 5, admin
+			"item-1", TaskItemStatus.SUBMITTED, null, "status-1", 5, admin
 		)).thenReturn(reviewPending);
 		TaskItem discarded = item(TaskItemStatus.DISCARDED, 7);
 		when(service.discard("item-1", "discard-1", 6, admin)).thenReturn(discarded);
-		TaskItem restored = item(TaskItemStatus.REVIEW_PENDING, 8);
+		TaskItem restored = item(TaskItemStatus.SUBMITTED, 8);
 		when(service.restore("item-1", "restore-1", 7, admin)).thenReturn(restored);
 
 		assertThat(controller.changeStatus("item-1", new TaskItemAdministrationController.StatusRequest(
-			"status-1", 5L, TaskItemStatus.REVIEW_PENDING, null
+			"status-1", 5L, TaskItemStatus.SUBMITTED, null
 		), admin)).isSameAs(reviewPending);
 		assertThat(controller.discard("item-1", new TaskItemAdministrationController.ItemOperationRequest(
 			"discard-1", 6L
@@ -44,7 +44,7 @@ class TaskItemAdministrationControllerTests {
 			"restore-1", 7L
 		), admin)).isSameAs(restored);
 
-		verify(service).changeStatus("item-1", TaskItemStatus.REVIEW_PENDING, null, "status-1", 5, admin);
+		verify(service).changeStatus("item-1", TaskItemStatus.SUBMITTED, null, "status-1", 5, admin);
 		verify(service).discard("item-1", "discard-1", 6, admin);
 		verify(service).restore("item-1", "restore-1", 7, admin);
 	}

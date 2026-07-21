@@ -23,12 +23,17 @@ const reasons = ref([])
 const note = ref('')
 
 const isReviewer = computed(() => session.user.value?.role === 'REVIEWER')
-const isOwnReviewerAssignment = computed(() =>
-  isReviewer.value
-  && item.value?.reviewerId === session.user.value?.userId
+const isOwnReviewAssignment = computed(() =>
+	Boolean(item.value)
+	&& item.value?.reviewerId === session.user.value?.userId
   && Boolean(item.value?.reviewAssignmentId),
 )
-const canDecide = computed(() => session.user.value?.role === 'ADMIN' || isOwnReviewerAssignment.value)
+const canDecide = computed(() =>
+	item.value?.status === 'REVIEW_PENDING'
+	&& Boolean(item.value?.reviewerId)
+	&& Boolean(item.value?.reviewAssignmentId)
+	&& (session.user.value?.role === 'ADMIN' || isOwnReviewAssignment.value),
+)
 const audioUrl = computed(() => item.value?.currentResult?.audio?.mediaId
   ? `/api/media/${encodeURIComponent(item.value.currentResult.audio.mediaId)}`
   : '')
@@ -103,7 +108,7 @@ onMounted(load)
   <section class="admin-page">
     <PageActions title="审核工作台" description="对照参考源检查采集结果，可补改文字后通过。">
       <button class="button-secondary" @click="backToQueue">返回审核池</button>
-      <button v-if="isOwnReviewerAssignment" class="button-secondary" @click="release">释放审核</button>
+      <button v-if="isOwnReviewAssignment" class="button-secondary" @click="release">释放审核</button>
     </PageActions>
     <AsyncState :loading="loading" :error="loadError" :empty="!item" @retry="backToQueue">
       <div class="review-layout">

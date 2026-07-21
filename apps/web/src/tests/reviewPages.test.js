@@ -17,6 +17,14 @@ describe('审核页面 API', () => {
     })
   })
 
+	it('指定已提交条目必须先领取再审核', async () => {
+		httpRequest.mockResolvedValue({})
+		await reviewApi.claimItem('item-1', 7, 'claim-item-1')
+		expect(httpRequest).toHaveBeenCalledWith('/api/reviews/item-1/claim', {
+			method: 'POST', json: { operationId: 'claim-item-1', expectedRevision: 7 }
+		})
+	})
+
   it('按后台角色区分审核池与工作台操作，管理员不会再看到审核员专属按钮', () => {
     const queue = readFileSync(join(process.cwd(), 'src/pages/admin/review/ReviewQueuePage.vue'), 'utf8')
     const workbench = readFileSync(join(process.cwd(), 'src/pages/admin/review/ReviewWorkbenchPage.vue'), 'utf8')
@@ -24,10 +32,13 @@ describe('审核页面 API', () => {
     expect(queue).toContain("const isAdmin=computed(()=>session.user.value?.role==='ADMIN')")
 	expect(queue).toContain("isReviewer=computed(()=>session.user.value?.role==='REVIEWER')")
     expect(queue).toContain('v-if="isReviewer" class="button-primary" @click="claim"')
-	expect(queue).toContain('v-if="isAdmin&&!r.reviewerId" class="button-link"')
+	expect(queue).toContain("r.status==='SUBMITTED'")
+	expect(queue).toContain('领取审核')
+	expect(queue).toContain('已提交')
+	expect(queue).toContain('待审核')
 		expect(workbench).toContain("const isReviewer = computed(() => session.user.value?.role === 'REVIEWER')")
-		expect(workbench).toContain("const canDecide = computed(() => session.user.value?.role === 'ADMIN' || isOwnReviewerAssignment.value)")
-    expect(workbench).toContain('v-if="isOwnReviewerAssignment" class="button-secondary" @click="release"')
+		expect(workbench).toContain("item.value?.status === 'REVIEW_PENDING'")
+		expect(workbench).toContain('v-if="isOwnReviewAssignment" class="button-secondary" @click="release"')
     expect(workbench).toContain('v-if="canDecide" class="business-actions"')
   })
 

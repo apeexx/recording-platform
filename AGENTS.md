@@ -212,6 +212,8 @@ WEB_SESSION_COOKIE_SECURE（默认 false，生产 HTTPS 应设 true）
 
 采集员领取必须同时满足任务 RUNNING 和 ACTIVE grant；全系统每名采集员最多一条普通 `RECORDING_PENDING`，领取使用 Mongo `findAndModify` 与部分唯一索引双重保证。驳回进入独立 `REWORK_PENDING`，保留原采集员、assignment 和驳回原因；同一采集员可以同时持有多条返修。授权撤销只阻止新领取，不影响已领取条目的提交和释放。
 
+启用人工审核时，采集员提交进入 `SUBMITTED`，审核领取或管理员分配后才原子进入 `REVIEW_PENDING`；`SUBMITTED` 期间本人可使用相同 assignment 与最新 revision 覆盖提交，继续复用录音原子替换、历史和旧媒体清理。审核释放回到 `SUBMITTED`，审核通过进入 `COMPLETED`，驳回进入 `REWORK_PENDING`；关闭人工审核时提交仍直接进入 `COMPLETED`。提交修改与审核领取必须以状态和 revision/CAS 竞争，失败统一返回 `STALE_STATE`。应用启动时仅将 reviewerId、reviewAssignmentId 均为空的旧 `REVIEW_PENDING` 幂等迁移为 `SUBMITTED`，不修改已领取记录，日志只输出迁移数量。
+
 Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idempotency-Key`。通用幂等记录按 `(actorUserId, action, operationKey)` 唯一，先持久化 IN_PROGRESS 声明，成功后保存 COMPLETED 响应快照；重复请求返回首次结果，跨实例仍在处理的重复请求返回 `409 OPERATION_IN_PROGRESS`，不得重复执行底层 mutation。
 
 当前录音固定保存到 `RECORDING_STORAGE_DIR/{taskCode}/{itemCode}.wav|mp3`。上传必须先写 `temp/`，校验扩展名、魔数、100MB、格式、单声道、任务采样率和时长，再原子替换；同一条目的替换流程按本地条目锁串行化，失败恢复旧文件。提交或释放成功后的旧稳定文件必须先隔离到 `temp/backups/` 唯一路径，并以 `media_cleanup_jobs` 持久化旧路径和 media ID；即时清理失败由同 operationId 重放和应用启动恢复重试，不得回滚已成功的 Mongo 状态，也不得把备份暴露为媒体路径。Mongo 只保存相对路径和元数据。采集员只能读取本人条目和录音；ACTIVE grant 只额外开放任务信息与参考媒体；ADMIN/REVIEWER 按审核权限读取。
@@ -354,12 +356,12 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 
 ```text
 请求方法：POST / GET
-请求路径：/api/tasks/{taskId}/items、/api/tasks/{taskId}/items/start、/api/task-items/{itemId}
-请求参数：单条添加 JSON referenceText/referenceAudioUrl/referenceVideoUrl + Idempotency-Key；start 携带 Idempotency-Key；列表 page、size
+请求路径：/api/tasks/{taskId}/items、/api/tasks/{taskId}/items/start、/api/task-items/{itemId}、/api/task-items/mine
+请求参数：单条添加 JSON referenceText/referenceAudioUrl/referenceVideoUrl + Idempotency-Key；start 携带 Idempotency-Key；列表 page、size；mine 支持 taskId、kind=PENDING|SUBMITTED|FINISHED，兼容 ALL|RECORDING|REWORK
 响应结构：TaskItem 或 {items,page,size,total}
 错误码：404 NO_AVAILABLE_ITEM/TASK_ITEM_NOT_FOUND；409 ITEM_CONFLICT；422 ITEM_REFERENCE_REQUIRED/远程媒体错误
 权限要求：添加和任务条目列表仅 ADMIN；start 仅 COLLECTOR；详情仅 ADMIN/REVIEWER/当前采集员
-数据一致性要求：新条目绑定 currentVersion；itemCode 任务内递增唯一且是条目唯一业务编号；添加和领取均持久化幂等；领取 findAndModify 原子更新并以同一更新递增 revision、追加新 revision 的操作历史，同时保持采集员全局唯一待录制
+数据一致性要求：新条目绑定 currentVersion；itemCode 任务内递增唯一且是条目唯一业务编号；添加和领取均持久化幂等；领取 findAndModify 原子更新并以同一更新递增 revision、追加新 revision 的操作历史，同时保持采集员全局唯一待录制；mine 按流程 rank、updatedAt 倒序、sequence 升序后分页
 前端调用位置：apps/web/src/pages/admin/tasks/TaskPoolPage.vue、apps/miniprogram/pages/tasks/*、apps/miniprogram/pages/work/*
 ```
 
@@ -370,8 +372,19 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 响应结构：{itemId,status,revision,assignmentId,result}
 错误码：409 STALE_STATE；413 UPLOAD_TOO_LARGE；422 录音格式/采样率/声道/时长/驳回原因错误
 权限要求：submit/release 仅当前 COLLECTOR（ADMIN 也可 release）；reject 仅 ADMIN/REVIEWER
-数据一致性要求：operationId 绑定操作者并返回首次结果；稳定 current 文件原子替换；驳回保留原采集员；释放清当前结果但保留提交/操作历史；提交/释放成功后的旧文件和 metadata 清理持久化并可由 operation 重放/启动恢复重试
+数据一致性要求：operationId 绑定操作者并返回首次结果；人工审核任务提交到 SUBMITTED 且领取前可覆盖提交，免审任务直接 COMPLETED；稳定 current 文件原子替换；驳回保留原采集员；释放清当前结果但保留提交/操作历史；提交/释放成功后的旧文件和 metadata 清理持久化并可由 operation 重放/启动恢复重试
 前端调用位置：apps/miniprogram/pages/work/*、apps/web/src/pages/admin/review/*
+```
+
+```text
+请求方法：GET / POST
+请求路径：/api/reviews/tasks、/api/reviews/tasks/{taskId}/pool|claim|claim-batch、/api/reviews/{itemId}/claim|release|approve|reject、/api/reviews/assign、/api/reviews/batch/approve
+请求参数：领取头或请求体 operationId/Idempotency-Key；指定领取、释放和决定携带 expectedRevision；分配携带 reviewerId；通过可补改 text；驳回携带 reasons/note
+响应结构：任务审核摘要、TaskItem、审核池分页或逐条批量结果
+错误码：404 NO_REVIEW_ITEM；409 STALE_STATE；422 INVALID_REVIEWER/INVALID_BATCH_SIZE/审核内容错误
+权限要求：ADMIN/REVIEWER 可查看审核池并领取指定条目；批量领取仅 REVIEWER；分配和批量通过仅 ADMIN；决定必须已有审核领取或分配
+数据一致性要求：领取和分配只处理 SUBMITTED 并原子转 REVIEW_PENDING；释放原子回到 SUBMITTED；决定只处理已有 reviewerId 与 reviewAssignmentId 的 REVIEW_PENDING；所有写入保持持久化幂等和 revision/CAS
+前端调用位置：apps/web/src/lib/reviewApi.js、apps/web/src/pages/admin/review/*
 ```
 
 ```text
@@ -694,9 +707,9 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 
 ## 9. 审核流程原则
 
-当前已实现可配置的单层人工审核：先选择有待审数据的任务，再进入对应审核池。审核员审核池只显示未占用条目，可在所选任务内单条或批量领取、释放本人占用、补改文本、通过或驳回；管理员审核池显示所选任务的全部待审核条目（包括已分配条目），管理员不领取审核占用，可直接单条通过或驳回，也可指定审核员并批量通过。驳回进入原采集员的 `REWORK_PENDING` 返修队列，提交和操作历史永久保留。前端不得向管理员展示“领取/批量领取/释放审核”等审核员专属入口，也不得向未占用该条目的审核员展示决定按钮；后端服务和 Spring Security 的角色规则必须保持一致。
+当前已实现可配置的单层人工审核：先选择有已提交或待审核数据的任务，再进入对应审核池。采集员提交后处于 `SUBMITTED` 并可继续修改；管理员或审核员领取、或管理员分配后才进入 `REVIEW_PENDING` 并锁定采集修改。审核员可在所选任务内单条或批量领取、释放本人占用、补改文本、通过或驳回；管理员可领取指定条目、指定审核员并对已领取/已分配条目作出单条或批量决定，不得直接决定未领取的 `SUBMITTED`。驳回进入原采集员的 `REWORK_PENDING` 返修队列，提交和操作历史永久保留。前端不得向未占用该条目的审核员展示决定按钮；后端服务和 Spring Security 的角色规则必须保持一致。
 
-管理员状态管理支持任务版本允许的动态阶段、批量逐条结果、媒体安全释放、软废弃和恢复。普通状态调整不能进入待领取；返回池必须调用释放。废弃不删除归属、结果或文件，恢复回废弃前状态并重新校验版本阶段和 revision。
+管理员状态管理支持任务版本允许的动态阶段、批量逐条结果、媒体安全释放、软废弃和恢复。普通状态调整不能进入待领取、待审核，也不能绕过人工审核直接进入已完成；返回池必须调用释放，人工审核完成必须走领取或分配后的审核决定。废弃不删除归属、结果或文件，恢复回废弃前状态并重新校验版本阶段和 revision。
 
 机器审核、真实 AI 转写及多级一审/二审仍属于后续范围，启用前必须另行确认状态与接口契约。
 
