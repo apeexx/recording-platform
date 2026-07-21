@@ -12,6 +12,7 @@ const route = useRoute()
 const session = useAdminSession()
 const sidebarItems = computed(() => sidebarForRole(session.user.value?.role))
 const openGroupKeys = ref(new Set())
+const brandIconPath = '/assets/branding/yanshu-avatar.svg'
 
 function hasChildren(item) {
   return Array.isArray(item.children) && item.children.length > 0
@@ -59,7 +60,7 @@ watch(() => route.path, addRouteGroupKey, { immediate: true })
 <template>
   <aside class="admin-sidebar" aria-label="管理员端侧边栏">
     <div class="admin-sidebar__brand">
-      <span class="admin-sidebar__brand-mark">录</span>
+      <img class="admin-sidebar__brand-mark" :src="brandIconPath" alt="">
       <div>
         <strong>录音任务平台</strong>
         <span>管理端</span>

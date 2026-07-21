@@ -1,5 +1,6 @@
 <script setup>
 import { computed, nextTick, ref, watch } from 'vue'
+import AdminSidebarIcon from './AdminSidebarIcon.vue'
 import AdminSidebarItem from './AdminSidebarItem.vue'
 
 const props = defineProps({
@@ -61,7 +62,7 @@ watch(
         :aria-controls="childrenId"
         @click="handleToggle"
       >
-        <span class="admin-sidebar-item__icon" aria-hidden="true">{{ item.title.slice(0, 1) }}</span>
+        <AdminSidebarIcon :name="item.icon" />
         <span class="admin-sidebar-group__text">{{ item.title }}</span>
         <span class="admin-sidebar-group__arrow" aria-hidden="true">›</span>
       </button>

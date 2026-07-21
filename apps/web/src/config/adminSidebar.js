@@ -32,7 +32,7 @@ export const adminSidebar = [
       { key: 'operation-logs', title: '操作记录', path: '/admin/system/logs' }
     ]
   },
-  { key: 'account', title: '个人账号', path: '/admin/account', icon: 'system', roles: ['REVIEWER'] }
+  { key: 'account', title: '个人账号', path: '/admin/account', icon: 'account', roles: ['REVIEWER'] }
 ]
 
 export function sidebarForRole(role) {

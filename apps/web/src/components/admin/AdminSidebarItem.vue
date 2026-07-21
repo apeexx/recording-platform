@@ -1,6 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
+import AdminSidebarIcon from './AdminSidebarIcon.vue'
 
 const props = defineProps({
   item: {
@@ -15,7 +16,6 @@ const props = defineProps({
 
 const route = useRoute()
 const isActive = computed(() => route.path === props.item.path)
-const marker = computed(() => (props.child ? '' : props.item.title.slice(0, 1)))
 </script>
 
 <template>
@@ -25,7 +25,7 @@ const marker = computed(() => (props.child ? '' : props.item.title.slice(0, 1)))
     :to="item.path"
   >
     <span v-if="child" class="admin-sidebar-item__dot" aria-hidden="true"></span>
-    <span v-else class="admin-sidebar-item__icon" aria-hidden="true">{{ marker }}</span>
+    <AdminSidebarIcon v-else :name="item.icon" />
     <span>{{ item.title }}</span>
   </router-link>
 </template>

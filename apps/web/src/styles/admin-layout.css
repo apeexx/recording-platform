@@ -26,7 +26,6 @@
   border-bottom: 1px solid var(--sidebar-border);
 }
 
-.admin-sidebar__brand-mark,
 .admin-avatar {
   display: inline-flex;
   align-items: center;
@@ -38,8 +37,11 @@
 }
 
 .admin-sidebar__brand-mark {
+  display: block;
   width: 38px;
   height: 38px;
+  flex: 0 0 38px;
+  border-radius: 9px;
 }
 
 .admin-avatar {
@@ -187,6 +189,12 @@
   color: var(--accent-foreground);
   font-size: 12px;
   font-weight: 700;
+}
+
+.admin-sidebar-item__icon img {
+  display: block;
+  width: 17px;
+  height: 17px;
 }
 
 .admin-sidebar-item__dot {

@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144" role="img" aria-labelledby="title desc">
+  <title id="title">砚数声采小程序头像</title>
+  <desc id="desc">暖米白圆角背景，墨黑竖向录音声纹，朱砂红录音点和砚数文字。</desc>
+  <rect width="144" height="144" rx="32.87" fill="#F3EAD9"/>
+  <g fill="none" stroke="#171717" stroke-width="8.61" stroke-linecap="round">
+    <path d="M43.04 72.78V50.87"/>
+    <path d="M54.78 72.78V37.57"/>
+    <path d="M66.52 72.78V56.35"/>
+    <path d="M78.26 72.78V29.74"/>
+    <path d="M90 72.78V46.96"/>
+    <path d="M101.74 72.78V59.48"/>
+  </g>
+  <circle cx="78.26" cy="29.74" r="6.26" fill="#C9302C"/>
+  <text x="72" y="113.48" fill="#171717" font-family="Microsoft YaHei, PingFang SC, sans-serif" font-size="21.91" font-weight="900" letter-spacing="3.91" text-anchor="middle">砚数</text>
+</svg>

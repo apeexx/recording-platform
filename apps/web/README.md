@@ -15,6 +15,8 @@
 - 左侧侧边栏、顶部栏和主内容区已经搭建。
 - 侧边栏大分类支持展开和收缩，多个分类可以同时展开。
 - 侧边栏二级菜单使用 CSS grid 过渡实现平滑展开和收起，不卸载菜单 DOM。
+- 侧边栏一级菜单由 `adminSidebar.js` 的 `icon` 字段映射本地 Iconfont SVG，保留浅蓝圆角图标底；二级菜单仍使用小圆点。图标来源和授权边界记录在 `public/assets/icons/admin-sidebar/README.md`，运行时不访问 Iconfont CDN。
+- 左上品牌标识使用与小程序字节一致的“砚数声采”SVG，Web 副本位于 `public/assets/branding/yanshu-avatar.svg`。
 - 任务/版本、数据池/CSV 导入、权限、审核、用户、操作记录和统计均使用真实 API；平台板块已整体移除。
 - 用户页使用“Web 端账号 / 小程序端账号”双页签统一管理：默认页签只加载 `WEB-...` 后台用户，小程序页签无需先搜索即可加载 `MINI-...` 采集员；切换时清空搜索条件。列表与搜索响应使用 `id`、`userType`、`loginName`、name、role、status，并通过 `userType` 将姓名、完整前缀用户 ID 或登录名搜索严格限定到当前页签。Web 页签不常驻展示创建表单，搜索栏右侧的“创建后台账号”按钮打开用户名、姓名、角色和初始密码弹窗；成功后关闭并刷新列表，失败保留输入。管理员可在小程序页签修改登录账号、重置采集员密码，也可在 Web 页签重置或停用后台账号；Web 重置后强制下次改密，小程序重置仅废止其活动会话。
 - 工作台只展示已业务化的模块入口，不使用模拟待办数据。
@@ -26,6 +28,7 @@
 ## 目录约定
 
 - `src/config/adminSidebar.js`：管理员侧边栏菜单配置。
+- `src/components/admin/AdminSidebarIcon.vue`：一级菜单本地 SVG 图标渲染组件。
 - `src/lib/httpClient.js`、`src/lib/authApi.js`：统一请求与后台身份 API。
 - `src/composables/useAdminSession.js`：无 Pinia 的后台会话状态。
 - `src/pages/auth/`：登录与首次改密页面。
