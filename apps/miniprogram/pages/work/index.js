@@ -1,5 +1,6 @@
 const { validateSubmission } = require('../../services/recorder.js')
 const { createRecordingSession } = require('../../services/recordingSession.js')
+const { waveformBars } = require('../../services/pcm.js')
 const feedback = require('../../services/feedback.js')
 
 const statusText = {
@@ -16,7 +17,7 @@ Page({
   data: {
     item: {}, version: {}, loading: true, error: '', referenceAudioPath: '', referenceVideoPath: '',
     audioPath: '', audioDuration: 0, text: '', recordState: 'idle',
-    levelBars: [0, 0, 0, 0, 0, 0, 0], submitting: false, releasing: false,
+    levelBars: waveformBars(0), submitting: false, releasing: false,
     statusText: '待录制', editable: true, readOnly: false, canRelease: true, submitLabel: '提交作业',
   },
   async onLoad(options) {
@@ -29,15 +30,12 @@ Page({
     this.session = createRecordingSession({
       recorder: wx.getRecorderManager(), fs: wx.getFileSystemManager(), userDataPath: wx.env.USER_DATA_PATH,
       version: this.data.version,
-      onLevel: level => {
-        const active = Math.ceil(level * 7)
-        this.setData({ levelBars: this.data.levelBars.map((_, i) => i < active ? Math.max(18, Math.round(level * 100)) : 8) })
-      },
+      onLevel: level => this.setData({ levelBars: waveformBars(level) }),
       onState: recordState => this.setData({ recordState }),
       onComplete: result => this.setData({ audioPath: result.filePath, audioDuration: result.durationMillis }),
       onError: error => {
         const message = error.message || '录音保存失败'
-        this.setData({ error: message, audioPath: '', audioDuration: 0 })
+        this.setData({ error: message, audioPath: '', audioDuration: 0, levelBars: waveformBars(0) })
         feedback.error(message)
       },
     })
@@ -77,10 +75,14 @@ Page({
   },
   startRecord() {
     if (!this.data.editable || !this.session) return
-    this.setData({ error: '', audioPath: '', audioDuration: 0 })
+    this.setData({ error: '', audioPath: '', audioDuration: 0, levelBars: waveformBars(0) })
     this.session.start()
   },
-  pauseRecord() { if (this.data.editable) this.session?.pause() },
+  pauseRecord() {
+    if (!this.data.editable) return
+    this.setData({ levelBars: waveformBars(0) })
+    this.session?.pause()
+  },
   resumeRecord() { if (this.data.editable) this.session?.resume() },
   async stopRecord() {
     if (!this.data.editable || !this.session) return
