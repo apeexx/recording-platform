@@ -11,6 +11,7 @@
 .reference-player{display:block;margin-top:22rpx}
 .rejection-box{margin-top:22rpx;padding:18rpx 20rpx;border-radius:16rpx;background:#fff2ef;color:#a83b35;line-height:1.6}
 .media{display:block;width:100%;margin-top:22rpx;border-radius:18rpx;overflow:hidden}
+.media-error{margin-top:16rpx;padding:16rpx 18rpx;border-radius:14rpx;background:#fff2ef;color:#b0443c;font-size:26rpx;line-height:1.5}
 
 .recorder-card{padding:0;overflow:hidden}
 .recorder-stage{box-sizing:border-box;display:flex;align-items:center;justify-content:center;width:100%;min-height:620rpx;padding:34rpx}

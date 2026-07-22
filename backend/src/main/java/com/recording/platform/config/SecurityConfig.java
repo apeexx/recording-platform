@@ -78,6 +78,7 @@ public class SecurityConfig {
 		);
 		http.authorizeHttpRequests((requests) -> requests
 			.requestMatchers(HttpMethod.GET, "/api/health/ready").permitAll()
+			.requestMatchers(HttpMethod.GET, "/api/media/public/reference/*").permitAll()
 			.requestMatchers(HttpMethod.POST,
 				"/api/auth/web/login",
 				"/api/auth/web/takeover",

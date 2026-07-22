@@ -46,6 +46,11 @@ function downloadMedia(mediaId) {
   }))
 }
 
+function referenceMediaUrl(mediaId) {
+  if (!mediaId) return ''
+  return `${config.apiBaseUrl}/api/media/public/reference/${encodeURIComponent(mediaId)}`
+}
+
 function uploadSubmission(itemId, payload) {
   const formData={operationId:payload.operationId,assignmentId:payload.assignmentId,expectedRevision:String(payload.expectedRevision),text:payload.text||''}
   if (!payload.audioPath) return multipartTextSubmit(itemId,formData)
@@ -90,6 +95,7 @@ module.exports = {
   item: id=>request(`/api/task-items/${encodeURIComponent(id)}`),
 	myWork: ({taskId='',kind='ALL',page=0,size=20}={})=>request(`/api/task-items/mine?taskId=${encodeURIComponent(taskId)}&kind=${encodeURIComponent(kind)}&page=${page}&size=${size}`),
   media: downloadMedia,
+  referenceMediaUrl,
   submit: uploadSubmission,
   release: (id,revision,op)=>request(`/api/task-items/${encodeURIComponent(id)}/release`,{method:'POST',data:{operationId:op,expectedRevision:revision}}),
   myReport: ()=>request('/api/reports/me'),

@@ -36,6 +36,18 @@ public class MediaAccessService {
 		MediaAsset asset = assets.findById(mediaId)
 			.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "MEDIA_NOT_FOUND", "媒体不存在"));
 		if (!canRead(asset, actor)) throw forbidden();
+		return readable(asset);
+	}
+
+	public ReadableMedia openPublicReference(String mediaId) {
+		MediaAsset asset = assets.findById(mediaId)
+			.filter(candidate -> candidate.getKind() == MediaKind.REFERENCE_AUDIO
+				|| candidate.getKind() == MediaKind.REFERENCE_VIDEO)
+			.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "MEDIA_NOT_FOUND", "参考媒体不存在"));
+		return readable(asset);
+	}
+
+	private ReadableMedia readable(MediaAsset asset) {
 		Path path = storage.resolve(asset.getRelativePath());
 		if (!Files.isRegularFile(path)) {
 			throw new ApiException(HttpStatus.NOT_FOUND, "MEDIA_FILE_MISSING", "媒体文件已清理或不存在");

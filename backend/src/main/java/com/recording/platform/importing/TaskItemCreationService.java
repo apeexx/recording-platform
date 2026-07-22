@@ -97,6 +97,8 @@ public class TaskItemCreationService {
 		item.setItemCode(itemCode);
 		item.setCreationOperationId(normalizedOperationId);
 		item.setReferenceText(text);
+		item.setReferenceAudioUrl(audioUrl);
+		item.setReferenceVideoUrl(videoUrl);
 		item.setStatus(TaskItemStatus.AVAILABLE);
 		Instant now = Instant.now(clock);
 		item.setCreatedAt(now);

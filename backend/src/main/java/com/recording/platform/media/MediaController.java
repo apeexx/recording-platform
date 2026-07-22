@@ -37,7 +37,18 @@ public class MediaController {
 		@RequestHeader(value = HttpHeaders.RANGE, required = false) String rangeHeader,
 		@AuthenticationPrincipal PlatformPrincipal actor
 	) {
-		ReadableMedia readable = access.open(mediaId, actor);
+		return response(access.open(mediaId, actor), rangeHeader);
+	}
+
+	@GetMapping("/public/reference/{mediaId}")
+	public ResponseEntity<StreamingResponseBody> readPublicReference(
+		@PathVariable String mediaId,
+		@RequestHeader(value = HttpHeaders.RANGE, required = false) String rangeHeader
+	) {
+		return response(access.openPublicReference(mediaId), rangeHeader);
+	}
+
+	private ResponseEntity<StreamingResponseBody> response(ReadableMedia readable, String rangeHeader) {
 		HttpHeaders headers = baseHeaders(readable.contentType());
 		if (rangeHeader == null || rangeHeader.isBlank()) {
 			headers.setContentLength(readable.length());

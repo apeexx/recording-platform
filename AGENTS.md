@@ -218,7 +218,7 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 
 当前录音固定保存到 `RECORDING_STORAGE_DIR/{taskCode}/{itemCode}.wav|mp3`。上传必须先写 `temp/`，校验扩展名、魔数、100MB、格式、单声道、任务采样率和时长，再原子替换；同一条目的替换流程按本地条目锁串行化，失败恢复旧文件。提交或释放成功后的旧稳定文件必须先隔离到 `temp/backups/` 唯一路径，并以 `media_cleanup_jobs` 持久化旧路径和 media ID；即时清理失败由同 operationId 重放和应用启动恢复重试，不得回滚已成功的 Mongo 状态，也不得把备份暴露为媒体路径。Mongo 只保存相对路径和元数据。采集员只能读取本人条目和录音；ACTIVE grant 只额外开放任务信息与参考媒体；ADMIN/REVIEWER 按审核权限读取。
 
-远程参考媒体生产默认只允许 HTTPS。策略必须阻止 localhost、环回、私网、链路本地、多播和危险重定向，并把校验后的公共 IP 绑定到实际 Socket；HTTPS 仍使用原 hostname 做 SNI、证书主机校验和 Host 请求头。`REMOTE_MEDIA_ALLOW_HTTP=true` 仅供显式开发联调，仍不允许私网目标。音频上限 100MB，视频上限 500MB；成功后不得保存完整签名 URL，只能保存 hostname、状态和脱敏错误摘要。
+远程参考媒体生产默认只允许 HTTPS。策略必须阻止 localhost、环回、私网、链路本地、多播和危险重定向，并把校验后的公共 IP 绑定到实际 Socket；HTTPS 仍使用原 hostname 做 SNI、证书主机校验和 Host 请求头。`REMOTE_MEDIA_ALLOW_HTTP=true` 仅供显式开发联调，仍不允许私网目标。音频上限 100MB，视频上限 500MB。校验和媒体副本保存成功后，`task_items.referenceAudioUrl/referenceVideoUrl` 保存规范化完整公网 URL，供小程序直接播放；`media_assets` 仍只保存 hostname、状态和脱敏错误摘要，日志不得输出 URL 查询参数。历史条目没有 URL 时使用仅开放 `REFERENCE_AUDIO/REFERENCE_VIDEO` 的 `GET /api/media/public/reference/{mediaId}`，任何 `RECORDING` 都不得从公开路径读取。
 
 导入只支持 `.csv`，固定列为 `referenceText`、`referenceAudioUrl`、`referenceVideoUrl`；条目不接收或保存外部编号，只使用系统生成的 itemCode。返回 HTTP 202 和 importJobId，Mongo 持久化状态/计数/失败行号/有限脱敏行错误，支持幂等、部分成功与失败行重试。单文件最多 50000 个数据行，每 100 行持久化一次进度，脱敏行错误摘要最多保存 1000 条。初始导入和过期 PROCESSING 恢复固定使用 `FULL` 模式幂等重放完整源文件，只有用户显式失败行重试使用 `FAILED_ROWS`。
 
@@ -358,10 +358,10 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 请求方法：POST / GET
 请求路径：/api/tasks/{taskId}/items、/api/tasks/{taskId}/items/start、/api/task-items/{itemId}、/api/task-items/mine
 请求参数：单条添加 JSON referenceText/referenceAudioUrl/referenceVideoUrl + Idempotency-Key；start 携带 Idempotency-Key；列表 page、size；mine 支持 taskId、kind=PENDING|SUBMITTED|FINISHED，兼容 ALL|RECORDING|REWORK
-响应结构：TaskItem 或 {items,page,size,total}
+响应结构：TaskItem 或 {items,page,size,total}；TaskItem 可包含 referenceAudioUrl、referenceVideoUrl，历史条目可为空
 错误码：404 NO_AVAILABLE_ITEM/TASK_ITEM_NOT_FOUND；409 ITEM_CONFLICT；422 ITEM_REFERENCE_REQUIRED/远程媒体错误
 权限要求：添加和任务条目列表仅 ADMIN；start 仅 COLLECTOR；详情仅 ADMIN/REVIEWER/当前采集员
-数据一致性要求：新条目绑定 currentVersion；itemCode 任务内递增唯一且是条目唯一业务编号；添加和领取均持久化幂等；领取 findAndModify 原子更新并以同一更新递增 revision、追加新 revision 的操作历史，同时保持同一采集员在同一任务内唯一待录制；同一任务再次领取返回已有条目，其他任务不受影响；mine 在各 kind 状态集合内统一按 updatedAt 倒序、sequence 升序后由 MongoDB 分页，不再按状态流程 rank 分组
+数据一致性要求：新条目绑定 currentVersion；远程媒体完成安全校验和后端副本保存后同时保存规范化公网 URL；itemCode 任务内递增唯一且是条目唯一业务编号；添加和领取均持久化幂等；领取 findAndModify 原子更新并以同一更新递增 revision、追加新 revision 的操作历史，同时保持同一采集员在同一任务内唯一待录制；同一任务再次领取返回已有条目，其他任务不受影响；mine 在各 kind 状态集合内统一按 updatedAt 倒序、sequence 升序后由 MongoDB 分页，不再按状态流程 rank 分组
 前端调用位置：apps/web/src/pages/admin/tasks/TaskDetailPage.vue 与 TaskPoolPage.vue、apps/miniprogram/pages/tasks/*、apps/miniprogram/pages/work/*；任务详情使用数字分页并支持每页 5/10/20 条（默认 10），小程序任务数据固定每页 10 条，独立 Web 任务数据池固定每页 20 条
 ```
 
@@ -407,6 +407,17 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 权限要求：已认证并通过条目/角色鉴权
 数据一致性要求：只读相对路径文件，防路径穿越；不写数据库
 前端调用位置：后续录音与审核播放器
+```
+
+```text
+请求方法：GET
+请求路径：/api/media/public/reference/{mediaId}
+请求参数：可选单个 Range 请求头
+响应结构：200 文件流或 206 单段 ResourceRegion
+错误码：404 MEDIA_NOT_FOUND/MEDIA_FILE_MISSING；416 INVALID_RANGE
+权限要求：公开，但仅允许 REFERENCE_AUDIO、REFERENCE_VIDEO；RECORDING 固定不可读取
+数据一致性要求：只读后端参考媒体副本，不返回录音结果，不写数据库
+前端调用位置：apps/miniprogram/pages/work/* 的历史条目兼容播放
 ```
 
 语音生成接口说明：

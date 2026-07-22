@@ -12,7 +12,7 @@
 
 实时波形只使用当前 PCM 帧，不保存历史音量或移动平均。RMS 不超过 `0.02` 时，7 根柱子全部保持 `8rpx` 平线；有声时按中心最高、左右对称的固定权重展开，RMS 达到 `0.25` 后按最高幅度显示，柱高限制在 `100rpx`。开始录音、暂停和错误时立即恢复平线，继续录音后由下一帧声音重新驱动。
 
-参考音频、当前录制结果和已提交/只读结果统一使用本地 `audio-player` 组件，由 `wx.createInnerAudioContext()` 提供播放、暂停、拖动进度、结束复位、错误提示和页面卸载销毁。不同播放器互斥播放，界面只显示一个动态时间值，不再使用原生 `<audio>` 或重复展示时长。WAV 采用流式写入，MP3 使用固定版本 `@breezystack/lamejs@1.2.7` 的本地 vendor 文件，运行时不依赖网络。
+参考音频、当前录制结果和已提交/只读结果统一使用本地 `audio-player` 组件，由 `wx.createInnerAudioContext()` 提供播放、暂停、拖动进度、结束复位、错误提示和页面卸载销毁。参考视频使用原生 `<video>`。新条目优先直接播放 `referenceAudioUrl/referenceVideoUrl` 公网地址；历史条目没有 URL 字段时使用 `/api/media/public/reference/{mediaId}` 后端公网兼容地址，不再通过 `downloadFile` 临时目录加载参考媒体。参考音频、参考视频和已提交录音独立加载，单项失败不阻断作业主体或另一媒体。不同音频播放器互斥播放，界面只显示一个动态时间值，不再使用原生 `<audio>` 或重复展示时长。WAV 采用流式写入，MP3 使用固定版本 `@breezystack/lamejs@1.2.7` 的本地 vendor 文件，运行时不依赖网络。
 
 播放器初始化期间可能短暂收到空资源路径；空路径只复位组件显示，不得写入 `InnerAudioContext.src`，避免微信音频内核尝试解码空资源并产生 `Unable to decode audio data`。只有有效的本地临时文件路径才会交给音频上下文。
 
@@ -25,7 +25,7 @@
    module.exports = { apiBaseUrl: 'https://your-test-api.example.com' }
    ```
 
-3. 在微信开发者工具中导入 `apps/miniprogram`。本地 HTTP 联调可暂时关闭“不校验合法域名”；真机和正式环境必须使用 HTTPS 并在微信后台配置 request/uploadFile/downloadFile 合法域名。
+3. 在微信开发者工具中导入 `apps/miniprogram`。本地 HTTP 联调可暂时关闭“不校验合法域名”；真机和正式环境必须使用 HTTPS，并在微信后台配置 request、uploadFile、downloadFile 以及参考音频/视频公网地址对应的合法域名。
 
 AppSecret 只存在后端环境变量 `WECHAT_APP_SECRET`，绝不得放入小程序。`project.config.json`、`project.private.config.json` 和 `config/private.js` 均已忽略。
 

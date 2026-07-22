@@ -113,6 +113,8 @@ class TaskItemCreationServiceTests {
 		assertThat(created.getItemCode()).isEqualTo("T000001-0000001");
 		assertThat(created.getReferenceAudioMediaId()).isEqualTo("audio-1");
 		assertThat(created.getReferenceVideoMediaId()).isEqualTo("video-1");
+		assertThat(created.getReferenceAudioUrl()).isEqualTo("https://cdn.example.com/a.wav");
+		assertThat(created.getReferenceVideoUrl()).isEqualTo("https://cdn.example.com/v.mp4");
 		assertThat(created.getStatus()).isEqualTo(TaskItemStatus.AVAILABLE);
 		assertThat(created.getOperations()).singleElement().satisfies((operation) -> {
 			assertThat(operation.getOperationId()).isEqualTo("add-1");

@@ -9,8 +9,10 @@
       </view>
       <view wx:if="{{item.currentRejection}}" class="rejection-box"><text>驳回原因：</text><text wx:for="{{item.currentRejection.reasons}}" wx:key="*this">{{item}} </text><text>{{item.currentRejection.note}}</text></view>
       <view wx:if="{{item.referenceText}}" class="reference-text">{{item.referenceText}}</view>
-      <audio-player wx:if="{{referenceAudioPath}}" class="reference-player" src="{{referenceAudioPath}}" label="参考音频" duration-millis="0" binderror="audioPlaybackError" />
-      <video wx:if="{{referenceVideoPath}}" class="media" src="{{referenceVideoPath}}" controls />
+      <audio-player wx:if="{{referenceAudioPath}}" class="reference-player" src="{{referenceAudioPath}}" label="参考音频" duration-millis="0" binderror="referenceAudioPlaybackError" />
+      <view wx:if="{{referenceAudioError}}" class="media-error">{{referenceAudioError}}</view>
+      <video wx:if="{{referenceVideoPath}}" class="media" src="{{referenceVideoPath}}" controls binderror="videoPlaybackError" />
+      <view wx:if="{{referenceVideoError}}" class="media-error">{{referenceVideoError}}</view>
     </view>
 
     <view wx:if="{{editable}}" class="card recorder-card">
@@ -41,6 +43,7 @@
 
     <view wx:if="{{readOnly}}" class="card readonly-result">
       <audio-player wx:if="{{audioPath}}" src="{{audioPath}}" label="已提交录音" duration-millis="{{audioDuration}}" binderror="audioPlaybackError" />
+      <view wx:elif="{{resultAudioError}}" class="media-error">{{resultAudioError}}</view>
       <view wx:else class="subtle">暂无可播放录音</view>
     </view>
 

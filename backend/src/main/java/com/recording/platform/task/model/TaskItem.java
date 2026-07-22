@@ -49,6 +49,8 @@ public class TaskItem {
 	private String assignmentId;
 	private long revision;
 	private String referenceText;
+	private String referenceAudioUrl;
+	private String referenceVideoUrl;
 	private String referenceAudioMediaId;
 	private String referenceVideoMediaId;
 	private TaskItemResult currentResult;

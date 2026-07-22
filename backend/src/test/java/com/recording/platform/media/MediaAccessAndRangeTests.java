@@ -123,6 +123,41 @@ class MediaAccessAndRangeTests {
 	}
 
 	@Test
+	void publicAccessOnlyOpensReferenceMediaAndNeverRecordingResults() throws Exception {
+		Path referencePath = tempDir.resolve("references/task-1/audio/reference.wav");
+		Path recordingPath = tempDir.resolve("T000001/I000001.wav");
+		Files.createDirectories(referencePath.getParent());
+		Files.createDirectories(recordingPath.getParent());
+		Files.writeString(referencePath, "reference");
+		Files.writeString(recordingPath, "recording");
+		MediaAssetStore assets = org.mockito.Mockito.mock(MediaAssetStore.class);
+		TaskItemStore items = org.mockito.Mockito.mock(TaskItemStore.class);
+		TaskGrantStore grants = org.mockito.Mockito.mock(TaskGrantStore.class);
+		MediaAsset reference = new MediaAsset();
+		reference.setId("media-reference");
+		reference.setKind(MediaKind.REFERENCE_AUDIO);
+		reference.setRelativePath("references/task-1/audio/reference.wav");
+		reference.setContentType("audio/wav");
+		MediaAsset recording = new MediaAsset();
+		recording.setId("media-recording");
+		recording.setKind(MediaKind.RECORDING);
+		recording.setRelativePath("T000001/I000001.wav");
+		recording.setContentType("audio/wav");
+		when(assets.findById("media-reference")).thenReturn(Optional.of(reference));
+		when(assets.findById("media-recording")).thenReturn(Optional.of(recording));
+		MediaAccessService service = new MediaAccessService(
+			assets, items, grants, new RecordingMediaStorage(tempDir)
+		);
+
+		assertThat(service.openPublicReference("media-reference").length()).isEqualTo(9);
+		assertThatThrownBy(() -> service.openPublicReference("media-recording"))
+			.isInstanceOfSatisfying(ApiException.class, (exception) -> {
+				assertThat(exception.getStatus()).isEqualTo(HttpStatus.NOT_FOUND);
+				assertThat(exception.getCode()).isEqualTo("MEDIA_NOT_FOUND");
+			});
+	}
+
+	@Test
 	void httpRangeRequestWritesMp3BytesWithPartialContentHeaders() throws Exception {
 		byte[] mp3Bytes = new byte[] {
 			(byte) 0xff, (byte) 0xf3, 0x68, (byte) 0xc4, 0x00, 0x01, 0x02, 0x03

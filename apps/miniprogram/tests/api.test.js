@@ -40,6 +40,14 @@ test('鉴权媒体先下载为临时文件再交给播放器', async () => {
   assert.equal(captured.header.Authorization, 'Bearer opaque-token')
 })
 
+test('历史参考媒体生成无需鉴权头的公网播放地址', () => {
+  const api = loadApi({getStorageSync: () => ({token:'opaque-token'})})
+  assert.match(
+    api.referenceMediaUrl('media/audio'),
+    /^https?:\/\/[^/]+\/api\/media\/public\/reference\/media%2Faudio$/
+  )
+})
+
 test('自定义头像通过鉴权上传到后端持久化', async () => {
   let captured
   const api=loadApi({getStorageSync:()=>({token:'opaque-token'}),uploadFile:options=>{captured=options;options.success({statusCode:200,data:'{"hasCustomAvatar":true}'})}})

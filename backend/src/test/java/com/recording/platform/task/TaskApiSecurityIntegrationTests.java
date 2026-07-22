@@ -40,7 +40,11 @@ import com.recording.platform.operation.service.OperationService;
 import com.recording.platform.report.service.ReportService;
 import com.recording.platform.report.dto.WorkSummary;
 import com.recording.platform.api.ApiException;
+import com.recording.platform.media.MediaAccessService;
+import com.recording.platform.media.ReadableMedia;
 import org.springframework.http.HttpStatus;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import jakarta.servlet.http.Cookie;
 import java.util.UUID;
@@ -93,11 +97,27 @@ class TaskApiSecurityIntegrationTests {
 	private OperationService operationService;
 	@MockitoBean
 	private ReportService reportService;
+	@MockitoBean
+	private MediaAccessService mediaAccessService;
 
 	@BeforeEach
 	void executeControllerIdempotencyMutations() {
 		lenient().when(idempotencyService.execute(any(), anyString(), anyString(), any(Class.class), any()))
 			.thenAnswer((invocation) -> ((Supplier<?>) invocation.getArgument(4)).get());
+	}
+
+	@Test
+	void publicReferenceMediaDoesNotRequireSessionButRecordingMediaStillDoes() throws Exception {
+		Path media = Files.createTempFile("public-reference-", ".wav");
+		Files.write(media, new byte[] {1, 2, 3});
+		when(mediaAccessService.openPublicReference("media-reference"))
+			.thenReturn(new ReadableMedia(media, "audio/wav", 3));
+
+		mockMvc.perform(get("/api/media/public/reference/media-reference"))
+			.andExpect(status().isOk());
+		mockMvc.perform(get("/api/media/media-recording"))
+			.andExpect(status().isUnauthorized())
+			.andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"));
 	}
 
 	@Test

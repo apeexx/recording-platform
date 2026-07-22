@@ -16,6 +16,7 @@ const readOnlyStatuses = new Set(['REVIEW_PENDING', 'COMPLETED', 'AI_PROCESSING'
 Page({
   data: {
     item: {}, version: {}, loading: true, error: '', referenceAudioPath: '', referenceVideoPath: '',
+    referenceAudioError: '', referenceVideoError: '', resultAudioError: '',
     audioPath: '', audioDuration: 0, text: '', recordState: 'idle',
     levelBars: waveformBars(0), submitting: false, releasing: false,
     statusText: '待录制', editable: true, readOnly: false, canRelease: true, submitLabel: '提交作业',
@@ -52,17 +53,25 @@ Page({
       const readOnly = readOnlyStatuses.has(item.status) || !editable
       await this.session?.dispose()
       this.session = null
-      const [referenceAudioPath, referenceVideoPath, resultAudioPath] = await Promise.all([
-        api.media(item.referenceAudioMediaId),
-        api.media(item.referenceVideoMediaId),
-        api.media(item.currentResult?.audio?.mediaId),
-      ])
-      const resultDuration = item.currentResult?.audio?.durationMillis || 0
       this.setData({
         item, version, text: item.currentResult?.text || '', statusText: statusText[item.status] || item.status,
         editable, readOnly, canRelease: item.status === 'RECORDING_PENDING' || item.status === 'REWORK_PENDING',
         submitLabel: item.status === 'SUBMITTED' ? '保存修改' : '提交作业',
+      })
+      const [referenceAudio, referenceVideo, resultAudio] = await Promise.allSettled([
+        Promise.resolve(item.referenceAudioUrl || api.referenceMediaUrl(item.referenceAudioMediaId)),
+        Promise.resolve(item.referenceVideoUrl || api.referenceMediaUrl(item.referenceVideoMediaId)),
+        api.media(item.currentResult?.audio?.mediaId),
+      ])
+      const referenceAudioPath = referenceAudio.status === 'fulfilled' ? referenceAudio.value : ''
+      const referenceVideoPath = referenceVideo.status === 'fulfilled' ? referenceVideo.value : ''
+      const resultAudioPath = resultAudio.status === 'fulfilled' ? resultAudio.value : ''
+      const resultDuration = item.currentResult?.audio?.durationMillis || 0
+      this.setData({
         referenceAudioPath, referenceVideoPath, audioPath: resultAudioPath,
+        referenceAudioError: referenceAudio.status === 'rejected' ? '参考音频加载失败' : '',
+        referenceVideoError: referenceVideo.status === 'rejected' ? '参考视频加载失败' : '',
+        resultAudioError: resultAudio.status === 'rejected' ? '已提交录音加载失败' : '',
         audioDuration: resultDuration,
         recordState: resultAudioPath ? 'stopped' : 'idle',
       })
@@ -94,6 +103,16 @@ Page({
   textInput(event) { if (this.data.editable) this.setData({ text: event.detail.value }) },
   audioPlaybackError(event) {
     feedback.error(event.detail?.message || '音频播放失败')
+  },
+  referenceAudioPlaybackError(event) {
+    const message = event.detail?.message || '参考音频播放失败'
+    this.setData({ referenceAudioError: message })
+    feedback.error(message)
+  },
+  videoPlaybackError() {
+    const message = '参考视频播放失败'
+    this.setData({ referenceVideoError: message })
+    feedback.error(message)
   },
   async submit() {
     if (!this.data.editable) return
