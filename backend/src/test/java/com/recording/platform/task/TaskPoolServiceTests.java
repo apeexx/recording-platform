@@ -3,7 +3,10 @@ package com.recording.platform.task;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.any;
 
 import com.recording.platform.api.ApiException;
 import com.recording.platform.identity.model.SessionType;
@@ -72,8 +75,8 @@ class TaskPoolServiceTests {
 	}
 
 	@Test
-	void existingGlobalAssignmentIsReturnedBeforeGrantChecks() {
-		TaskItem existing = item("task-other", "item-existing", TaskItemStatus.RECORDING_PENDING);
+	void existingAssignmentForTheRequestedTaskIsReturnedBeforeGrantChecks() {
+		TaskItem existing = item("task-requested", "item-existing", TaskItemStatus.RECORDING_PENDING);
 		existing.setCollectorId("collector-1");
 		existing.setAssignmentId("assignment-existing");
 		items.save(existing);
@@ -85,7 +88,24 @@ class TaskPoolServiceTests {
 	}
 
 	@Test
-	void concurrentStartsForOneCollectorReturnOneGlobalPendingItem() throws Exception {
+	void existingAssignmentForAnotherTaskDoesNotBlockAClaim() {
+		TaskItem existing = item("task-other", "item-existing", TaskItemStatus.RECORDING_PENDING);
+		existing.setCollectorId("collector-1");
+		existing.setAssignmentId("assignment-existing");
+		items.save(existing);
+		stubRunningTaskAndGrant("task-requested");
+		items.save(item("task-requested", "item-requested", TaskItemStatus.AVAILABLE));
+
+		TaskItem result = service.start("task-requested", collector);
+
+		assertThat(result.getId()).isEqualTo("item-requested");
+		assertThat(items.data.values()).filteredOn((item) -> item.getStatus() == TaskItemStatus.RECORDING_PENDING)
+			.extracting(TaskItem::getTaskId)
+			.containsExactlyInAnyOrder("task-other", "task-requested");
+	}
+
+	@Test
+	void concurrentStartsForOneCollectorReturnOnePendingItemForTheTask() throws Exception {
 		stubRunningTaskAndGrant("task-1");
 		items.save(item("task-1", "item-1", TaskItemStatus.AVAILABLE));
 		items.save(item("task-1", "item-2", TaskItemStatus.AVAILABLE));
@@ -101,6 +121,47 @@ class TaskPoolServiceTests {
 			assertThat(claimed).extracting(TaskItem::getId).containsOnly(claimed.get(0).getId());
 			assertThat(items.data.values()).filteredOn((item) -> item.getStatus() == TaskItemStatus.RECORDING_PENDING)
 				.hasSize(1);
+		} finally {
+			executor.shutdownNow();
+		}
+	}
+
+	@Test
+	void duplicateKeyRaceRecoversOnlyTheCurrentItemFromTheRequestedTask() {
+		stubRunningTaskAndGrant("task-1");
+		TaskItemStore racingItems = org.mockito.Mockito.mock(TaskItemStore.class);
+		TaskItem current = item("task-1", "item-current", TaskItemStatus.RECORDING_PENDING);
+		current.setCollectorId("collector-1");
+		when(racingItems.findCurrentByCollectorAndTask("collector-1", "task-1"))
+			.thenReturn(Optional.empty(), Optional.of(current));
+		when(racingItems.claimAvailable(any(ClaimMutation.class)))
+			.thenThrow(new org.springframework.dao.DuplicateKeyException("task scoped pending index"));
+		TaskPoolService racingService = new TaskPoolService(tasks, versions, grants, racingItems, CLOCK);
+
+		TaskItem result = racingService.start("task-1", collector);
+
+		assertThat(result).isSameAs(current);
+		verify(racingItems, times(2)).findCurrentByCollectorAndTask("collector-1", "task-1");
+	}
+
+	@Test
+	void concurrentStartsForDifferentTasksCanEachClaimOneItem() throws Exception {
+		stubRunningTaskAndGrant("task-1");
+		stubRunningTaskAndGrant("task-2");
+		items.save(item("task-1", "item-1", TaskItemStatus.AVAILABLE));
+		items.save(item("task-2", "item-2", TaskItemStatus.AVAILABLE));
+		var executor = Executors.newFixedThreadPool(2);
+		try {
+			List<Callable<TaskItem>> calls = List.of(
+				() -> service.start("task-1", collector),
+				() -> service.start("task-2", collector)
+			);
+			List<TaskItem> claimed = executor.invokeAll(calls).stream().map((future) -> {
+				try { return future.get(); } catch (Exception exception) { throw new RuntimeException(exception); }
+			}).toList();
+			assertThat(claimed).extracting(TaskItem::getTaskId).containsExactlyInAnyOrder("task-1", "task-2");
+			assertThat(items.data.values()).filteredOn((item) -> item.getStatus() == TaskItemStatus.RECORDING_PENDING)
+				.hasSize(2);
 		} finally {
 			executor.shutdownNow();
 		}
@@ -294,12 +355,13 @@ class TaskPoolServiceTests {
 		private final Map<String, TaskItem> data = new HashMap<>();
 		@Override public synchronized TaskItem save(TaskItem item) { data.put(item.getId(), item); return item; }
 		@Override public synchronized Optional<TaskItem> findById(String id) { return Optional.ofNullable(data.get(id)); }
-		@Override public synchronized Optional<TaskItem> findCurrentByCollector(String collectorId) {
+		@Override public synchronized Optional<TaskItem> findCurrentByCollectorAndTask(String collectorId, String taskId) {
 			return data.values().stream().filter((item) -> collectorId.equals(item.getCollectorId())
+				&& taskId.equals(item.getTaskId())
 				&& item.getStatus() == TaskItemStatus.RECORDING_PENDING).findFirst();
 		}
 		@Override public synchronized Optional<TaskItem> claimAvailable(ClaimMutation mutation) {
-			Optional<TaskItem> current = findCurrentByCollector(mutation.collectorId());
+			Optional<TaskItem> current = findCurrentByCollectorAndTask(mutation.collectorId(), mutation.taskId());
 			if (current.isPresent()) return current;
 			Optional<TaskItem> candidate = data.values().stream().filter((item) -> mutation.taskId().equals(item.getTaskId())
 				&& item.getStatus() == TaskItemStatus.AVAILABLE).findFirst();

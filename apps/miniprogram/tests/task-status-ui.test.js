@@ -6,10 +6,16 @@ const read = file => fs.readFileSync(file, 'utf8')
 
 test('任务大厅与任务数据页使用三段流程', () => {
 	const hall = read('pages/tasks/index.wxml')
+	const hallScript = read('pages/tasks/index.js')
 	const listScript = read('pages/work-list/index.js')
 	const listPage = read('pages/work-list/index.wxml')
 	assert.match(hall, /查看任务/)
 	assert.doesNotMatch(hall, /查看待办/)
+	assert.doesNotMatch(hall, /当前有未完成作业|每位采集员同时只能占用一条|continueWork/)
+	assert.doesNotMatch(hallScript, /currentItemId|currentTaskItemId|continueWork/)
+	for (const script of ['pages/tasks/index.js', 'pages/work/index.js', 'pages/profile/index.js']) {
+		assert.doesNotMatch(read(script), /currentTaskItemId/)
+	}
 	assert.match(listScript, /PENDING.*待处理.*SUBMITTED.*已提交.*FINISHED.*已完成/s)
 	assert.match(listPage, /任务数据/)
 	assert.match(listPage, /待审核/)

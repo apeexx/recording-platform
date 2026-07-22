@@ -64,7 +64,7 @@ public class TaskPoolService {
 	public TaskItem start(String taskId, PlatformPrincipal actor) {
 		requireCollector(actor);
 		requireProfile(actor);
-		Optional<TaskItem> existing = items.findCurrentByCollector(actor.userId());
+		Optional<TaskItem> existing = items.findCurrentByCollectorAndTask(actor.userId(), taskId);
 		if (existing.isPresent()) return existing.get();
 		TaskRecord task = requireTask(taskId);
 		if (task.getLifecycle() != TaskLifecycle.RUNNING) {
@@ -85,7 +85,7 @@ public class TaskPoolService {
 				new ApiException(HttpStatus.NOT_FOUND, "NO_AVAILABLE_ITEM", "当前没有可领取的数据")
 			);
 		} catch (DuplicateKeyException exception) {
-			return items.findCurrentByCollector(actor.userId()).orElseThrow(() ->
+			return items.findCurrentByCollectorAndTask(actor.userId(), taskId).orElseThrow(() ->
 				new ApiException(HttpStatus.CONFLICT, "CLAIM_CONFLICT", "领取状态已变化，请重试")
 			);
 		}

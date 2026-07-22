@@ -1,5 +1,4 @@
 <view class="page">
-  <view wx:if="{{currentItemId}}" class="card row"><view><view>当前有未完成作业</view><view class="subtle">每位采集员同时只能占用一条</view></view><button size="mini" class="button" bindtap="continueWork">继续</button></view>
   <view wx:if="{{error}}" class="error">{{error}}</view>
   <view wx:if="{{!loading && !tasks.length}}" class="empty">暂无可参与任务</view>
   <view wx:for="{{tasks}}" wx:key="id" class="card">

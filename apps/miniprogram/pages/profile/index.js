@@ -8,5 +8,5 @@ Page({
   async load(){this.setData({loading:true,error:''});try{const [summary,page]=await Promise.all([getApp().globalData.api.myReport(),getApp().globalData.api.mySubmissions(0)]);this.setData({summary,cumulativeDuration:duration(summary.cumulativeDurationMillis),currentDuration:duration(summary.currentDurationMillis),submissions:(page.items||[]).map(x=>({...x,submittedAtText:x.submittedAt?new Date(x.submittedAt).toLocaleString('zh-CN',{hour12:false}):'-',durationText:duration(x.durationMillis),resultTypeText:resultTypeText(x),statusText:statusText[x.currentItemStatus]||'-'}))})}catch(e){this.setData({error:e.message||'加载失败，请重试'})}finally{this.setData({loading:false})}},
   copyUserId(){const{copyUserId}=require('../../services/userIdClipboard.js');copyUserId(this.data.user?.userId)},
   openSettings(){wx.navigateTo({url:'/pages/profile-settings/index'})},
-  logout(){getApp().globalData.session.clear();wx.removeStorageSync('currentTaskItemId');wx.reLaunch({url:'/pages/login/index'})}
+  logout(){getApp().globalData.session.clear();wx.reLaunch({url:'/pages/login/index'})}
 })

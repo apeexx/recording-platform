@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
 
 import com.recording.platform.task.model.TaskItem;
 import com.recording.platform.task.model.OperationHistory;
@@ -31,6 +32,22 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 
 class MongoTaskItemStoreTests {
+	@Test
+	void currentRecordingLookupIsScopedByCollectorAndTask() {
+		SpringDataTaskItemRepository repository = org.mockito.Mockito.mock(SpringDataTaskItemRepository.class);
+		MongoTemplate template = org.mockito.Mockito.mock(MongoTemplate.class);
+		TaskItem current = new TaskItem();
+		when(repository.findFirstByCollectorIdAndTaskIdAndStatus(
+			"collector-1", "task-1", TaskItemStatus.RECORDING_PENDING
+		)).thenReturn(java.util.Optional.of(current));
+		MongoTaskItemStore store = new MongoTaskItemStore(repository, template);
+
+		assertThat(store.findCurrentByCollectorAndTask("collector-1", "task-1")).containsSame(current);
+		verify(repository).findFirstByCollectorIdAndTaskIdAndStatus(
+			"collector-1", "task-1", TaskItemStatus.RECORDING_PENDING
+		);
+	}
+
 	@Test
 	void claimUsesAnAtomicAvailableQuerySortedByTaskSequence() {
 		SpringDataTaskItemRepository repository = org.mockito.Mockito.mock(SpringDataTaskItemRepository.class);

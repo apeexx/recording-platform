@@ -106,7 +106,6 @@ Page({
         operationId: api.operationId('submit'), assignmentId: this.data.item.assignmentId,
         expectedRevision: this.data.item.revision, text: this.data.text.trim(), audioPath: this.data.audioPath,
       })
-      wx.removeStorageSync('currentTaskItemId')
       feedback.success(this.data.item.status === 'SUBMITTED' ? '修改已保存' : '提交成功')
       setTimeout(() => wx.navigateBack({ delta: 1 }), 450)
     } catch (error) {
@@ -132,7 +131,6 @@ Page({
         try {
           const api = getApp().globalData.api
           await api.release(this.itemId, this.data.item.revision, api.operationId('release'))
-          wx.removeStorageSync('currentTaskItemId')
           feedback.success('已释放到数据池')
           setTimeout(() => wx.navigateBack({ delta: 1 }), 400)
         } catch (error) {

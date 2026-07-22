@@ -49,8 +49,10 @@ public class MongoTaskItemStore implements TaskItemStore {
 	@Override public Optional<TaskItem> findByTaskIdAndCreationOperationId(String taskId, String operationId) {
 		return repository.findByTaskIdAndCreationOperationId(taskId, operationId);
 	}
-	@Override public Optional<TaskItem> findCurrentByCollector(String collectorId) {
-		return repository.findFirstByCollectorIdAndStatus(collectorId, TaskItemStatus.RECORDING_PENDING);
+	@Override public Optional<TaskItem> findCurrentByCollectorAndTask(String collectorId, String taskId) {
+		return repository.findFirstByCollectorIdAndTaskIdAndStatus(
+			collectorId, taskId, TaskItemStatus.RECORDING_PENDING
+		);
 	}
 
 	@Override

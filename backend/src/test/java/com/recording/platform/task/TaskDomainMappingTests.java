@@ -58,8 +58,9 @@ class TaskDomainMappingTests {
 		assertCompoundIndex(TaskItem.class, true, "taskId", "itemCode");
 		assertThat(Arrays.stream(TaskItem.class.getDeclaredFields()).map(Field::getName))
 			.doesNotContain("externalItemId");
-		CompoundIndex collectorPending = findCompoundIndex(TaskItem.class, "collectorId");
+		CompoundIndex collectorPending = findCompoundIndex(TaskItem.class, "collectorId", "taskId");
 		assertThat(collectorPending.unique()).isTrue();
+		assertThat(collectorPending.name()).isEqualTo("unique_collector_task_recording_pending");
 		assertThat(collectorPending.partialFilter()).contains("RECORDING_PENDING");
 		CompoundIndex creationOperation = findCompoundIndex(TaskItem.class, "taskId", "creationOperationId");
 		assertThat(creationOperation.unique()).isTrue();
