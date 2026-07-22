@@ -4,7 +4,7 @@ const fs=require('node:fs')
 const path=require('node:path')
 const vm=require('node:vm')
 
-function loadPage({api={},profile={profileComplete:true,hasCustomAvatar:false}}={}){
+function loadPage({api={},profile={profileComplete:true,hasCustomAvatar:false},cachedProfile=null,profilePromise=null,onUpdateProfile=()=>{}}={}){
   const source=fs.readFileSync(path.resolve('pages/profile-settings/index.js'),'utf8')
   const toasts=[]
   let definition
@@ -21,7 +21,14 @@ function loadPage({api={},profile={profileComplete:true,hasCustomAvatar:false}}=
     showModal(){},
     reLaunch(){}
   }
-  const session={refreshProfile:async()=>profile,completeProfile:async()=>profile,setName:async()=>profile,clear(){}}
+  const session={
+    current:()=>cachedProfile?{token:'token',user:cachedProfile}:null,
+    refreshProfile:()=>profilePromise||Promise.resolve(profile),
+    completeProfile:async()=>profile,
+    setName:async()=>profile,
+    updateProfile:value=>{onUpdateProfile(value);return{...(cachedProfile||{}),...value}},
+    clear(){},
+  }
   const requireStub=()=>({success:title=>wx.showToast({title}),info:title=>wx.showToast({title,icon:'none'}),error:title=>wx.showToast({title,icon:'none'})})
   vm.runInNewContext(source,{Page:value=>{definition=value},wx,require:requireStub,getApp:()=>({globalData:{api:apiStub,session}})},{filename:'pages/profile-settings/index.js'})
   const page={...definition,data:{...definition.data},setData(patch){Object.assign(this.data,patch)}}
@@ -112,4 +119,23 @@ test('恢复默认头像先进入预览，确认后才删除',async()=>{
   assert.equal(page.data.pendingAvatarMode,'default')
   await page.saveAvatar()
   assert.equal(deleteCalls,1)
+})
+
+test('资料设置页先展示当前会话缓存',()=>{
+  const cached={userId:'MINI-1',name:'缓存姓名',account:'123456',profileComplete:true}
+  const {page}=loadPage({cachedProfile:cached,profilePromise:new Promise(()=>{})})
+  page.onShow()
+  assert.equal(page.data.profile.name,'缓存姓名')
+  assert.equal(page.data.account,'123456')
+})
+
+test('头像更新成功后同步会话资料缓存',async()=>{
+  let cached
+  const {page}=loadPage({
+    profile:{profileComplete:true,hasCustomAvatar:true},
+    onUpdateProfile:profile=>{cached=profile},
+  })
+  page.setData({pendingAvatarMode:'upload',pendingAvatarPath:'/tmp/new.png'})
+  await page.saveAvatar()
+  assert.equal(cached.hasCustomAvatar,true)
 })

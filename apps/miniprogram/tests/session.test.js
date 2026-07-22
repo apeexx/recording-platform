@@ -6,6 +6,14 @@ const vm = require('node:vm')
 
 const { createSessionService } = require('../services/session.js')
 
+function storageWx(stored) {
+  return {
+    getStorageSync: key => stored[key],
+    setStorageSync: (key, value) => { stored[key] = value },
+    removeStorageSync: key => { delete stored[key] },
+  }
+}
+
 test('微信登录只向后端发送临时 code 并保存不透明 token', async () => {
   const stored = {}
   const wx = {
@@ -51,6 +59,32 @@ test('确认接管后仅保存后端签发的新小程序会话',async()=>{
   assert.deepEqual(calls,['takeover-token'])
   assert.equal(result.userId,'MINI-0123456789abcdef01234567')
   assert.equal(stored.recSession.token,'new-token')
+})
+
+test('新账号登录整体覆盖旧账号资料缓存', async () => {
+  const stored = { recSession: { token: 'old', user: { userId: 'MINI-old', name: '旧用户', profileComplete: true } } }
+  const session = createSessionService({
+    wx: storageWx(stored),
+    api: { accountLogin: async () => ({ token: 'new', userId: 'MINI-new', name: '新用户', profileComplete: true }) },
+  })
+  await session.accountLogin('123456', 'Password-1')
+  assert.deepEqual(stored.recSession.user, { token: 'new', userId: 'MINI-new', name: '新用户', profileComplete: true })
+})
+
+test('资料与头像响应统一合并到当前会话缓存', () => {
+  const stored = { recSession: { token: 'token', user: { userId: 'MINI-1', name: '原姓名', profileComplete: true } } }
+  const session = createSessionService({ wx: storageWx(stored), api: {} })
+  const updated = session.updateProfile({ name: '新姓名', hasCustomAvatar: true })
+  assert.equal(updated.userId, 'MINI-1')
+  assert.equal(stored.recSession.user.name, '新姓名')
+  assert.equal(stored.recSession.user.hasCustomAvatar, true)
+})
+
+test('退出登录删除 token 与个人资料缓存', () => {
+  const stored = { recSession: { token: 'token', user: { userId: 'MINI-1', profileComplete: true } } }
+  const session = createSessionService({ wx: storageWx(stored), api: {} })
+  session.clear()
+  assert.equal(stored.recSession, undefined)
 })
 
 function loadLoginPage({session,modalResult={confirm:false}}){

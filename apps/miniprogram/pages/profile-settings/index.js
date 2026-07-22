@@ -3,13 +3,14 @@ const feedback=require('../../services/feedback.js')
 
 Page({
   data:{profile:{},avatarSrc:DEFAULT_AVATAR,avatarPreviewVisible:false,pendingAvatarPath:'',pendingAvatarMode:'',avatarSaving:false,name:'',account:'',password:'',confirmPassword:'',currentPassword:'',newPassword:''},
-  onShow(){this.load()},
+  onShow(){this.applyProfile(getApp().globalData.session.current()?.user);this.load()},
   input(e){this.setData({[e.currentTarget.dataset.field]:e.detail.value})},
   copyUserId(){const{copyUserId}=require('../../services/userIdClipboard.js');copyUserId(this.data.profile?.userId)},
+  applyProfile(profile){if(profile)this.setData({profile,name:profile.name||'',account:profile.account||''})},
   async load(){
     try{
       const profile=await getApp().globalData.session.refreshProfile()
-      this.setData({profile,name:profile.name||'',account:profile.account||''})
+      this.applyProfile(profile)
       if(!profile.hasCustomAvatar)return this.setData({avatarSrc:DEFAULT_AVATAR})
       try{this.setData({avatarSrc:await getApp().globalData.api.avatar()})}catch(_){this.setData({avatarSrc:DEFAULT_AVATAR})}
     }catch(e){feedback.error(e.message||'资料加载失败')}
@@ -27,7 +28,8 @@ Page({
     this.setData({avatarSaving:true})
     try{
       const profile=pendingAvatarMode==='default'?await getApp().globalData.api.deleteAvatar():await getApp().globalData.api.uploadAvatar(pendingAvatarPath)
-      this.setData({profile,avatarSrc:pendingAvatarMode==='default'?DEFAULT_AVATAR:pendingAvatarPath,avatarPreviewVisible:false,pendingAvatarMode:'',pendingAvatarPath:''})
+      const cachedProfile=getApp().globalData.session.updateProfile(profile)
+      this.setData({profile:cachedProfile,avatarSrc:pendingAvatarMode==='default'?DEFAULT_AVATAR:pendingAvatarPath,avatarPreviewVisible:false,pendingAvatarMode:'',pendingAvatarPath:''})
       feedback.success(pendingAvatarMode==='default'?'已恢复默认头像':'头像已更新')
     }catch(e){feedback.error('头像保存失败，请重试')}finally{this.setData({avatarSaving:false})}
   }

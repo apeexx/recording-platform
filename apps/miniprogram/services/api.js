@@ -99,7 +99,7 @@ module.exports = {
   submit: uploadSubmission,
   release: (id,revision,op)=>request(`/api/task-items/${encodeURIComponent(id)}/release`,{method:'POST',data:{operationId:op,expectedRevision:revision}}),
   myReport: ()=>request('/api/reports/me'),
-  mySubmissions: (page=0)=>request(`/api/reports/me/submissions?page=${page}&size=20`)
+  mySubmissions: (page=0)=>request(`/api/reports/me/submissions?page=${page}&size=5`)
 }
 
 function downloadProtected(path) {
