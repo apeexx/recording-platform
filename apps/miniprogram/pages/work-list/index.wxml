@@ -11,7 +11,9 @@
   </view>
   <view class="pagination" wx:if="{{total>0}}">
     <button class="page-button" disabled="{{loading||page===0}}" bindtap="previousPage">上一页</button>
-    <view class="page-summary">第 {{page+1}} 页，共 {{totalPages}} 页</view>
+    <picker class="page-picker" mode="selector" range="{{pageOptions}}" value="{{page}}" disabled="{{loading}}" bindchange="selectPage">
+      <view class="page-summary">第 {{page+1}} 页 / 共 {{totalPages}} 页</view>
+    </picker>
     <button class="page-button" disabled="{{loading||page+1>=totalPages}}" bindtap="nextPage">下一页</button>
   </view>
 </view>

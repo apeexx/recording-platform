@@ -3,6 +3,7 @@ import { onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import AsyncState from '../../../components/admin/AsyncState.vue'
 import PageActions from '../../../components/admin/PageActions.vue'
+import PaginationControls from '../../../components/admin/PaginationControls.vue'
 import { taskApi } from '../../../lib/taskApi.js'
 import { operationId } from '../../../lib/apiUtils.js'
 import { statusLabel } from '../../../lib/statusLabels.js'
@@ -10,9 +11,12 @@ import { useNotifications } from '../../../composables/useNotifications.js'
 
 const notifications = useNotifications()
 const route = useRoute()
+const ITEM_PAGE_SIZE = 10
 const task = ref(null)
 const taskVersion = ref(null)
 const items = ref([])
+const page = ref(0)
+const total = ref(0)
 const loading = ref(false)
 const error = ref('')
 const notice = ref('')
@@ -22,18 +26,29 @@ const importFile = ref(null)
 const job = ref(null)
 const itemForm = reactive({ referenceText: '', referenceAudioUrl: '', referenceVideoUrl: '' })
 
+async function loadItems() {
+  const result = await taskApi.items(route.params.id, page.value, ITEM_PAGE_SIZE)
+  const nextTotal = Number(result.total) || 0
+  const lastPage = Math.max(Math.ceil(nextTotal / ITEM_PAGE_SIZE) - 1, 0)
+  if (page.value > lastPage) {
+    page.value = lastPage
+    return loadItems()
+  }
+  total.value = nextTotal
+  items.value = result.items || []
+}
+
 async function load() {
   loading.value = true
   error.value = ''
   try {
-    const [taskData, versions, itemResult] = await Promise.all([
+    const [taskData, versions] = await Promise.all([
       taskApi.get(route.params.id),
       taskApi.versions(route.params.id),
-      taskApi.items(route.params.id, 0, 100),
     ])
     task.value = taskData
     taskVersion.value = versions.find((version) => version.id === taskData.currentVersionId)
-    items.value = itemResult.items || []
+    await loadItems()
   } catch (exception) {
     error.value = exception.message
   } finally {
@@ -46,6 +61,7 @@ async function add() {
     await taskApi.addItem(route.params.id, { ...itemForm }, operationId('item-add'))
     Object.keys(itemForm).forEach((key) => { itemForm[key] = '' })
     notifications.success('数据条目已添加')
+    page.value = 0
     await load()
   } catch (exception) {
     error.value = exception.message
@@ -96,6 +112,12 @@ function toggle(row) {
   const next = new Set(selected.value)
   next.has(row.id) ? next.delete(row.id) : next.add(row.id)
   selected.value = next
+}
+
+async function changePage(value) {
+  page.value = value
+  selected.value = new Set()
+  await load()
 }
 
 async function batch(action) {
@@ -155,7 +177,7 @@ onMounted(load)
         </form>
         <div class="business-card business-card-wide">
           <div class="business-heading">
-            <h3>数据池（{{ items.length }}）</h3>
+            <h3>数据池（共 {{ total }} 条）</h3>
             <div class="business-actions">
               <select v-model="targetStatus">
                 <option value="RECORDING_PENDING">待录制</option>
@@ -175,6 +197,7 @@ onMounted(load)
                 <tbody><tr v-for="row in items" :key="row.id"><td><input type="checkbox" :checked="selected.has(row.id)" @change="toggle(row)"></td><td>{{ row.itemCode }}</td><td>{{ statusLabel('item', row.status) }}</td><td>{{ row.collectorId || '-' }}</td><td>{{ row.currentResult?.audio?.durationMillis ? `${Math.round(row.currentResult.audio.durationMillis / 1000)}秒` : row.currentResult?.text ? '文本' : '-' }}</td><td><button v-if="row.status !== 'DISCARDED'" class="button-link is-danger" @click="itemAction(row, 'discard')">废弃</button><button v-else class="button-link" @click="itemAction(row, 'restore')">恢复</button><router-link class="button-link" :to="`/admin/items/${row.id}/operations`">记录</router-link></td></tr></tbody>
               </table>
             </div>
+            <PaginationControls :page="page" :size="ITEM_PAGE_SIZE" :total="total" @change="changePage" />
           </AsyncState>
         </div>
       </div>

@@ -62,7 +62,7 @@ Web 端已建立基础主题变量，变量文件位于 `apps/web/src/styles/the
 
 Web 管理端已建立 Vue Router 导航壳。未登录访问后台会进入 `/login`；ADMIN 默认进入 `/admin/dashboard`，REVIEWER 默认进入 `/admin/review` 并先选择任务。首次登录待改密账号只能访问 `/first-password`，改密后清除会话并要求重新登录。
 
-侧边栏菜单统一配置在 `apps/web/src/config/adminSidebar.js`，路由统一位于 `apps/web/src/router/`。菜单按 ADMIN/REVIEWER 动态过滤，未业务化的旧静态原型不再暴露在生产导航和路由。`apps/web/src/lib/httpClient.js` 统一处理 Cookie、CSRF、JSON/multipart、幂等头、结构化错误和会话接管下线；CSRF 失效时只刷新令牌并自动重试一次，真实角色越权不会重试。任务、数据池、授权、审核、用户、记录和统计页面均通过该请求层接入真实接口。
+侧边栏菜单统一配置在 `apps/web/src/config/adminSidebar.js`，路由统一位于 `apps/web/src/router/`。菜单按 ADMIN/REVIEWER 动态过滤，未业务化的旧静态原型不再暴露在生产导航和路由。`apps/web/src/lib/httpClient.js` 统一处理 Cookie、CSRF、JSON/multipart、幂等头、结构化错误和会话接管下线；CSRF 失效时只刷新令牌并自动重试一次，真实角色越权不会重试。任务、数据池、授权、审核、用户、记录和统计页面均通过该请求层接入真实接口。任务详情中的数据池使用每页 10 条的服务端分页，独立“任务数据池”页面保持每页 20 条。
 
 “语音生成”模块位于 `apps/web/src/pages/admin/voice-generation/`，当前已接入后端真实接口，支持 0 元试听、付费克隆、日常合成、声音配置和生成记录。
 
@@ -173,7 +173,7 @@ POST /api/admin/users/{userId}/reset-password
 - 录音文件：`RECORDING_STORAGE_DIR` 的相对值按仓库根目录解析，目录下只使用相对媒体路径；当前录音固定为 `{taskCode}/{itemCode}.wav|mp3`。上传先进入 `temp/`，完成扩展名、魔数、100MB、单声道、采样率和时长校验后原子替换，失败恢复旧文件。待删除的旧稳定文件会先移动到 `temp/backups/` 唯一路径，避免后续重录复用同一路径时误删新文件；`GET /api/media/{mediaId}` 鉴权读取并支持单 Range，完整文件和 Range 响应都使用分块流式输出，避免将最大 100MB 媒体整体载入内存。
 - 导入固定列为 `referenceText`、`referenceAudioUrl`、`referenceVideoUrl`，仅支持 `.csv`，支持部分成功、失败行重试及幂等。条目不再接收或保存外部编号，只使用系统生成的条目编号。单文件最多 50000 个数据行；每 100 行持久化一次进度，行错误摘要最多保存 1000 条，完整失败行号单独保留用于重试。
 - 本地批量导入正向测试可直接使用 `docs/test-data/task-items-import-valid.csv`。该文件包含 8 条中文参考文字，不包含远程音频或视频 URL，可用于验证 CSV 解析、异步导入和数据池新增闭环。
-- 分页导入测试可使用 `docs/test-data/task-items-import-pagination-101.csv`。该文件包含 101 条唯一中文参考文字，音频和视频 URL 均为空，适用于启用文字参考的任务；按每页 20 条可形成 `20/20/20/20/20/1` 的六页边界。
+- 分页导入测试可使用 `docs/test-data/task-items-import-pagination-101.csv`。该文件包含 101 条唯一中文参考文字，音频和视频 URL 均为空，适用于启用文字参考的任务；任务详情与小程序按每页 10 条可形成十一页边界，独立任务数据池按每页 20 条可形成六页边界。
 - 部分失败测试可使用 `docs/test-data/task-items-import-partial-failure.csv`。该文件共 5 行：2 行具有参考文字并应成功，3 行参考源均为空并应返回 `ITEM_REFERENCE_REQUIRED`；首次导入预期为 `PARTIAL_SUCCESS`、成功 2 行、失败 3 行。失败行重试不会修正源数据，因此预期仍保持部分失败，可用于验证失败行保留和重试幂等。
 - 远程参考媒体生产默认只允许 HTTPS；每次重定向重新执行协议、主机和地址策略，禁止本机、环回、私网、链路本地与多播地址，并将校验后的地址绑定到实际连接。开发环境只有显式设置 `REMOTE_MEDIA_ALLOW_HTTP=true` 才允许 HTTP，仍不允许私网目标。音频上限 100MB、视频上限 500MB。
 

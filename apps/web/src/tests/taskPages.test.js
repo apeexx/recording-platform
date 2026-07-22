@@ -27,6 +27,17 @@ describe('任务页面 API', () => {
 	  expect(pool).not.toContain('externalItemId')
 	  expect(pool).not.toContain('外部编号')
 	})
+  it('任务详情数据池每页十条并提供服务端分页', () => {
+    const detail = fs.readFileSync(path.resolve('src/pages/admin/tasks/TaskDetailPage.vue'), 'utf8')
+    expect(detail).toContain("import PaginationControls from '../../../components/admin/PaginationControls.vue'")
+    expect(detail).toContain('const ITEM_PAGE_SIZE = 10')
+    expect(detail).toContain('taskApi.items(route.params.id, page.value, ITEM_PAGE_SIZE)')
+    expect(detail).toContain('function changePage(value)')
+    expect(detail).toContain('selected.value = new Set()')
+    expect(detail).toContain('数据池（共 {{ total }} 条）')
+    expect(detail).toContain('<PaginationControls :page="page" :size="ITEM_PAGE_SIZE" :total="total" @change="changePage" />')
+    expect(detail).not.toContain('taskApi.items(route.params.id, 0, 100)')
+  })
   it('任务状态和数据池请求使用后端真实路径', async () => {
     httpRequest.mockResolvedValue({})
     await taskApi.transition('t1', 'publish', 'op-2')
