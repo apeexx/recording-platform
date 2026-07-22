@@ -1,0 +1,11 @@
+referenceText,referenceAudioUrl,referenceVideoUrl
+混合数据 1：参考文字与参考音频。,https://web-ext-storage.dcloud.net.cn/doc/uniapp/ForElise.mp3,
+混合数据 2：参考文字与参考视频。,,https://qiniu-web-assets.dcloud.net.cn/unidoc/zh/2minute-demo.mp4
+,https://www.cambridgeenglish.org/images/153149-movers-sample-listening-test-vol2.mp3,https://sf1-cdn-tos.huoshanstatic.com/obj/media-fe/xgplayer_doc_video/mp4/xgplayer-demo-360p.mp4
+混合数据 4：文字、音频和视频齐全。,https://assets.anytourl.com/uploads/192dd66bed6362c7f11632cdcabb5b0d.wav,https://qiniu-web-assets.dcloud.net.cn/unidoc/zh/2minute-demo.mp4
+混合数据 5：再次测试文字与音频。,https://www.cambridgeenglish.org/images/153149-movers-sample-listening-test-vol2.mp3,
+混合数据 6：再次测试文字与视频。,,https://sf1-cdn-tos.huoshanstatic.com/obj/media-fe/xgplayer_doc_video/mp4/xgplayer-demo-360p.mp4
+,https://web-ext-storage.dcloud.net.cn/doc/uniapp/ForElise.mp3,https://qiniu-web-assets.dcloud.net.cn/unidoc/zh/2minute-demo.mp4
+混合数据 8：三种参考内容同时导入。,https://www.cambridgeenglish.org/images/153149-movers-sample-listening-test-vol2.mp3,https://sf1-cdn-tos.huoshanstatic.com/obj/media-fe/xgplayer_doc_video/mp4/xgplayer-demo-360p.mp4
+混合数据 9：复用 WAV 与 MP4 素材。,https://assets.anytourl.com/uploads/192dd66bed6362c7f11632cdcabb5b0d.wav,https://sf1-cdn-tos.huoshanstatic.com/obj/media-fe/xgplayer_doc_video/mp4/xgplayer-demo-360p.mp4
+混合数据 10：完成整批导入检查。,https://web-ext-storage.dcloud.net.cn/doc/uniapp/ForElise.mp3,https://qiniu-web-assets.dcloud.net.cn/unidoc/zh/2minute-demo.mp4
