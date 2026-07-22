@@ -447,21 +447,9 @@ public class MongoTaskItemStore implements TaskItemStore {
 	) {
 		Criteria criteria = Criteria.where("collectorId").is(collectorId).and("status").in(statuses);
 		if (taskId != null && !taskId.isBlank()) criteria = criteria.and("taskId").is(taskId);
-		List<TaskItemStatus> orderedStatuses = new java.util.ArrayList<>(statuses);
-		List<TaskItem> matched = new java.util.ArrayList<>(
-			mongoTemplate.find(Query.query(criteria), TaskItem.class)
-		);
-		matched.sort(java.util.Comparator
-			.comparingInt((TaskItem item) -> {
-				int rank = orderedStatuses.indexOf(item.getStatus());
-				return rank < 0 ? Integer.MAX_VALUE : rank;
-			})
-			.thenComparing(TaskItem::getUpdatedAt,
-				java.util.Comparator.nullsLast(java.util.Comparator.reverseOrder()))
-			.thenComparingLong(TaskItem::getSequence));
-		int from = Math.min((int) pageable.getOffset(), matched.size());
-		int to = Math.min(from + pageable.getPageSize(), matched.size());
-		return new org.springframework.data.domain.PageImpl<>(matched.subList(from, to), pageable, matched.size());
+		long total = mongoTemplate.count(Query.query(criteria), TaskItem.class);
+		List<TaskItem> content = mongoTemplate.find(Query.query(criteria).with(pageable), TaskItem.class);
+		return new org.springframework.data.domain.PageImpl<>(content, pageable, total);
 	}
 
 	@Override public List<TaskItem> findForReport(String collectorId, String taskId) {

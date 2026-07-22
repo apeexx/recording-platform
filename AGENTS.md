@@ -361,7 +361,7 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 响应结构：TaskItem 或 {items,page,size,total}
 错误码：404 NO_AVAILABLE_ITEM/TASK_ITEM_NOT_FOUND；409 ITEM_CONFLICT；422 ITEM_REFERENCE_REQUIRED/远程媒体错误
 权限要求：添加和任务条目列表仅 ADMIN；start 仅 COLLECTOR；详情仅 ADMIN/REVIEWER/当前采集员
-数据一致性要求：新条目绑定 currentVersion；itemCode 任务内递增唯一且是条目唯一业务编号；添加和领取均持久化幂等；领取 findAndModify 原子更新并以同一更新递增 revision、追加新 revision 的操作历史，同时保持采集员全局唯一待录制；mine 按流程 rank、updatedAt 倒序、sequence 升序后分页
+数据一致性要求：新条目绑定 currentVersion；itemCode 任务内递增唯一且是条目唯一业务编号；添加和领取均持久化幂等；领取 findAndModify 原子更新并以同一更新递增 revision、追加新 revision 的操作历史，同时保持采集员全局唯一待录制；mine 在各 kind 状态集合内统一按 updatedAt 倒序、sequence 升序后由 MongoDB 分页，不再按状态流程 rank 分组
 前端调用位置：apps/web/src/pages/admin/tasks/TaskPoolPage.vue、apps/miniprogram/pages/tasks/*、apps/miniprogram/pages/work/*
 ```
 

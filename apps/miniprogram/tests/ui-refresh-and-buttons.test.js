@@ -33,6 +33,6 @@ test('只有任务大厅、任务数据和我的统计开启下拉刷新', () =>
 test('任务数据页按当前页签重新加载并始终结束下拉刷新动画', () => {
   const script = read('pages/work-list/index.js')
 
-  assert.match(script, /onPullDownRefresh\(\)\s*\{\s*this\.load\(\)\.finally\(\(\)\s*=>\s*wx\.stopPullDownRefresh\(\)\)\s*\}/)
+	assert.match(script, /onPullDownRefresh\(\)\s*\{\s*this\.load\(this\.data\.page\)\.finally\(\(\)\s*=>\s*wx\.stopPullDownRefresh\(\)\)\s*\}/)
   assert.match(script, /kind:this\.data\.kind/)
 })

@@ -1,0 +1,42 @@
+const test = require('node:test')
+const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const path = require('node:path')
+
+const read = file => fs.readFileSync(path.resolve(file), 'utf8')
+
+test('任务数据固定每页二十条并正确计算分页边界', () => {
+  const modulePath = path.resolve('pages/work-list/pagination.js')
+  assert.equal(fs.existsSync(modulePath), true, '缺少任务数据分页辅助模块')
+  delete require.cache[require.resolve(modulePath)]
+  const pagination = require(modulePath)
+  assert.equal(pagination.PAGE_SIZE, 20)
+  assert.equal(pagination.pageCount(0), 1)
+  assert.equal(pagination.pageCount(20), 1)
+  assert.equal(pagination.pageCount(21), 2)
+  assert.equal(pagination.pageCount(101), 6)
+  assert.equal(pagination.clampPage(9, 25), 1)
+  assert.equal(pagination.canPrevious(0), false)
+  assert.equal(pagination.canPrevious(1), true)
+  assert.equal(pagination.canNext(0, 25), true)
+  assert.equal(pagination.canNext(1, 25), false)
+})
+
+test('任务数据页提供服务端分页并在切换页签时回到第一页', () => {
+  const script = read('pages/work-list/index.js')
+  const page = read('pages/work-list/index.wxml')
+  const style = read('pages/work-list/index.wxss')
+
+  assert.match(script, /size:PAGE_SIZE/)
+  assert.match(script, /previousPage\(\)/)
+  assert.match(script, /nextPage\(\)/)
+  assert.match(script, /kind,page:0/)
+  assert.match(script, /onPullDownRefresh\(\)\{this\.load\(this\.data\.page\)/)
+  assert.match(page, /bindtap="previousPage"/)
+  assert.match(page, /按最新修改时间倒序排列/)
+  assert.match(page, /第 \{\{page\+1\}\} 页，共 \{\{totalPages\}\} 页/)
+  assert.match(page, /bindtap="nextPage"/)
+  assert.match(page, /disabled="\{\{loading\|\|page===0\}\}"/)
+  assert.match(page, /disabled="\{\{loading\|\|page\+1>=totalPages\}\}"/)
+  assert.match(style, /\.pagination\{[^}]*flex-wrap:wrap/)
+})

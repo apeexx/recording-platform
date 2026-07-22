@@ -28,6 +28,7 @@ import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.data.mongodb.core.query.UpdateDefinition;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 
 class MongoTaskItemStoreTests {
 	@Test
@@ -215,25 +216,30 @@ class MongoTaskItemStoreTests {
 	}
 
 	@Test
-	void collectorWorkSortsByWorkflowRankBeforePaging() {
+	void collectorWorkDelegatesStableSortAndPagingToMongo() {
 		SpringDataTaskItemRepository repository = org.mockito.Mockito.mock(SpringDataTaskItemRepository.class);
 		MongoTemplate template = org.mockito.Mockito.mock(MongoTemplate.class);
-		TaskItem rework = item("rework", TaskItemStatus.REWORK_PENDING, "2026-07-21T12:00:00Z", 1);
-		TaskItem recordingOlder = item("recording-older", TaskItemStatus.RECORDING_PENDING, "2026-07-21T10:00:00Z", 2);
-		TaskItem recordingNewer = item("recording-newer", TaskItemStatus.RECORDING_PENDING, "2026-07-21T11:00:00Z", 3);
+		TaskItem newest = item("newest", TaskItemStatus.REWORK_PENDING, "2026-07-21T12:00:00Z", 1);
+		TaskItem older = item("older", TaskItemStatus.RECORDING_PENDING, "2026-07-21T11:00:00Z", 2);
+		when(template.count(any(Query.class), eq(TaskItem.class))).thenReturn(5L);
 		when(template.find(any(Query.class), eq(TaskItem.class)))
-			.thenReturn(List.of(rework, recordingOlder, recordingNewer));
+			.thenReturn(List.of(newest, older));
 		MongoTaskItemStore store = new MongoTaskItemStore(repository, template);
 
 		var page = store.findAllByCollectorIdAndStatusIn(
 			"collector-1", null,
 			List.of(TaskItemStatus.RECORDING_PENDING, TaskItemStatus.REWORK_PENDING),
-			PageRequest.of(0, 2)
+			PageRequest.of(1, 2, Sort.by(Sort.Order.desc("updatedAt"), Sort.Order.asc("sequence")))
 		);
 
-		assertThat(page.getContent()).extracting(TaskItem::getId)
-			.containsExactly("recording-newer", "recording-older");
-		assertThat(page.getTotalElements()).isEqualTo(3);
+		ArgumentCaptor<Query> query = ArgumentCaptor.forClass(Query.class);
+		org.mockito.Mockito.verify(template).find(query.capture(), eq(TaskItem.class));
+		assertThat(query.getValue().getSkip()).isEqualTo(2L);
+		assertThat(query.getValue().getLimit()).isEqualTo(2);
+		assertThat(query.getValue().getSortObject())
+			.isEqualTo(new Document("updatedAt", -1).append("sequence", 1));
+		assertThat(page.getContent()).extracting(TaskItem::getId).containsExactly("newest", "older");
+		assertThat(page.getTotalElements()).isEqualTo(5);
 	}
 
 	private TaskItem item(String id, TaskItemStatus status, String updatedAt, long sequence) {

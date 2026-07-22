@@ -18,6 +18,7 @@ import java.util.Optional;
 import java.util.List;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.junit.jupiter.api.Test;
 
 class TaskItemQueryServiceTests {
@@ -60,6 +61,37 @@ class TaskItemQueryServiceTests {
 
 		service.mine(null, CollectorWorkKind.SUBMITTED, 0, 20, principal("collector-1"));
 		service.mine(null, CollectorWorkKind.FINISHED, 0, 20, principal("collector-1"));
+	}
+
+	@Test
+	void collectorWorkUsesUpdatedTimeDescendingWithSequenceTieBreak() {
+		TaskItemStore items = org.mockito.Mockito.mock(TaskItemStore.class);
+		TaskStore tasks = org.mockito.Mockito.mock(TaskStore.class);
+		when(items.findAllByCollectorIdAndStatusIn(
+			org.mockito.ArgumentMatchers.eq("collector-1"),
+			org.mockito.ArgumentMatchers.isNull(),
+			org.mockito.ArgumentMatchers.eq(List.of(TaskItemStatus.RECORDING_PENDING, TaskItemStatus.REWORK_PENDING)),
+			org.mockito.ArgumentMatchers.any(Pageable.class)
+		)).thenReturn(new PageImpl<>(List.of()));
+		TaskItemQueryService service = new TaskItemQueryService(items, tasks);
+
+		service.mine(null, CollectorWorkKind.PENDING, 2, 20, principal("collector-1"));
+
+		var captor = org.mockito.ArgumentCaptor.forClass(Pageable.class);
+		org.mockito.Mockito.verify(items).findAllByCollectorIdAndStatusIn(
+			org.mockito.ArgumentMatchers.eq("collector-1"),
+			org.mockito.ArgumentMatchers.isNull(),
+			org.mockito.ArgumentMatchers.eq(List.of(TaskItemStatus.RECORDING_PENDING, TaskItemStatus.REWORK_PENDING)),
+			captor.capture()
+		);
+		Pageable pageable = captor.getValue();
+		assertThat(pageable.getPageNumber()).isEqualTo(2);
+		assertThat(pageable.getPageSize()).isEqualTo(20);
+		assertThat(pageable.getSort().getOrderFor("updatedAt")).isNotNull()
+			.extracting(Sort.Order::getDirection).isEqualTo(Sort.Direction.DESC);
+		assertThat(pageable.getSort().getOrderFor("sequence")).isNotNull()
+			.extracting(Sort.Order::getDirection).isEqualTo(Sort.Direction.ASC);
+		assertThat(pageable.getSort().getOrderFor("status")).isNull();
 	}
 
 	private PlatformPrincipal principal(String userId) {

@@ -47,7 +47,7 @@ public class TaskItemQueryService {
 		};
 		PageRequest pageable = PageRequest.of(
 			Math.max(page, 0), Math.min(Math.max(size, 1), 100),
-			Sort.by(Sort.Order.desc("status"), Sort.Order.desc("updatedAt"), Sort.Order.asc("sequence"))
+			Sort.by(Sort.Order.desc("updatedAt"), Sort.Order.asc("sequence"))
 		);
 		var result = items.findAllByCollectorIdAndStatusIn(actor.userId(), taskId, statuses, pageable);
 		var filtered = result.getContent();
