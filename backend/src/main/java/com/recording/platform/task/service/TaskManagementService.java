@@ -1,175 +1,67 @@
 package com.recording.platform.task.service;
 
 import com.recording.platform.api.ApiException;
-import com.recording.platform.task.model.RecordingFormat;
 import com.recording.platform.task.model.ReferenceType;
+import com.recording.platform.task.model.TaskConfiguration;
 import com.recording.platform.task.model.TaskLifecycle;
 import com.recording.platform.task.model.TaskRecord;
-import com.recording.platform.task.model.TaskResultType;
-import com.recording.platform.task.model.TaskVersion;
 import com.recording.platform.task.store.SequenceStore;
 import com.recording.platform.task.store.TaskStore;
-import com.recording.platform.task.store.TaskVersionStore;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.LinkedHashSet;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 @Service
 public class TaskManagementService {
-	private static final Logger LOGGER = LoggerFactory.getLogger(TaskManagementService.class);
 	private static final Set<Integer> SUPPORTED_SAMPLE_RATES = Set.of(8000, 16000, 24000, 32000, 44100, 48000);
+	private static final long MIN_DURATION_MILLIS = 1_000;
+	private static final long MAX_DURATION_MILLIS = 600_000;
 	private final SequenceStore sequences;
 	private final TaskStore tasks;
-	private final TaskVersionStore versions;
 	private final Clock clock;
 
-	public TaskManagementService(SequenceStore sequences, TaskStore tasks, TaskVersionStore versions, Clock clock) {
+	public TaskManagementService(SequenceStore sequences, TaskStore tasks, Clock clock) {
 		this.sequences = sequences;
 		this.tasks = tasks;
-		this.versions = versions;
 		this.clock = clock;
 	}
 
 	public TaskRecord create(CreateTaskCommand command) {
-		validateVersion(command.version());
+		TaskConfiguration configuration = configuration(command.configuration());
 		long taskSequence = sequences.next("task");
 		if (taskSequence < 1 || taskSequence > 999999) {
 			throw new ApiException(HttpStatus.CONFLICT, "TASK_CODE_EXHAUSTED", "任务编号已达到上限");
 		}
-		String taskCode = "T%06d".formatted(taskSequence);
 		Instant now = Instant.now(clock);
 		TaskRecord task = new TaskRecord();
-		task.setTaskCode(taskCode);
+		task.setTaskCode("T%06d".formatted(taskSequence));
 		task.setName(required(command.name(), "INVALID_TASK_NAME", "任务名称不能为空"));
 		task.setDescription(trimToNull(command.description()));
 		task.setLifecycle(TaskLifecycle.DRAFT);
+		task.setConfiguration(configuration);
 		task.setCreatedAt(now);
 		task.setUpdatedAt(now);
-		TaskVersion savedVersion = null;
-		try {
-			task = tasks.save(task);
-			TaskVersion version = newVersion(task.getId(), 1, command.version(), false, now);
-			savedVersion = versions.save(version);
-			task.setCurrentVersionId(savedVersion.getId());
-			task.setCurrentVersionNumber(1);
-			return tasks.save(task);
-		} catch (RuntimeException exception) {
-			List<RuntimeException> compensationFailures = new ArrayList<>();
-			if (savedVersion != null && savedVersion.getId() != null) {
-				String savedVersionId = savedVersion.getId();
-				collectCompensationFailure(
-					compensationFailures,
-					() -> versions.deleteById(savedVersionId),
-					"delete task version after create failure"
-				);
-			}
-			if (task.getId() != null) {
-				String savedTaskId = task.getId();
-				collectCompensationFailure(
-					compensationFailures,
-					() -> tasks.deleteById(savedTaskId),
-					"delete task after create failure"
-				);
-			}
-			failIfCompensationFailed(exception, compensationFailures);
-			throw exception;
+		return tasks.save(task);
+	}
+
+	public TaskRecord updateStructure(String taskId, String name, String description, TaskConfigurationSpec spec) {
+		TaskRecord task = requireTask(taskId);
+		if (task.getLifecycle() != TaskLifecycle.DRAFT) {
+			throw invalidState("任务发布后不可修改");
 		}
+		task.setName(required(name, "INVALID_TASK_NAME", "任务名称不能为空"));
+		task.setDescription(trimToNull(description));
+		task.setConfiguration(configuration(spec));
+		task.setUpdatedAt(Instant.now(clock));
+		return tasks.save(task);
 	}
 
 	public TaskRecord publish(String taskId) {
-		TaskRecord task = requireTask(taskId);
-		if (task.getLifecycle() != TaskLifecycle.DRAFT) {
-			throw invalidState("只有草稿任务可以发布");
-		}
-		TaskVersion version = requireVersion(task.getCurrentVersionId());
-		TaskVersion previous = copyVersion(version);
-		TaskVersion savedVersion = null;
-		try {
-			version.setPublished(true);
-			version.setPublishedAt(Instant.now(clock));
-			savedVersion = versions.save(version);
-			task.setLifecycle(TaskLifecycle.RUNNING);
-			task.setUpdatedAt(Instant.now(clock));
-			return tasks.save(task);
-		} catch (RuntimeException exception) {
-			if (savedVersion != null) {
-				TaskVersion restore = copyVersion(previous);
-				restore.setVersion(savedVersion.getVersion());
-				List<RuntimeException> compensationFailures = new ArrayList<>();
-				collectCompensationFailure(
-					compensationFailures,
-					() -> versions.save(restore),
-					"restore published task version"
-				);
-				failIfCompensationFailed(exception, compensationFailures);
-			}
-			throw exception;
-		}
-	}
-
-	public TaskRecord updateStructure(
-		String taskId,
-		String name,
-		String description,
-		TaskVersionSpec spec
-	) {
-		validateVersion(spec);
-		TaskRecord task = requireTask(taskId);
-		if (task.getLifecycle() == TaskLifecycle.ENDED) {
-			throw invalidState("已结束任务不能修改");
-		}
-		TaskVersion current = requireVersion(task.getCurrentVersionId());
-		Instant now = Instant.now(clock);
-		TaskVersion target;
-		if (current.isPublished()) {
-			target = newVersion(task.getId(), current.getVersionNumber() + 1, spec, true, now);
-			target.setPublishedAt(now);
-		} else {
-			target = newVersion(task.getId(), current.getVersionNumber(), spec, false, current.getCreatedAt());
-			target.setId(current.getId());
-			target.setVersion(current.getVersion());
-		}
-		TaskVersion savedTarget = null;
-		try {
-			savedTarget = versions.save(target);
-			task.setName(required(name, "INVALID_TASK_NAME", "任务名称不能为空"));
-			task.setDescription(trimToNull(description));
-			task.setCurrentVersionId(savedTarget.getId());
-			task.setCurrentVersionNumber(savedTarget.getVersionNumber());
-			task.setUpdatedAt(now);
-			return tasks.save(task);
-		} catch (RuntimeException exception) {
-			List<RuntimeException> compensationFailures = new ArrayList<>();
-			if (savedTarget != null) {
-				if (current.isPublished()) {
-					String orphanId = savedTarget.getId();
-					if (orphanId != null) {
-						collectCompensationFailure(
-							compensationFailures,
-							() -> versions.deleteById(orphanId),
-							"delete orphan task version"
-						);
-					}
-				} else {
-					TaskVersion restore = copyVersion(current);
-					restore.setVersion(savedTarget.getVersion());
-					collectCompensationFailure(
-						compensationFailures,
-						() -> versions.save(restore),
-						"restore draft task version"
-					);
-				}
-			}
-			failIfCompensationFailed(exception, compensationFailures);
-			throw exception;
-		}
+		return transition(taskId, TaskLifecycle.DRAFT, TaskLifecycle.RUNNING);
 	}
 
 	public TaskRecord pause(String taskId) {
@@ -194,52 +86,35 @@ public class TaskManagementService {
 		return requireTask(taskId);
 	}
 
-	public TaskVersion getVersion(String versionId) {
-		return requireVersion(versionId);
-	}
-
 	private TaskRecord transition(String taskId, TaskLifecycle expected, TaskLifecycle target) {
 		TaskRecord task = requireTask(taskId);
-		if (task.getLifecycle() != expected) {
-			throw invalidState("任务状态不允许该操作");
-		}
+		if (task.getLifecycle() != expected) throw invalidState("任务状态不允许该操作");
 		task.setLifecycle(target);
 		task.setUpdatedAt(Instant.now(clock));
 		return tasks.save(task);
 	}
 
-	private TaskVersion newVersion(
-		String taskId,
-		int number,
-		TaskVersionSpec spec,
-		boolean published,
-		Instant createdAt
-	) {
-		TaskVersion version = new TaskVersion();
-		version.setTaskId(taskId);
-		version.setVersionNumber(number);
-		version.setReferenceTypes(new LinkedHashSet<>(spec.referenceTypes()));
-		version.setResultType(spec.resultType());
-		version.setHumanReviewEnabled(spec.humanReviewEnabled());
-		version.setRecordingFormat(spec.recordingFormat());
-		version.setSampleRates(spec.sampleRates() == null ? new LinkedHashSet<>() : new LinkedHashSet<>(spec.sampleRates()));
-		version.setChannels(spec.channels());
-		version.setMinDurationMillis(spec.minDurationMillis());
-		version.setMaxDurationMillis(spec.maxDurationMillis());
-		version.setRejectionReasons(!spec.humanReviewEnabled() || spec.rejectionReasons() == null
+	private TaskConfiguration configuration(TaskConfigurationSpec spec) {
+		validateConfiguration(spec);
+		TaskConfiguration configuration = new TaskConfiguration();
+		configuration.setReferenceTypes(new LinkedHashSet<>(spec.referenceTypes()));
+		configuration.setResultType(spec.resultType());
+		configuration.setHumanReviewEnabled(spec.humanReviewEnabled());
+		configuration.setRecordingFormat(spec.recordingFormat());
+		configuration.setSampleRates(new LinkedHashSet<>(spec.sampleRates()));
+		configuration.setChannels(spec.channels());
+		configuration.setMinDurationMillis(spec.minDurationMillis());
+		configuration.setMaxDurationMillis(spec.maxDurationMillis());
+		configuration.setRejectionReasons(!spec.humanReviewEnabled() || spec.rejectionReasons() == null
 			? List.of() : List.copyOf(spec.rejectionReasons()));
-		version.setAiEnabled(false);
-		version.setAiProvider(trimToNull(spec.aiProvider()));
-		version.setAiModel(trimToNull(spec.aiModel()));
-		version.setPublished(published);
-		version.setCreatedAt(createdAt);
-		return version;
+		configuration.setAiEnabled(false);
+		configuration.setAiProvider(trimToNull(spec.aiProvider()));
+		configuration.setAiModel(trimToNull(spec.aiModel()));
+		return configuration;
 	}
 
-	private void validateVersion(TaskVersionSpec spec) {
-		if (spec == null) {
-			throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", "任务版本配置不能为空");
-		}
+	private void validateConfiguration(TaskConfigurationSpec spec) {
+		if (spec == null) throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", "任务配置不能为空");
 		if (spec.referenceTypes() == null || spec.referenceTypes().isEmpty()) {
 			throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "REFERENCE_REQUIRED", "至少启用一种参考组件");
 		}
@@ -263,8 +138,10 @@ public class TaskManagementService {
 			throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "INVALID_SAMPLE_RATE", "采样率不受微信录音端支持");
 		}
 		if (spec.minDurationMillis() == null || spec.maxDurationMillis() == null
-			|| spec.minDurationMillis() < 1 || spec.maxDurationMillis() < spec.minDurationMillis()) {
-			throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "INVALID_DURATION_RANGE", "录音时长范围不合法");
+			|| spec.minDurationMillis() < MIN_DURATION_MILLIS
+			|| spec.maxDurationMillis() > MAX_DURATION_MILLIS
+			|| spec.maxDurationMillis() < spec.minDurationMillis()) {
+			throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "INVALID_DURATION_RANGE", "录音时长范围必须为 1 到 600 秒");
 		}
 	}
 
@@ -273,79 +150,16 @@ public class TaskManagementService {
 			.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "TASK_NOT_FOUND", "任务不存在"));
 	}
 
-	private TaskVersion requireVersion(String versionId) {
-		return versions.findById(versionId)
-			.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "TASK_VERSION_NOT_FOUND", "任务版本不存在"));
-	}
-
 	private ApiException invalidState(String message) {
 		return new ApiException(HttpStatus.CONFLICT, "INVALID_TASK_STATE", message);
 	}
 
 	private String required(String value, String code, String message) {
-		if (value == null || value.isBlank()) {
-			throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, code, message);
-		}
+		if (value == null || value.isBlank()) throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, code, message);
 		return value.trim();
 	}
 
 	private String trimToNull(String value) {
 		return value == null || value.isBlank() ? null : value.trim();
-	}
-
-	private void collectCompensationFailure(
-		List<RuntimeException> failures,
-		Runnable cleanup,
-		String action
-	) {
-		try {
-			cleanup.run();
-		} catch (RuntimeException cleanupFailure) {
-			LOGGER.error("Task consistency compensation failed: {}", action, cleanupFailure);
-			failures.add(cleanupFailure);
-		}
-	}
-
-	private void failIfCompensationFailed(RuntimeException original, List<RuntimeException> failures) {
-		if (failures.isEmpty()) return;
-		ApiException controlled = new ApiException(
-			HttpStatus.INTERNAL_SERVER_ERROR,
-			"TASK_CONSISTENCY_RECOVERY_FAILED",
-			"任务数据一致性恢复失败，请联系管理员"
-		);
-		controlled.addSuppressed(original);
-		failures.forEach(controlled::addSuppressed);
-		throw controlled;
-	}
-
-	private TaskVersion copyVersion(TaskVersion source) {
-		TaskVersion copy = new TaskVersion();
-		copy.setId(source.getId());
-		copy.setVersion(source.getVersion());
-		copy.setTaskId(source.getTaskId());
-		copy.setVersionNumber(source.getVersionNumber());
-		copy.setReferenceTypes(new LinkedHashSet<>(source.getReferenceTypes()));
-		copy.setResultType(source.getResultType());
-		copy.setHumanReviewEnabled(source.isHumanReviewEnabled());
-		copy.setRecordingFormat(source.getRecordingFormat());
-		copy.setSampleRates(new LinkedHashSet<>(source.getSampleRates()));
-		copy.setChannels(source.getChannels());
-		copy.setMinDurationMillis(source.getMinDurationMillis());
-		copy.setMaxDurationMillis(source.getMaxDurationMillis());
-		copy.setRejectionReasons(new ArrayList<>(source.getRejectionReasons()));
-		copy.setAiEnabled(source.isAiEnabled());
-		copy.setAiProvider(source.getAiProvider());
-		copy.setAiModel(source.getAiModel());
-		copy.setPublished(source.isPublished());
-		copy.setCreatedAt(source.getCreatedAt());
-		copy.setPublishedAt(source.getPublishedAt());
-		return copy;
-	}
-
-	public java.util.List<com.recording.platform.task.model.TaskVersion> versions(String taskId) {
-		if (tasks.findById(taskId).isEmpty()) {
-			throw new ApiException(HttpStatus.NOT_FOUND, "TASK_NOT_FOUND", "任务不存在");
-		}
-		return versions.findAllByTaskIdOrderByVersionNumber(taskId);
 	}
 }

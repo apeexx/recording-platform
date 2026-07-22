@@ -9,7 +9,6 @@ import com.recording.platform.task.model.TaskAccessRequest;
 import com.recording.platform.task.model.TaskGrant;
 import com.recording.platform.task.model.TaskItem;
 import com.recording.platform.task.model.TaskRecord;
-import com.recording.platform.task.model.TaskVersion;
 import java.lang.reflect.Field;
 import java.util.Arrays;
 import org.junit.jupiter.api.Test;
@@ -23,8 +22,6 @@ class TaskDomainMappingTests {
 	void collectionsExposeTheRequiredUniqueBusinessKeys() throws Exception {
 		assertCollection(TaskRecord.class, "tasks");
 		assertUniqueField(TaskRecord.class, "taskCode", false);
-		assertCollection(TaskVersion.class, "task_versions");
-		assertCompoundIndex(TaskVersion.class, true, "taskId", "versionNumber");
 		assertCollection(TaskGrant.class, "task_grants");
 		assertCompoundIndex(TaskGrant.class, true, "taskId", "userId");
 		assertCollection(ImportJob.class, "import_jobs");
@@ -38,11 +35,12 @@ class TaskDomainMappingTests {
 	}
 
 	@Test
-	void tasksUseGeneratedCodesWithoutPlatformAndExposeResultType() {
+	void tasksEmbedConfigurationWithoutBusinessVersionPointers() {
 		assertThat(Arrays.stream(TaskRecord.class.getDeclaredFields()).map(Field::getName))
-			.doesNotContain("platformId");
-		assertThat(Arrays.stream(TaskVersion.class.getDeclaredFields()).map(Field::getName))
-			.contains("resultType");
+			.contains("configuration")
+			.doesNotContain("platformId", "currentVersionId", "currentVersionNumber");
+		assertThat(Arrays.stream(TaskItem.class.getDeclaredFields()).map(Field::getName))
+			.doesNotContain("taskVersionId", "taskVersionNumber");
 		assertThatCode(() -> Class.forName("com.recording.platform.task.model.SequenceRecord"))
 			.doesNotThrowAnyException();
 	}

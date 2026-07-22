@@ -14,13 +14,11 @@ import com.recording.platform.task.model.SubmittedRecording;
 import com.recording.platform.task.model.TaskItem;
 import com.recording.platform.task.model.TaskItemResult;
 import com.recording.platform.task.model.TaskRecord;
-import com.recording.platform.task.model.TaskVersion;
 import com.recording.platform.task.service.SubmitTaskItemCommand;
 import com.recording.platform.task.service.TaskItemActionResult;
 import com.recording.platform.task.service.TaskPoolService;
 import com.recording.platform.task.store.TaskItemStore;
 import com.recording.platform.task.store.TaskStore;
-import com.recording.platform.task.store.TaskVersionStore;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
@@ -34,7 +32,6 @@ public class TaskItemSubmissionService {
 	private static final int ITEM_LOCK_STRIPES = 256;
 	private final TaskItemStore items;
 	private final TaskStore tasks;
-	private final TaskVersionStore versions;
 	private final TaskPoolService pool;
 	private final RecordingMediaStorage storage;
 	private final MediaAssetStore assets;
@@ -45,7 +42,6 @@ public class TaskItemSubmissionService {
 	public TaskItemSubmissionService(
 		TaskItemStore items,
 		TaskStore tasks,
-		TaskVersionStore versions,
 		TaskPoolService pool,
 		RecordingMediaStorage storage,
 		MediaAssetStore assets,
@@ -54,7 +50,6 @@ public class TaskItemSubmissionService {
 	) {
 		this.items = items;
 		this.tasks = tasks;
-		this.versions = versions;
 		this.pool = pool;
 		this.storage = storage;
 		this.assets = assets;
@@ -116,9 +111,10 @@ public class TaskItemSubmissionService {
 		}
 		TaskRecord task = tasks.findById(item.getTaskId())
 			.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "TASK_NOT_FOUND", "任务不存在"));
-		TaskVersion version = versions.findById(item.getTaskVersionId())
-			.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "TASK_VERSION_NOT_FOUND", "任务版本不存在"));
-		PreparedRecording prepared = storage.prepare(audio, version, task.getTaskCode(), item.getItemCode());
+		if (task.getConfiguration() == null) {
+			throw new ApiException(HttpStatus.CONFLICT, "TASK_CONFIGURATION_MISSING", "任务配置不存在");
+		}
+		PreparedRecording prepared = storage.prepare(audio, task.getConfiguration(), task.getTaskCode(), item.getItemCode());
 		RecordingReplacement replacement = storage.activate(
 			prepared,
 			previousAudio == null ? null : previousAudio.relativePath()

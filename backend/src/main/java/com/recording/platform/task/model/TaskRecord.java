@@ -21,8 +21,7 @@ public class TaskRecord {
 	private String name;
 	private String description;
 	private TaskLifecycle lifecycle;
-	private String currentVersionId;
-	private int currentVersionNumber;
+	private TaskConfiguration configuration;
 	private long itemSequence;
 	private Instant createdAt;
 	private Instant updatedAt;

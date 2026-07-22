@@ -54,7 +54,7 @@ onMounted(load)
               <tr>
                 <th>任务编号</th>
                 <th>任务名称</th>
-                <th>版本</th>
+                <th>最终成果</th>
                 <th>状态</th>
                 <th>操作</th>
               </tr>
@@ -63,7 +63,7 @@ onMounted(load)
               <tr v-for="row in rows" :key="row.id">
                 <td>{{ row.taskCode }}</td>
                 <td>{{ row.name }}</td>
-                <td>v{{ row.currentVersionNumber }}</td>
+                <td>{{ row.configuration?.resultType === 'TEXT' ? '文本或录音' : '仅录音' }}</td>
                 <td>{{ statusLabel('task', row.lifecycle) }}</td>
                 <td>
                   <router-link class="button-link" :to="`/admin/tasks/${row.id}/permissions`">

@@ -5,10 +5,11 @@ import com.recording.platform.identity.model.UserRole;
 import com.recording.platform.security.PlatformPrincipal;
 import com.recording.platform.task.model.TaskItem;
 import com.recording.platform.task.model.TaskItemStatus;
-import com.recording.platform.task.model.TaskVersion;
+import com.recording.platform.task.model.TaskConfiguration;
+import com.recording.platform.task.model.TaskRecord;
 import com.recording.platform.task.store.AdminItemTransitionMutation;
 import com.recording.platform.task.store.TaskItemStore;
-import com.recording.platform.task.store.TaskVersionStore;
+import com.recording.platform.task.store.TaskStore;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.UUID;
@@ -21,12 +22,12 @@ import java.util.function.BiFunction;
 @Service
 public class TaskItemAdministrationService {
 	private final TaskItemStore items;
-	private final TaskVersionStore versions;
+	private final TaskStore tasks;
 	private final Clock clock;
 
-	public TaskItemAdministrationService(TaskItemStore items, TaskVersionStore versions, Clock clock) {
+	public TaskItemAdministrationService(TaskItemStore items, TaskStore tasks, Clock clock) {
 		this.items = items;
-		this.versions = versions;
+		this.tasks = tasks;
 		this.clock = clock;
 	}
 
@@ -40,7 +41,7 @@ public class TaskItemAdministrationService {
 		if (target == TaskItemStatus.AVAILABLE) throw invalid("RELEASE_REQUIRED", "返回待领取必须使用释放操作");
 		if (target == TaskItemStatus.DISCARDED) throw invalid("DISCARD_REQUIRED", "废弃数据必须使用废弃操作");
 		if (item.getStatus() == TaskItemStatus.DISCARDED) throw stale();
-		if (target == TaskItemStatus.COMPLETED && requireVersion(item).isHumanReviewEnabled()) {
+		if (target == TaskItemStatus.COMPLETED && requireConfiguration(item).isHumanReviewEnabled()) {
 			throw invalid("REVIEW_DECISION_REQUIRED", "启用人工审核的任务必须通过审核决定完成");
 		}
 		validateEnabled(item, target);
@@ -127,19 +128,23 @@ public class TaskItemAdministrationService {
 	}
 
 	private void validateEnabled(TaskItem item, TaskItemStatus target) {
-		TaskVersion version = requireVersion(item);
+		TaskConfiguration configuration = requireConfiguration(item);
 		if (target == TaskItemStatus.REVIEW_PENDING) {
 			throw invalid("REVIEW_CLAIM_REQUIRED", "待审核状态只能通过审核领取或分配进入");
 		}
-		if (target == TaskItemStatus.SUBMITTED && !version.isHumanReviewEnabled()
-			|| target == TaskItemStatus.AI_PROCESSING && !version.isAiEnabled()) {
-			throw invalid("STATUS_NOT_ENABLED", "任务版本未启用该状态阶段");
+		if (target == TaskItemStatus.SUBMITTED && !configuration.isHumanReviewEnabled()
+			|| target == TaskItemStatus.AI_PROCESSING && !configuration.isAiEnabled()) {
+			throw invalid("STATUS_NOT_ENABLED", "任务未启用该状态阶段");
 		}
 	}
 
-	private TaskVersion requireVersion(TaskItem item) {
-		return versions.findById(item.getTaskVersionId())
-			.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "TASK_VERSION_NOT_FOUND", "任务版本不存在"));
+	private TaskConfiguration requireConfiguration(TaskItem item) {
+		TaskRecord task = tasks.findById(item.getTaskId())
+			.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "TASK_NOT_FOUND", "任务不存在"));
+		if (task.getConfiguration() == null) {
+			throw new ApiException(HttpStatus.CONFLICT, "TASK_CONFIGURATION_MISSING", "任务配置不存在");
+		}
+		return task.getConfiguration();
 	}
 
 	private AdminItemTransitionMutation mutation(

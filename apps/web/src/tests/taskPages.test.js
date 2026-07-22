@@ -9,15 +9,26 @@ describe('任务页面 API', () => {
   beforeEach(() => vi.clearAllMocks())
 	it('创建任务不发送平台或手填编号', async () => {
 	  httpRequest.mockResolvedValue({ id: 't1', taskCode: 'T000001' })
-	  const data = { name: '朗读任务', version: { referenceTypes: ['TEXT'], resultType: 'TEXT' } }
+	  const data = { name: '朗读任务', configuration: { referenceTypes: ['TEXT'], resultType: 'TEXT' } }
 	  await taskApi.create(data, 'op-1')
 	  expect(httpRequest).toHaveBeenCalledWith('/api/tasks', { method: 'POST', json: data, idempotencyKey: 'op-1' })
 	})
-	it('文本成果仍保留录音配置，关闭审核时隐藏驳回原因', () => {
+	it('任务编辑使用嵌入配置、胶囊开关和双端时长滑块', () => {
 	  const source = fs.readFileSync(path.resolve('src/pages/admin/tasks/TaskEditorPage.vue'), 'utf8')
-	  expect(source).not.toContain("v-if=\"form.resultType==='AUDIO'\"")
+	  expect(source).toContain('DurationRangeSlider')
+	  expect(source).toContain('ToggleSwitch')
+	  expect(source).toContain('configuration')
+	  expect(source).not.toContain('taskApi.versions')
 	  expect(source).toContain('v-if="form.humanReviewEnabled"')
 	  expect(source).toContain("rejectionReasons: form.humanReviewEnabled")
+	})
+	it('任务列表移除版本并展示成果与录音配置摘要', () => {
+	  const source = fs.readFileSync(path.resolve('src/pages/admin/tasks/TaskListPage.vue'), 'utf8')
+	  expect(source).not.toContain('currentVersionNumber')
+	  expect(source).toContain('最终成果')
+	  expect(source).toContain('录音格式')
+	  expect(source).toContain('采样率')
+	  expect(source).toContain('时长范围')
 	})
   it('任务数据池完全不显示或提交外部编号', () => {
 	  const detail = fs.readFileSync(path.resolve('src/pages/admin/tasks/TaskDetailPage.vue'), 'utf8')
@@ -45,10 +56,9 @@ describe('任务页面 API', () => {
     httpRequest.mockResolvedValue({})
     await taskApi.transition('t1', 'publish', 'op-2')
     await taskApi.items('t1', 2, 30)
-    await taskApi.versions('t1')
     expect(httpRequest).toHaveBeenNthCalledWith(1, '/api/tasks/t1/publish', { method: 'POST', idempotencyKey: 'op-2' })
     expect(httpRequest).toHaveBeenNthCalledWith(2, '/api/tasks/t1/items?page=2&size=30')
-    expect(httpRequest).toHaveBeenNthCalledWith(3, '/api/tasks/t1/versions')
+		expect(taskApi.versions).toBeUndefined()
   })
 	it('采集权限只展示带前缀的用户 ID，不使用旧用户编号字段',()=>{
 	  const source=fs.readFileSync(path.resolve('src/pages/admin/tasks/TaskPermissionsPage.vue'),'utf8')

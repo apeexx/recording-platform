@@ -2,27 +2,38 @@
 import { onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import PageActions from '../../../components/admin/PageActions.vue'
+import BaseSelect from '../../../components/form/BaseSelect.vue'
+import DurationRangeSlider from '../../../components/form/DurationRangeSlider.vue'
+import ToggleSwitch from '../../../components/form/ToggleSwitch.vue'
 import { taskApi } from '../../../lib/taskApi.js'
 import { operationId } from '../../../lib/apiUtils.js'
 import { useNotifications } from '../../../composables/useNotifications.js'
 
 const route = useRoute(), router = useRouter(), notifications = useNotifications()
 const error = ref(''), saving = ref(false)
-const form = reactive({ name: '', description: '', referenceTypes: ['TEXT'], resultType: 'AUDIO', humanReviewEnabled: true, recordingFormat: 'WAV', sampleRate: 16000, minDurationSeconds: 1, maxDurationSeconds: 600, rejectionReasons: '空音频,内容不符' })
+const form = reactive({ name: '', description: '', referenceTypes: ['TEXT'], resultType: 'TEXT', humanReviewEnabled: true, recordingFormat: 'WAV', sampleRate: 16000, minDurationSeconds: 1, maxDurationSeconds: 600, rejectionReasons: '空音频,内容不符' })
+const resultOptions = [{ value: 'TEXT', label: '文本或录音（可同时提交）' }, { value: 'AUDIO', label: '仅录音' }]
+const formatOptions = [{ value: 'WAV', label: 'WAV' }, { value: 'MP3', label: 'MP3' }]
+const sampleRateOptions = [8000, 16000, 44100, 48000].map(value => ({ value, label: `${value}Hz` }))
 
 async function init() {
   if (!route.params.id) return
   try {
-    const [task, versions] = await Promise.all([taskApi.get(route.params.id), taskApi.versions(route.params.id)])
-    const version = versions.find(row => row.id === task.currentVersionId) || versions.at(-1)
-    Object.assign(form, { name: task.name, description: task.description || '', referenceTypes: [...(version?.referenceTypes || ['TEXT'])], resultType: version?.resultType || 'AUDIO', humanReviewEnabled: version?.humanReviewEnabled !== false, recordingFormat: version?.recordingFormat || 'WAV', sampleRate: [...(version?.sampleRates || [16000])][0], minDurationSeconds: (version?.minDurationMillis || 1000) / 1000, maxDurationSeconds: (version?.maxDurationMillis || 600000) / 1000, rejectionReasons: (version?.rejectionReasons || []).join(',') })
-  } catch (e) { error.value = e.message }
+    const task = await taskApi.get(route.params.id)
+    if (task.lifecycle !== 'DRAFT') {
+      notifications.error('任务发布后不可修改')
+      await router.replace(`/admin/tasks/${route.params.id}`)
+      return
+    }
+    const configuration = task.configuration || {}
+    Object.assign(form, { name: task.name, description: task.description || '', referenceTypes: [...(configuration.referenceTypes || ['TEXT'])], resultType: configuration.resultType || 'TEXT', humanReviewEnabled: configuration.humanReviewEnabled !== false, recordingFormat: configuration.recordingFormat || 'WAV', sampleRate: [...(configuration.sampleRates || [16000])][0], minDurationSeconds: (configuration.minDurationMillis || 1000) / 1000, maxDurationSeconds: (configuration.maxDurationMillis || 600000) / 1000, rejectionReasons: (configuration.rejectionReasons || []).join(',') })
+  } catch (exception) { error.value = exception.message }
 }
+
 function payload() {
-  const version = { referenceTypes: form.referenceTypes, resultType: form.resultType, humanReviewEnabled: form.humanReviewEnabled, rejectionReasons: form.humanReviewEnabled ? form.rejectionReasons.split(',').map(v => v.trim()).filter(Boolean) : [], aiEnabled: false }
-  Object.assign(version, { recordingFormat: form.recordingFormat, sampleRates: [Number(form.sampleRate)], channels: 1, minDurationMillis: Number(form.minDurationSeconds) * 1000, maxDurationMillis: Number(form.maxDurationSeconds) * 1000 })
-  return { name: form.name, description: form.description, version }
+  return { name: form.name, description: form.description, configuration: { referenceTypes: form.referenceTypes, resultType: form.resultType, humanReviewEnabled: form.humanReviewEnabled, recordingFormat: form.recordingFormat, sampleRates: [Number(form.sampleRate)], channels: 1, minDurationMillis: Number(form.minDurationSeconds) * 1000, maxDurationMillis: Number(form.maxDurationSeconds) * 1000, rejectionReasons: form.humanReviewEnabled ? form.rejectionReasons.split(',').map(value => value.trim()).filter(Boolean) : [], aiEnabled: false } }
 }
+
 async function save() {
   if (!form.referenceTypes.length) { error.value = '至少选择一种参考源'; return }
   saving.value = true; error.value = ''
@@ -30,11 +41,32 @@ async function save() {
   try {
     if (route.params.id) await taskApi.update(route.params.id, payload(), key)
     else await taskApi.create(payload(), key)
-    notifications.success(route.params.id ? '任务版本已保存' : '任务已创建', { dedupeKey: key })
-    router.push('/admin/tasks')
-  } catch (e) { error.value = e.message; notifications.error(e.message || '保存失败', { dedupeKey: `${key}:error` }) }
+    notifications.success(route.params.id ? '草稿任务已保存' : '任务已创建', { dedupeKey: key })
+    await router.push('/admin/tasks')
+  } catch (exception) { error.value = exception.message; notifications.error(exception.message || '保存失败', { dedupeKey: `${key}:error` }) }
   finally { saving.value = false }
 }
 onMounted(init)
 </script>
-<template><section class="admin-page"><PageActions :title="route.params.id?'编辑任务版本':'创建任务'" description="任务编号由系统自动生成；所有任务均采集录音，最终成果可选择文本或音频。"/><form class="business-card business-form business-form-wide" @submit.prevent="save"><div class="business-form-grid"><label>任务名称<input v-model.trim="form.name" required/></label><label>最终成果<select v-model="form.resultType"><option value="TEXT">文本（录音＋文本）</option><option value="AUDIO">音频（仅录音）</option></select></label><label>录音格式<select v-model="form.recordingFormat"><option>WAV</option><option>MP3</option></select></label><label>采样率<select v-model.number="form.sampleRate"><option :value="8000">8000Hz</option><option :value="16000">16000Hz</option><option :value="44100">44100Hz</option><option :value="48000">48000Hz</option></select></label><label>最短时长（秒）<input v-model.number="form.minDurationSeconds" type="number" min="0.1" step="0.1"/></label><label>最长时长（秒）<input v-model.number="form.maxDurationSeconds" type="number" min="1"/></label><label class="business-span">说明<textarea v-model="form.description" rows="3"/></label></div><fieldset><legend>参考内容（至少一项）</legend><label v-for="type in ['TEXT','AUDIO','VIDEO']" :key="type" class="business-check"><input v-model="form.referenceTypes" type="checkbox" :value="type"/>{{ type==='TEXT'?'参考文字':type==='AUDIO'?'参考音频':'参考视频' }}</label></fieldset><fieldset><legend>审核</legend><label class="business-check"><input v-model="form.humanReviewEnabled" type="checkbox"/>人工审核</label></fieldset><label v-if="form.humanReviewEnabled">驳回预设原因（逗号分隔）<input v-model="form.rejectionReasons"/></label><p class="business-note">所有任务都需要录音；文本成果任务还需要同时提交文本。首期 AI 功能固定关闭。</p><p v-if="error" class="business-error">{{ error }}</p><div class="business-actions"><router-link class="button-secondary" to="/admin/tasks">取消</router-link><button class="button-primary" :disabled="saving">{{ saving?'保存中…':'保存' }}</button></div></form></section></template>
+
+<template>
+  <section class="admin-page">
+    <PageActions :title="route.params.id ? '编辑草稿任务' : '创建任务'" description="任务编号由系统自动生成；任务发布后名称、说明和全部配置永久冻结。" />
+    <form class="business-card business-form business-form-wide" @submit.prevent="save">
+      <div class="business-form-grid">
+        <label>任务名称<input v-model.trim="form.name" required></label>
+        <label>最终成果<BaseSelect v-model="form.resultType" :options="resultOptions" aria-label="最终成果" /></label>
+        <label>录音格式<BaseSelect v-model="form.recordingFormat" :options="formatOptions" aria-label="录音格式" /></label>
+        <label>采样率<BaseSelect v-model="form.sampleRate" :options="sampleRateOptions" aria-label="采样率" /></label>
+        <label class="business-span">录音时长范围<DurationRangeSlider v-model:min-value="form.minDurationSeconds" v-model:max-value="form.maxDurationSeconds" :min="1" :max="600" /></label>
+        <label class="business-span">说明<textarea v-model="form.description" rows="3" /></label>
+      </div>
+      <fieldset><legend>参考内容（至少一项）</legend><label v-for="type in ['TEXT','AUDIO','VIDEO']" :key="type" class="business-check"><input v-model="form.referenceTypes" type="checkbox" :value="type">{{ type === 'TEXT' ? '参考文字' : type === 'AUDIO' ? '参考音频' : '参考视频' }}</label></fieldset>
+      <fieldset><legend>审核</legend><ToggleSwitch v-model="form.humanReviewEnabled" label="人工审核" /></fieldset>
+      <label v-if="form.humanReviewEnabled">驳回预设原因（逗号分隔）<input v-model="form.rejectionReasons"></label>
+      <p class="business-note">文本任务可提交文本或录音，也可同时提交；音频任务仅提交录音。首期 AI 功能固定关闭。</p>
+      <p v-if="error" class="business-error">{{ error }}</p>
+      <div class="business-actions"><router-link class="button-secondary" to="/admin/tasks">取消</router-link><button class="button-primary" :disabled="saving">{{ saving ? '保存中…' : '保存' }}</button></div>
+    </form>
+  </section>
+</template>

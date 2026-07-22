@@ -44,8 +44,8 @@ async function load() {
   loadError.value = ''
   try {
     item.value = await taskApi.item(route.params.itemId)
-    const versions = await taskApi.versions(item.value.taskId)
-    version.value = versions.find((candidate) => candidate.id === item.value.taskVersionId)
+    const task = await taskApi.get(item.value.taskId)
+    version.value = task.configuration
     text.value = item.value.currentResult?.text || ''
   } catch (error) {
     loadError.value = error.message

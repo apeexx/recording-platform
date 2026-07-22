@@ -4,7 +4,7 @@ import com.recording.platform.api.ApiException;
 import com.recording.platform.config.StoragePathResolver;
 import com.recording.platform.task.model.RecordingFormat;
 import com.recording.platform.task.model.SubmittedRecording;
-import com.recording.platform.task.model.TaskVersion;
+import com.recording.platform.task.model.TaskConfiguration;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.AtomicMoveNotSupportedException;
@@ -40,7 +40,7 @@ public class RecordingMediaStorage {
 
 	public PreparedRecording prepare(
 		MultipartFile upload,
-		TaskVersion version,
+		TaskConfiguration configuration,
 		String taskCode,
 		String itemCode
 	) {
@@ -66,7 +66,7 @@ public class RecordingMediaStorage {
 				throw new ApiException(HttpStatus.PAYLOAD_TOO_LARGE, "UPLOAD_TOO_LARGE", "录音文件不能超过 100MB");
 			}
 			AudioMetadata metadata = inspector.inspect(temporary, upload.getOriginalFilename());
-			validateAgainstVersion(metadata, version);
+			validateAgainstConfiguration(metadata, configuration);
 			String relative = safeTaskCode + "/" + safeItemCode + "." + extension;
 			SubmittedRecording recording = new SubmittedRecording(
 				UUID.randomUUID().toString(),
@@ -170,18 +170,18 @@ public class RecordingMediaStorage {
 		return root.relativize(normalized).toString().replace('\\', '/');
 	}
 
-	private void validateAgainstVersion(AudioMetadata metadata, TaskVersion version) {
-		if (version == null || metadata.format() != version.getRecordingFormat()) {
+	private void validateAgainstConfiguration(AudioMetadata metadata, TaskConfiguration configuration) {
+		if (configuration == null || metadata.format() != configuration.getRecordingFormat()) {
 			throw invalid("INVALID_AUDIO_FORMAT", "录音格式不符合任务配置");
 		}
-		if (metadata.channels() != 1 || metadata.channels() != version.getChannels()) {
+		if (metadata.channels() != 1 || metadata.channels() != configuration.getChannels()) {
 			throw invalid("INVALID_AUDIO_CHANNELS", "录音必须为单声道");
 		}
-		if (version.getSampleRates() == null || !version.getSampleRates().contains(metadata.sampleRate())) {
+		if (configuration.getSampleRates() == null || !configuration.getSampleRates().contains(metadata.sampleRate())) {
 			throw invalid("INVALID_AUDIO_SAMPLE_RATE", "录音采样率不符合任务配置");
 		}
-		if (metadata.durationMillis() < version.getMinDurationMillis()
-			|| metadata.durationMillis() > version.getMaxDurationMillis()) {
+		if (metadata.durationMillis() < configuration.getMinDurationMillis()
+			|| metadata.durationMillis() > configuration.getMaxDurationMillis()) {
 			throw invalid("INVALID_AUDIO_DURATION", "录音时长不符合任务配置");
 		}
 	}

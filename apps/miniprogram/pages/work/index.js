@@ -13,11 +13,15 @@ const statusText = {
 }
 const editableStatuses = new Set(['RECORDING_PENDING', 'REWORK_PENDING', 'SUBMITTED'])
 const readOnlyStatuses = new Set(['REVIEW_PENDING', 'COMPLETED', 'AI_PROCESSING'])
+function durationText(duration) {
+  const seconds = Math.floor(Math.max(Number(duration) || 0, 0) / 1000)
+  return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
+}
 
 Page({
   data: {
-    item: {}, version: {}, loading: true, loadError: '', referenceAudioPath: '', referenceVideoPath: '',
-    audioPath: '', audioDuration: 0, text: '', recordState: 'idle',
+    item: {}, configuration: {}, loading: true, loadError: '', referenceAudioPath: '', referenceVideoPath: '',
+    audioPath: '', audioDuration: 0, recordingDurationText: '00:00', text: '', recordState: 'idle',
     levelBars: waveformBars(0), submitting: false, releasing: false,
     statusText: '待录制', editable: true, readOnly: false, canRelease: true, submitLabel: '提交作业',
     autoClaimNextEnabled: true, showAutoClaimNext: true,
@@ -33,13 +37,14 @@ Page({
   setupRecorder() {
     this.session = createRecordingSession({
       recorder: wx.getRecorderManager(), fs: wx.getFileSystemManager(), userDataPath: wx.env.USER_DATA_PATH,
-      version: this.data.version,
+      configuration: this.data.configuration,
       onLevel: level => this.setData({ levelBars: waveformBars(level) }),
+      onDuration: duration => this.setData({ audioDuration: duration, recordingDurationText: durationText(duration) }),
       onState: recordState => this.setData({ recordState }),
       onComplete: result => this.setData({ audioPath: result.filePath, audioDuration: result.durationMillis }),
       onError: error => {
         const message = error.message || '录音保存失败'
-        this.setData({ audioPath: '', audioDuration: 0, levelBars: waveformBars(0) })
+        this.setData({ audioPath: '', audioDuration: 0, recordingDurationText: '00:00', levelBars: waveformBars(0) })
         feedback.error(message)
       },
     })
@@ -50,14 +55,14 @@ Page({
     try {
       const api = getApp().globalData.api
       const item = await api.item(this.itemId)
-      const versions = await api.versions(item.taskId)
-      const version = versions.find(candidate => candidate.id === item.taskVersionId) || {}
+      const task = await api.task(item.taskId)
+      const configuration = task.configuration || {}
       const editable = editableStatuses.has(item.status)
       const readOnly = readOnlyStatuses.has(item.status) || !editable
       await this.session?.dispose()
       this.session = null
       this.setData({
-        item, version, text: item.currentResult?.text || '', statusText: statusText[item.status] || item.status,
+        item, configuration, text: item.currentResult?.text || '', statusText: statusText[item.status] || item.status,
         editable, readOnly, canRelease: item.status === 'RECORDING_PENDING' || item.status === 'REWORK_PENDING',
         submitLabel: item.status === 'SUBMITTED' ? '保存修改' : '提交作业',
         showAutoClaimNext: item.status === 'RECORDING_PENDING' || item.status === 'REWORK_PENDING',
@@ -73,7 +78,7 @@ Page({
       const resultDuration = item.currentResult?.audio?.durationMillis || 0
       this.setData({
         referenceAudioPath, referenceVideoPath, audioPath: resultAudioPath,
-        audioDuration: resultDuration,
+        audioDuration: resultDuration, recordingDurationText: durationText(resultDuration),
         recordState: resultAudioPath ? 'stopped' : 'idle',
       })
       if (referenceAudio.status === 'rejected') feedback.error('参考音频加载失败')
@@ -89,7 +94,7 @@ Page({
   },
   startRecord() {
     if (!this.data.editable || !this.session) return
-    this.setData({ audioPath: '', audioDuration: 0, levelBars: waveformBars(0) })
+    this.setData({ audioPath: '', audioDuration: 0, recordingDurationText: '00:00', levelBars: waveformBars(0) })
     this.session.start()
   },
   pauseRecord() {
@@ -136,7 +141,7 @@ Page({
   },
   async submit() {
     if (!this.data.editable) return
-    const validation = validateSubmission(this.data.version, { audio: this.data.audioPath, text: this.data.text })
+    const validation = validateSubmission(this.data.configuration, { audio: this.data.audioPath, text: this.data.text })
     if (validation) { feedback.error(validation.message); return }
     this.setData({ submitting: true })
     const api = getApp().globalData.api

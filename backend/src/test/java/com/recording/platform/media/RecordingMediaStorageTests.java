@@ -5,7 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.recording.platform.api.ApiException;
 import com.recording.platform.task.model.RecordingFormat;
-import com.recording.platform.task.model.TaskVersion;
+import com.recording.platform.task.model.TaskConfiguration;
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -23,7 +23,7 @@ class RecordingMediaStorageTests {
 	@Test
 	void validMonoWavIsValidatedIntoATemporaryFileAndAtomicallyActivated() throws Exception {
 		RecordingMediaStorage storage = new RecordingMediaStorage(tempDir);
-		TaskVersion version = wavVersion();
+		TaskConfiguration version = wavVersion();
 		MockMultipartFile upload = new MockMultipartFile(
 			"audio", "voice.wav", "audio/wav", wav(16000, 1, 2000, (byte) 7)
 		);
@@ -47,7 +47,7 @@ class RecordingMediaStorageTests {
 	@Test
 	void invalidMagicOrTaskAudioParametersFailWithoutReplacingThePreviousFile() throws Exception {
 		RecordingMediaStorage storage = new RecordingMediaStorage(tempDir);
-		TaskVersion version = wavVersion();
+		TaskConfiguration version = wavVersion();
 		PreparedRecording first = storage.prepare(
 			new MockMultipartFile("audio", "voice.wav", "audio/wav", wav(16000, 1, 2000, (byte) 3)),
 			version,
@@ -81,7 +81,7 @@ class RecordingMediaStorageTests {
 	@Test
 	void rollbackRestoresThePreviousCurrentFileAndTraversalIsRejected() throws Exception {
 		RecordingMediaStorage storage = new RecordingMediaStorage(tempDir);
-		TaskVersion version = wavVersion();
+		TaskConfiguration version = wavVersion();
 		PreparedRecording first = storage.prepare(
 			new MockMultipartFile("audio", "first.wav", "audio/wav", wav(16000, 1, 2000, (byte) 1)),
 			version, "TASK-001", "I000001"
@@ -108,7 +108,7 @@ class RecordingMediaStorageTests {
 	@Test
 	void repeatedRecordingsKeepTheStableCurrentPathAndDiscardTheOldFileAfterCommit() throws Exception {
 		RecordingMediaStorage storage = new RecordingMediaStorage(tempDir);
-		TaskVersion version = wavVersion();
+		TaskConfiguration version = wavVersion();
 		PreparedRecording previous = storage.prepare(
 			new MockMultipartFile("audio", "previous.wav", "audio/wav", wav(16000, 1, 2000, (byte) 1)),
 			version, "TASK-001", "I000001"
@@ -145,7 +145,7 @@ class RecordingMediaStorageTests {
 	@Test
 	void committedReplacementCanDeferBackupCleanupToADurableJob() throws Exception {
 		RecordingMediaStorage storage = new RecordingMediaStorage(tempDir);
-		TaskVersion version = wavVersion();
+		TaskConfiguration version = wavVersion();
 		PreparedRecording previous = storage.prepare(
 			new MockMultipartFile("audio", "previous.wav", "audio/wav", wav(16000, 1, 2000, (byte) 1)),
 			version, "TASK-001", "I000001"
@@ -167,7 +167,7 @@ class RecordingMediaStorageTests {
 	@Test
 	void retirementMovesCurrentRecordingToAnInaccessibleBackupUntilCleanup() throws Exception {
 		RecordingMediaStorage storage = new RecordingMediaStorage(tempDir);
-		TaskVersion version = wavVersion();
+		TaskConfiguration version = wavVersion();
 		PreparedRecording current = storage.prepare(
 			new MockMultipartFile("audio", "current.wav", "audio/wav", wav(16000, 1, 2000, (byte) 1)),
 			version, "TASK-001", "I000001"
@@ -197,8 +197,8 @@ class RecordingMediaStorageTests {
 			});
 	}
 
-	private TaskVersion wavVersion() {
-		TaskVersion version = new TaskVersion();
+	private TaskConfiguration wavVersion() {
+		TaskConfiguration version = new TaskConfiguration();
 		version.setRecordingFormat(RecordingFormat.WAV);
 		version.setSampleRates(Set.of(16000));
 		version.setChannels(1);

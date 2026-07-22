@@ -14,7 +14,7 @@ import com.recording.platform.task.model.TaskItemStatus;
 import com.recording.platform.task.model.TaskLifecycle;
 import com.recording.platform.task.model.TaskRecord;
 import com.recording.platform.task.model.TaskResultType;
-import com.recording.platform.task.model.TaskVersion;
+import com.recording.platform.task.model.TaskConfiguration;
 import com.recording.platform.task.store.ClaimMutation;
 import com.recording.platform.task.store.RejectMutation;
 import com.recording.platform.task.store.ReleaseMutation;
@@ -22,7 +22,6 @@ import com.recording.platform.task.store.SubmitMutation;
 import com.recording.platform.task.store.TaskGrantStore;
 import com.recording.platform.task.store.TaskItemStore;
 import com.recording.platform.task.store.TaskStore;
-import com.recording.platform.task.store.TaskVersionStore;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Optional;
@@ -33,7 +32,6 @@ import org.springframework.stereotype.Service;
 @Service
 public class TaskPoolService {
 	private final TaskStore tasks;
-	private final TaskVersionStore versions;
 	private final TaskGrantStore grants;
 	private final TaskItemStore items;
 	private final Clock clock;
@@ -42,22 +40,20 @@ public class TaskPoolService {
 	@org.springframework.beans.factory.annotation.Autowired
 	public TaskPoolService(
 		TaskStore tasks,
-		TaskVersionStore versions,
 		TaskGrantStore grants,
 		TaskItemStore items,
 		Clock clock,
 		MiniProgramUserStore users
 	) {
 		this.tasks = tasks;
-		this.versions = versions;
 		this.grants = grants;
 		this.items = items;
 		this.clock = clock;
 		this.profileGuard = new CollectorProfileGuard(users);
 	}
 
-	public TaskPoolService(TaskStore tasks, TaskVersionStore versions, TaskGrantStore grants, TaskItemStore items, Clock clock) {
-		this.tasks = tasks; this.versions = versions; this.grants = grants; this.items = items; this.clock = clock; this.profileGuard = null;
+	public TaskPoolService(TaskStore tasks, TaskGrantStore grants, TaskItemStore items, Clock clock) {
+		this.tasks = tasks; this.grants = grants; this.items = items; this.clock = clock; this.profileGuard = null;
 	}
 
 	public TaskItem start(String taskId, PlatformPrincipal actor) {
@@ -96,10 +92,10 @@ public class TaskPoolService {
 			|| command.expectedRevision() != item.getRevision()) {
 			throw stale();
 		}
-		TaskVersion version = requireVersion(item.getTaskVersionId());
+		TaskConfiguration configuration = requireConfiguration(item.getTaskId());
 		String text = trimToNull(command.text());
-		validateSubmission(version, text, command.audio());
-		TaskItemStatus target = version.isHumanReviewEnabled()
+		validateSubmission(configuration, text, command.audio());
+		TaskItemStatus target = configuration.isHumanReviewEnabled()
 			? TaskItemStatus.SUBMITTED : TaskItemStatus.COMPLETED;
 		SubmitMutation mutation = new SubmitMutation(
 			itemId,
@@ -134,8 +130,8 @@ public class TaskPoolService {
 			throw stale();
 		}
 		String normalizedReason = trimToNull(reason);
-		TaskVersion version = requireVersion(item.getTaskVersionId());
-		if (normalizedReason == null || !version.getRejectionReasons().contains(normalizedReason)) {
+		TaskConfiguration configuration = requireConfiguration(item.getTaskId());
+		if (normalizedReason == null || !configuration.getRejectionReasons().contains(normalizedReason)) {
 			throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "INVALID_REJECTION_REASON", "请选择任务配置的驳回原因");
 		}
 		RejectMutation mutation = new RejectMutation(
@@ -211,28 +207,28 @@ public class TaskPoolService {
 			.orElse(null);
 	}
 
-	private void validateSubmission(TaskVersion version, String text, SubmittedRecording audio) {
-		if (audio == null) {
-			throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "AUDIO_REQUIRED", "录音任务必须提交录音");
-		}
-		if (version.getResultType() == TaskResultType.TEXT) {
-			if (text == null || text.isBlank()) {
-				throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "TEXT_REQUIRED", "文本成果任务必须同时提交文本");
+	private void validateSubmission(TaskConfiguration configuration, String text, SubmittedRecording audio) {
+		if (configuration.getResultType() == TaskResultType.TEXT) {
+			if (audio == null && (text == null || text.isBlank())) {
+				throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "RESULT_REQUIRED", "文本或录音至少提交一项");
 			}
+		} else if (audio == null) {
+			throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "AUDIO_REQUIRED", "音频任务必须提交录音");
 		} else if (text != null && !text.isBlank()) {
 			throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "TEXT_NOT_ALLOWED", "该任务只允许提交录音");
 		}
-		if (audio.format() != version.getRecordingFormat()) {
+		if (audio == null) return;
+		if (audio.format() != configuration.getRecordingFormat()) {
 			throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "INVALID_AUDIO_FORMAT", "录音格式不符合任务配置");
 		}
-		if (audio.channels() != 1 || audio.channels() != version.getChannels()) {
+		if (audio.channels() != 1 || audio.channels() != configuration.getChannels()) {
 			throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "INVALID_AUDIO_CHANNELS", "录音必须为单声道");
 		}
-		if (!version.getSampleRates().contains(audio.sampleRate())) {
+		if (!configuration.getSampleRates().contains(audio.sampleRate())) {
 			throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "INVALID_AUDIO_SAMPLE_RATE", "录音采样率不符合任务配置");
 		}
-		if (audio.durationMillis() < version.getMinDurationMillis()
-			|| audio.durationMillis() > version.getMaxDurationMillis()) {
+		if (audio.durationMillis() < configuration.getMinDurationMillis()
+			|| audio.durationMillis() > configuration.getMaxDurationMillis()) {
 			throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "INVALID_AUDIO_DURATION", "录音时长不符合任务配置");
 		}
 	}
@@ -247,9 +243,10 @@ public class TaskPoolService {
 			.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "TASK_NOT_FOUND", "任务不存在"));
 	}
 
-	private TaskVersion requireVersion(String versionId) {
-		return versions.findById(versionId)
-			.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "TASK_VERSION_NOT_FOUND", "任务版本不存在"));
+	private TaskConfiguration requireConfiguration(String taskId) {
+		TaskConfiguration configuration = requireTask(taskId).getConfiguration();
+		if (configuration == null) throw new ApiException(HttpStatus.CONFLICT, "TASK_CONFIGURATION_MISSING", "任务配置不存在");
+		return configuration;
 	}
 
 	private TaskItem requireItem(String itemId) {

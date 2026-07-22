@@ -26,12 +26,11 @@ import com.recording.platform.task.model.TaskItem;
 import com.recording.platform.task.model.TaskItemResult;
 import com.recording.platform.task.model.TaskItemStatus;
 import com.recording.platform.task.model.TaskRecord;
-import com.recording.platform.task.model.TaskVersion;
+import com.recording.platform.task.model.TaskConfiguration;
 import com.recording.platform.task.service.TaskItemActionResult;
 import com.recording.platform.task.service.TaskPoolService;
 import com.recording.platform.task.store.TaskItemStore;
 import com.recording.platform.task.store.TaskStore;
-import com.recording.platform.task.store.TaskVersionStore;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Instant;
@@ -48,7 +47,6 @@ class TaskItemSubmissionServiceTests {
 	void concurrentDuplicateOperationOnlyTouchesTheStableCurrentFileOnce() throws Exception {
 		TaskItemStore items = org.mockito.Mockito.mock(TaskItemStore.class);
 		TaskStore tasks = org.mockito.Mockito.mock(TaskStore.class);
-		TaskVersionStore versions = org.mockito.Mockito.mock(TaskVersionStore.class);
 		TaskPoolService pool = org.mockito.Mockito.mock(TaskPoolService.class);
 		RecordingMediaStorage storage = org.mockito.Mockito.mock(RecordingMediaStorage.class);
 		MediaAssetStore assets = org.mockito.Mockito.mock(MediaAssetStore.class);
@@ -57,15 +55,15 @@ class TaskItemSubmissionServiceTests {
 		when(items.findById("item-1")).thenAnswer((ignored) -> Optional.of(item(committed.get())));
 		TaskRecord task = new TaskRecord();
 		task.setTaskCode("TASK-001");
+		TaskConfiguration configuration = new TaskConfiguration();
+		task.setConfiguration(configuration);
 		when(tasks.findById("task-1")).thenReturn(Optional.of(task));
-		TaskVersion version = new TaskVersion();
-		when(versions.findById("version-1")).thenReturn(Optional.of(version));
 		SubmittedRecording recording = new SubmittedRecording(
 			"media-1", "recordings/TASK-001/I000001/current.wav", RecordingFormat.WAV,
 			32044, 16000, 1, 1000
 		);
 		PreparedRecording prepared = new PreparedRecording(recording, Path.of("temp.wav"));
-		when(storage.prepare(any(), eq(version), eq("TASK-001"), eq("I000001"))).thenReturn(prepared);
+		when(storage.prepare(any(), eq(configuration), eq("TASK-001"), eq("I000001"))).thenReturn(prepared);
 		RecordingReplacement replacement = org.mockito.Mockito.mock(RecordingReplacement.class);
 		when(storage.activate(prepared, null)).thenReturn(replacement);
 		when(assets.save(any())).thenAnswer((invocation) -> invocation.getArgument(0));
@@ -80,7 +78,6 @@ class TaskItemSubmissionServiceTests {
 		TaskItemSubmissionService service = new TaskItemSubmissionService(
 			items,
 			tasks,
-			versions,
 			pool,
 			storage,
 			assets,
@@ -106,7 +103,7 @@ class TaskItemSubmissionServiceTests {
 			executor.shutdownNow();
 		}
 
-		verify(storage, times(1)).prepare(any(), eq(version), eq("TASK-001"), eq("I000001"));
+		verify(storage, times(1)).prepare(any(), eq(configuration), eq("TASK-001"), eq("I000001"));
 		verify(storage, times(1)).activate(prepared, null);
 		verify(replacement, times(1)).deferCleanup();
 		verify(assets, times(1)).save(any());
@@ -116,7 +113,6 @@ class TaskItemSubmissionServiceTests {
 	void cleanupFailureAfterMongoCommitIsRetriedByTheSameOperationWithoutRollingBackCurrent() {
 		TaskItemStore items = org.mockito.Mockito.mock(TaskItemStore.class);
 		TaskStore tasks = org.mockito.Mockito.mock(TaskStore.class);
-		TaskVersionStore versions = org.mockito.Mockito.mock(TaskVersionStore.class);
 		TaskPoolService pool = org.mockito.Mockito.mock(TaskPoolService.class);
 		RecordingMediaStorage storage = org.mockito.Mockito.mock(RecordingMediaStorage.class);
 		MediaAssetStore assets = org.mockito.Mockito.mock(MediaAssetStore.class);
@@ -129,15 +125,15 @@ class TaskItemSubmissionServiceTests {
 		TaskItem replay = item(true);
 		TaskRecord task = new TaskRecord();
 		task.setTaskCode("TASK-001");
+		TaskConfiguration configuration = new TaskConfiguration();
+		task.setConfiguration(configuration);
 		when(tasks.findById("task-1")).thenReturn(Optional.of(task));
-		TaskVersion version = new TaskVersion();
-		when(versions.findById("version-1")).thenReturn(Optional.of(version));
 		SubmittedRecording recording = new SubmittedRecording(
 			"media-1", "recordings/TASK-001/I000001/current.wav", RecordingFormat.WAV,
 			32044, 16000, 1, 1000
 		);
 		PreparedRecording prepared = new PreparedRecording(recording, Path.of("temp.wav"));
-		when(storage.prepare(any(), eq(version), eq("TASK-001"), eq("I000001"))).thenReturn(prepared);
+		when(storage.prepare(any(), eq(configuration), eq("TASK-001"), eq("I000001"))).thenReturn(prepared);
 		RecordingReplacement replacement = org.mockito.Mockito.mock(RecordingReplacement.class);
 		when(storage.activate(prepared, previousRecording.relativePath())).thenReturn(replacement);
 		when(replacement.deferCleanup()).thenReturn("temp/backups/old.wav");
@@ -162,7 +158,7 @@ class TaskItemSubmissionServiceTests {
 			Clock.fixed(Instant.parse("2026-07-11T12:00:00Z"), ZoneOffset.UTC)
 		);
 		TaskItemSubmissionService service = new TaskItemSubmissionService(
-			items, tasks, versions, pool, storage, assets, cleanup,
+			items, tasks, pool, storage, assets, cleanup,
 			Clock.fixed(Instant.parse("2026-07-11T12:00:00Z"), ZoneOffset.UTC)
 		);
 		SubmitTaskItemForm form = new SubmitTaskItemForm("submit-1", "assignment-1", 1, null);
@@ -190,7 +186,6 @@ class TaskItemSubmissionServiceTests {
 		TaskItem item = new TaskItem();
 		item.setId("item-1");
 		item.setTaskId("task-1");
-		item.setTaskVersionId("version-1");
 		item.setItemCode("I000001");
 		item.setStatus(committed ? TaskItemStatus.REVIEW_PENDING : TaskItemStatus.RECORDING_PENDING);
 		item.setCollectorId("collector-1");

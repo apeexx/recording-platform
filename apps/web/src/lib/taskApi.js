@@ -5,7 +5,6 @@ const encoded = (value) => encodeURIComponent(value)
 export const taskApi = {
   list(page = 0, size = 20) { return httpRequest(`/api/tasks${queryString({ page, size })}`) },
   get(id) { return httpRequest(`/api/tasks/${encoded(id)}`) },
-  versions(id) { return httpRequest(`/api/tasks/${encoded(id)}/versions`) },
   create(data, key) { return httpRequest('/api/tasks', { method: 'POST', json: data, idempotencyKey: key }) },
   update(id, data, key) { return httpRequest(`/api/tasks/${encoded(id)}`, { method: 'PUT', json: data, idempotencyKey: key }) },
   transition(id, action, key) { return httpRequest(`/api/tasks/${encoded(id)}/${action}`, { method: 'POST', idempotencyKey: key }) },

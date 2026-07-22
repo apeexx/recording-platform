@@ -6,7 +6,7 @@ import com.recording.platform.task.model.TaskResultType;
 import java.util.List;
 import java.util.Set;
 
-public record TaskVersionSpec(
+public record TaskConfigurationSpec(
 	Set<ReferenceType> referenceTypes,
 	TaskResultType resultType,
 	boolean humanReviewEnabled,
@@ -19,9 +19,4 @@ public record TaskVersionSpec(
 	boolean aiEnabled,
 	String aiProvider,
 	String aiModel
-) {
-	public boolean hasAudioConfiguration() {
-		return recordingFormat != null || (sampleRates != null && !sampleRates.isEmpty()) || channels != null
-			|| minDurationMillis != null || maxDurationMillis != null;
-	}
-}
+) { }

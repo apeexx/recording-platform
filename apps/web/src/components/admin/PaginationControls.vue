@@ -1,5 +1,6 @@
 <script setup>
 import { computed } from 'vue'
+import BaseSelect from '../form/BaseSelect.vue'
 
 const props=defineProps({
   page:{type:Number,default:0},
@@ -10,6 +11,7 @@ const props=defineProps({
 })
 const emit=defineEmits(['change','size-change'])
 const totalPages=computed(()=>Math.max(Math.ceil(props.total/props.size),1))
+const sizeOptions=computed(()=>props.pageSizes.map(value=>({value,label:`${value} 条/页`})))
 
 const pageItems=computed(()=>{
   const pages=totalPages.value
@@ -28,14 +30,12 @@ const pageItems=computed(()=>{
 })
 
 function go(value){const max=totalPages.value-1;emit('change',Math.min(Math.max(value,0),max))}
-function changeSize(event){const value=Number(event.target.value);if(value!==props.size&&props.pageSizes.includes(value))emit('size-change',value)}
+function changeSize(value){const next=Number(value);if(next!==props.size&&props.pageSizes.includes(next))emit('size-change',next)}
 </script>
 
 <template>
   <nav v-if="numbered" class="pagination pagination-numbered" aria-label="分页">
-    <select class="pagination-size" :value="size" aria-label="每页条数" @change="changeSize">
-      <option v-for="value in pageSizes" :key="value" :value="value">{{ value }} 条/页</option>
-    </select>
+    <BaseSelect class="pagination-size" :model-value="size" :options="sizeOptions" aria-label="每页条数" @update:model-value="changeSize" />
     <button class="pagination-arrow" :disabled="page===0" aria-label="上一页" @click="go(page-1)">‹</button>
     <template v-for="item in pageItems" :key="item.key">
       <button v-if="item.type==='page'" class="pagination-page" :class="{'is-active':item.value===page}" :data-page="item.value" :disabled="item.value===page" :aria-current="item.value===page?'page':undefined" @click="go(item.value)">{{ item.label }}</button>

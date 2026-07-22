@@ -15,7 +15,8 @@ describe('数字分页组件', () => {
     await wrapper.get('[data-page="13"]').trigger('click')
     expect(wrapper.emitted('change')).toEqual([[13]])
 
-    await wrapper.get('.pagination-size').setValue('20')
+    await wrapper.get('.pagination-size .base-select-trigger').trigger('click')
+    await wrapper.findAll('.pagination-size .base-select-option').find(option => option.text() === '20 条/页').trigger('click')
     expect(wrapper.emitted('size-change')).toEqual([[20]])
   })
 

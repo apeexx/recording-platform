@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.annotation.Order;
 
 class LocalDataResetRunnerTests {
@@ -24,6 +25,17 @@ class LocalDataResetRunnerTests {
 
 		assertThat(resetOrder.value()).isLessThan(0);
 		assertThat(exitOrder.value()).isGreaterThan(0);
+	}
+
+	@Test
+	void legacyStatusMigrationIsSkippedDuringReset() throws Exception {
+		Class<?> runner = Class.forName("com.recording.platform.task.service.TaskItemStatusMigrationRunner");
+		ConditionalOnProperty condition = runner.getAnnotation(ConditionalOnProperty.class);
+
+		assertThat(condition).isNotNull();
+		assertThat(condition.name()).containsExactly("recording.local-reset.enabled");
+		assertThat(condition.havingValue()).isEqualTo("false");
+		assertThat(condition.matchIfMissing()).isTrue();
 	}
 
 	@Test

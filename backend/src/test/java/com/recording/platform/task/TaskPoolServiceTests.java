@@ -25,7 +25,7 @@ import com.recording.platform.task.model.TaskItemStatus;
 import com.recording.platform.task.model.TaskLifecycle;
 import com.recording.platform.task.model.TaskRecord;
 import com.recording.platform.task.model.TaskResultType;
-import com.recording.platform.task.model.TaskVersion;
+import com.recording.platform.task.model.TaskConfiguration;
 import com.recording.platform.task.service.SubmitTaskItemCommand;
 import com.recording.platform.task.service.TaskItemActionResult;
 import com.recording.platform.task.service.TaskPoolService;
@@ -36,7 +36,6 @@ import com.recording.platform.task.store.SubmitMutation;
 import com.recording.platform.task.store.TaskGrantStore;
 import com.recording.platform.task.store.TaskItemStore;
 import com.recording.platform.task.store.TaskStore;
-import com.recording.platform.task.store.TaskVersionStore;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -58,7 +57,6 @@ import org.springframework.data.domain.Pageable;
 class TaskPoolServiceTests {
 	private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-07-11T12:00:00Z"), ZoneOffset.UTC);
 	private TaskStore tasks;
-	private TaskVersionStore versions;
 	private TaskGrantStore grants;
 	private InMemoryItemStore items;
 	private TaskPoolService service;
@@ -67,10 +65,9 @@ class TaskPoolServiceTests {
 	@BeforeEach
 	void setUp() {
 		tasks = org.mockito.Mockito.mock(TaskStore.class);
-		versions = org.mockito.Mockito.mock(TaskVersionStore.class);
 		grants = org.mockito.Mockito.mock(TaskGrantStore.class);
 		items = new InMemoryItemStore();
-		service = new TaskPoolService(tasks, versions, grants, items, CLOCK);
+		service = new TaskPoolService(tasks, grants, items, CLOCK);
 		collector = principal("collector-1", "张三", UserRole.COLLECTOR, SessionType.MINIPROGRAM);
 	}
 
@@ -159,8 +156,7 @@ class TaskPoolServiceTests {
 		pending.setAssignmentId("assignment-1");
 		pending.setRevision(1);
 		items.save(pending);
-		TaskVersion version = version(false, true);
-		when(versions.findById("version-1")).thenReturn(Optional.of(version));
+		stubConfiguration("task-1", configuration(false, true));
 		SubmittedRecording audio = new SubmittedRecording(
 			"media-1", "recordings/TASK-001/I000001/current.wav", RecordingFormat.WAV,
 			1000, 16000, 1, 2500
@@ -191,7 +187,7 @@ class TaskPoolServiceTests {
 		pending.setAssignmentId("assignment-1");
 		pending.setRevision(1);
 		items.save(pending);
-		when(versions.findById("version-1")).thenReturn(Optional.of(version(true, true)));
+		stubConfiguration("task-1", configuration(true, true));
 		SubmitTaskItemCommand command = new SubmitTaskItemCommand(
 			"submit-private", "assignment-1", 1, "第一版", recording()
 		);
@@ -208,23 +204,52 @@ class TaskPoolServiceTests {
 	}
 
 	@Test
-	void textResultRequiresRecordingAndTextTogether() {
+	void textResultAllowsTextOnlyAndRejectsAnEmptyResult() {
 		TaskItem pending = item("task-1", "item-text", TaskItemStatus.RECORDING_PENDING);
 		pending.setCollectorId("collector-1");
 		pending.setAssignmentId("assignment-1");
 		pending.setRevision(1);
 		items.save(pending);
-		when(versions.findById("version-1")).thenReturn(Optional.of(version(true, true)));
-
-		assertThatThrownBy(() -> service.submit(
-			"item-text", new SubmitTaskItemCommand("text-only", "assignment-1", 1, "文本", null), collector
-		)).isInstanceOfSatisfying(ApiException.class,
-			error -> assertThat(error.getCode()).isEqualTo("AUDIO_REQUIRED"));
+		stubConfiguration("task-1", configuration(true, true));
 
 		TaskItemActionResult result = service.submit(
-			"item-text", new SubmitTaskItemCommand("text-audio", "assignment-1", 1, "文本", recording()), collector
+			"item-text", new SubmitTaskItemCommand("text-only", "assignment-1", 1, "文本", null), collector
 		);
 		assertThat(result.status()).isEqualTo(TaskItemStatus.SUBMITTED);
+
+		TaskItem empty = item("task-1", "item-empty", TaskItemStatus.RECORDING_PENDING);
+		empty.setCollectorId("collector-1");
+		empty.setAssignmentId("assignment-2");
+		empty.setRevision(1);
+		items.save(empty);
+		assertThatThrownBy(() -> service.submit(
+			"item-empty", new SubmitTaskItemCommand("empty", "assignment-2", 1, " ", null), collector
+		)).isInstanceOfSatisfying(ApiException.class,
+			error -> assertThat(error.getCode()).isEqualTo("RESULT_REQUIRED"));
+	}
+
+	@Test
+	void textResultAllowsAudioOnlyAndTextWithAudio() {
+		stubConfiguration("task-1", configuration(true, false));
+		TaskItem audioOnly = item("task-1", "audio-only", TaskItemStatus.RECORDING_PENDING);
+		audioOnly.setCollectorId("collector-1");
+		audioOnly.setAssignmentId("assignment-audio");
+		audioOnly.setRevision(1);
+		items.save(audioOnly);
+		assertThat(service.submit("audio-only", new SubmitTaskItemCommand(
+			"audio-only-op", "assignment-audio", 1, null, recording()
+		), collector).status()).isEqualTo(TaskItemStatus.COMPLETED);
+
+		TaskItem both = item("task-1", "both", TaskItemStatus.RECORDING_PENDING);
+		both.setCollectorId("collector-1");
+		both.setAssignmentId("assignment-both");
+		both.setRevision(1);
+		items.save(both);
+		TaskItemActionResult result = service.submit("both", new SubmitTaskItemCommand(
+			"both-op", "assignment-both", 1, "文本", recording()
+		), collector);
+		assertThat(result.result().text()).isEqualTo("文本");
+		assertThat(result.result().audio()).isNotNull();
 	}
 
 	@Test
@@ -234,7 +259,7 @@ class TaskPoolServiceTests {
 		submitted.setAssignmentId("assignment-1");
 		submitted.setRevision(2);
 		items.save(submitted);
-		when(versions.findById("version-1")).thenReturn(Optional.of(version(true, true)));
+		stubConfiguration("task-1", configuration(true, true));
 
 		TaskItemActionResult result = service.submit(
 			"item-submitted",
@@ -253,7 +278,7 @@ class TaskPoolServiceTests {
 		pending.setAssignmentId("assignment-1");
 		pending.setRevision(1);
 		items.save(pending);
-		when(versions.findById("version-1")).thenReturn(Optional.of(version(true, true)));
+		stubConfiguration("task-1", configuration(true, true));
 		TaskItemActionResult submitted = service.submit(
 			"item-1",
 			new SubmitTaskItemCommand("submit-1", "assignment-1", 1, "第一版", recording()),
@@ -300,19 +325,26 @@ class TaskPoolServiceTests {
 		when(grants.findActive(taskId, "collector-1")).thenReturn(Optional.of(grant));
 	}
 
-	private TaskVersion version(boolean textInput, boolean humanReview) {
-		TaskVersion version = new TaskVersion();
-		version.setId("version-1");
-		version.setReferenceTypes(Set.of(ReferenceType.TEXT));
-		version.setResultType(textInput ? TaskResultType.TEXT : TaskResultType.AUDIO);
-		version.setHumanReviewEnabled(humanReview);
-		version.setRecordingFormat(RecordingFormat.WAV);
-		version.setSampleRates(Set.of(16000));
-		version.setChannels(1);
-		version.setMinDurationMillis(1000);
-		version.setMaxDurationMillis(600000);
-		version.setRejectionReasons(List.of("噪音过大"));
-		return version;
+	private TaskConfiguration configuration(boolean textInput, boolean humanReview) {
+		TaskConfiguration configuration = new TaskConfiguration();
+		configuration.setReferenceTypes(Set.of(ReferenceType.TEXT));
+		configuration.setResultType(textInput ? TaskResultType.TEXT : TaskResultType.AUDIO);
+		configuration.setHumanReviewEnabled(humanReview);
+		configuration.setRecordingFormat(RecordingFormat.WAV);
+		configuration.setSampleRates(Set.of(16000));
+		configuration.setChannels(1);
+		configuration.setMinDurationMillis(1000);
+		configuration.setMaxDurationMillis(600000);
+		configuration.setRejectionReasons(List.of("噪音过大"));
+		return configuration;
+	}
+
+	private void stubConfiguration(String taskId, TaskConfiguration configuration) {
+		TaskRecord task = new TaskRecord();
+		task.setId(taskId);
+		task.setLifecycle(TaskLifecycle.RUNNING);
+		task.setConfiguration(configuration);
+		when(tasks.findById(taskId)).thenReturn(Optional.of(task));
 	}
 
 	private SubmittedRecording recording() {
@@ -326,7 +358,6 @@ class TaskPoolServiceTests {
 		TaskItem item = new TaskItem();
 		item.setId(id);
 		item.setTaskId(taskId);
-		item.setTaskVersionId("version-1");
 		item.setItemCode(id.toUpperCase());
 		item.setStatus(status);
 		return item;

@@ -4,6 +4,7 @@
 @import "./styles/auth.css";
 @import "./styles/business.css";
 @import "./styles/pagination.css";
+@import "./styles/form-controls.css";
 
 * {
   box-sizing: border-box;

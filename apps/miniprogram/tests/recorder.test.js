@@ -8,10 +8,11 @@ test('录音参数使用 PCM 帧、任务采样率和单声道', () => {
   })
 })
 
-test('所有任务都提交录音，文本成果额外要求文本', () => {
+test('文本任务至少提交文本或录音，音频任务只允许录音', () => {
 	assert.equal(validateSubmission({resultType:'AUDIO'}, {audio:'voice.wav',text:'文字'}).code, 'TEXT_NOT_ALLOWED')
 	assert.equal(validateSubmission({resultType:'AUDIO'}, {audio:null,text:'  '}).code, 'AUDIO_REQUIRED')
 	assert.equal(validateSubmission({resultType:'TEXT'}, {audio:'voice.wav',text:'普通话'}), null)
-	assert.equal(validateSubmission({resultType:'TEXT'}, {audio:null,text:'普通话'}).code, 'AUDIO_REQUIRED')
-	assert.equal(validateSubmission({resultType:'TEXT'}, {audio:'voice.wav',text:''}).code, 'TEXT_REQUIRED')
+	assert.equal(validateSubmission({resultType:'TEXT'}, {audio:null,text:'普通话'}), null)
+	assert.equal(validateSubmission({resultType:'TEXT'}, {audio:'voice.wav',text:''}), null)
+	assert.equal(validateSubmission({resultType:'TEXT'}, {audio:null,text:'  '}).code, 'RESULT_REQUIRED')
 })

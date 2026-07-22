@@ -13,10 +13,11 @@ import com.recording.platform.security.PlatformPrincipal;
 import com.recording.platform.task.model.TaskItem;
 import com.recording.platform.task.model.TaskItemResult;
 import com.recording.platform.task.model.TaskItemStatus;
-import com.recording.platform.task.model.TaskVersion;
+import com.recording.platform.task.model.TaskConfiguration;
+import com.recording.platform.task.model.TaskRecord;
 import com.recording.platform.task.service.TaskItemAdministrationService;
 import com.recording.platform.task.store.TaskItemStore;
-import com.recording.platform.task.store.TaskVersionStore;
+import com.recording.platform.task.store.TaskStore;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -32,12 +33,11 @@ class TaskItemAdministrationServiceTests {
 	@Test
 	void ordinaryStatusChangeCannotEnterAvailableOrDisabledReviewStage() {
 		TaskItemStore items = mock(TaskItemStore.class);
-		TaskVersionStore versions = mock(TaskVersionStore.class);
+		TaskStore tasks = mock(TaskStore.class);
 		TaskItem item = item(TaskItemStatus.COMPLETED, 5);
 		when(items.findById("item-1")).thenReturn(Optional.of(item));
-		TaskVersion version = version(false);
-		when(versions.findById("version-1")).thenReturn(Optional.of(version));
-		TaskItemAdministrationService service = new TaskItemAdministrationService(items, versions, CLOCK);
+		stubTask(tasks, version(false));
+		TaskItemAdministrationService service = new TaskItemAdministrationService(items, tasks, CLOCK);
 
 		assertCode(() -> service.changeStatus("item-1", TaskItemStatus.AVAILABLE, null, "op-1", 5, admin()),
 			"RELEASE_REQUIRED");
@@ -50,15 +50,15 @@ class TaskItemAdministrationServiceTests {
 	}
 
 	@Test
-	void statusChangeUsesRevisionAndTaskVersionRules() {
+	void statusChangeUsesRevisionAndTaskConfigurationRules() {
 		TaskItemStore items = mock(TaskItemStore.class);
-		TaskVersionStore versions = mock(TaskVersionStore.class);
+		TaskStore tasks = mock(TaskStore.class);
 		TaskItem item = item(TaskItemStatus.COMPLETED, 5);
 		when(items.findById("item-1")).thenReturn(Optional.of(item));
-		when(versions.findById("version-1")).thenReturn(Optional.of(version(true)));
+		stubTask(tasks, version(true));
 		TaskItem updated = item(TaskItemStatus.SUBMITTED, 6);
 		when(items.adminTransitionIfCurrent(any())).thenReturn(Optional.of(updated));
-		TaskItemAdministrationService service = new TaskItemAdministrationService(items, versions, CLOCK);
+		TaskItemAdministrationService service = new TaskItemAdministrationService(items, tasks, CLOCK);
 
 		TaskItem result = service.changeStatus(
 			"item-1", TaskItemStatus.SUBMITTED, null, "op-status", 5, admin()
@@ -71,7 +71,7 @@ class TaskItemAdministrationServiceTests {
 	@Test
 	void discardAndRestorePreserveResultOwnershipAndPreviousStatus() {
 		TaskItemStore items = mock(TaskItemStore.class);
-		TaskVersionStore versions = mock(TaskVersionStore.class);
+		TaskStore tasks = mock(TaskStore.class);
 		TaskItem completed = item(TaskItemStatus.COMPLETED, 8);
 		completed.setCollectorId("collector-1");
 		completed.setAssignmentId("assignment-1");
@@ -83,13 +83,13 @@ class TaskItemAdministrationServiceTests {
 		discarded.setAssignmentId("assignment-1");
 		discarded.setCurrentResult(completed.getCurrentResult());
 		when(items.adminDiscardIfCurrent(any())).thenReturn(Optional.of(discarded));
-		when(versions.findById("version-1")).thenReturn(Optional.of(version(true)));
+		stubTask(tasks, version(true));
 		TaskItem restored = item(TaskItemStatus.COMPLETED, 10);
 		restored.setCollectorId("collector-1");
 		restored.setAssignmentId("assignment-1");
 		restored.setCurrentResult(completed.getCurrentResult());
 		when(items.adminRestoreIfCurrent(any())).thenReturn(Optional.of(restored));
-		TaskItemAdministrationService service = new TaskItemAdministrationService(items, versions, CLOCK);
+		TaskItemAdministrationService service = new TaskItemAdministrationService(items, tasks, CLOCK);
 
 		TaskItem discardResult = service.discard("item-1", "op-discard", 8, admin());
 		when(items.findById("item-1")).thenReturn(Optional.of(discardResult));
@@ -103,7 +103,7 @@ class TaskItemAdministrationServiceTests {
 	@Test
 	void batchDiscardReturnsPerItemSuccessAndConflict() {
 		TaskItemStore items = mock(TaskItemStore.class);
-		TaskVersionStore versions = mock(TaskVersionStore.class);
+		TaskStore tasks = mock(TaskStore.class);
 		TaskItem first = item(TaskItemStatus.COMPLETED, 2);
 		TaskItem second = item(TaskItemStatus.COMPLETED, 4);
 		second.setId("item-2");
@@ -111,7 +111,7 @@ class TaskItemAdministrationServiceTests {
 		when(items.findById("item-2")).thenReturn(Optional.of(second));
 		TaskItem discarded = item(TaskItemStatus.DISCARDED, 3);
 		when(items.adminDiscardIfCurrent(any())).thenReturn(Optional.of(discarded)).thenReturn(Optional.empty());
-		TaskItemAdministrationService service = new TaskItemAdministrationService(items, versions, CLOCK);
+		TaskItemAdministrationService service = new TaskItemAdministrationService(items, tasks, CLOCK);
 
 		List<BatchItemResult> results = service.batchDiscard(
 			"batch-discard",
@@ -129,11 +129,11 @@ class TaskItemAdministrationServiceTests {
 	@Test
 	void batchStatusUsesTheSameDynamicStateRulesPerItem() {
 		TaskItemStore items = mock(TaskItemStore.class);
-		TaskVersionStore versions = mock(TaskVersionStore.class);
+		TaskStore tasks = mock(TaskStore.class);
 		TaskItem item = item(TaskItemStatus.COMPLETED, 5);
 		when(items.findById("item-1")).thenReturn(Optional.of(item));
-		when(versions.findById("version-1")).thenReturn(Optional.of(version(false)));
-		TaskItemAdministrationService service = new TaskItemAdministrationService(items, versions, CLOCK);
+		stubTask(tasks, version(false));
+		TaskItemAdministrationService service = new TaskItemAdministrationService(items, tasks, CLOCK);
 
 		List<BatchItemResult> results = service.batchChangeStatus(
 			"batch-status", TaskItemStatus.SUBMITTED,
@@ -149,11 +149,11 @@ class TaskItemAdministrationServiceTests {
 	@Test
 	void humanReviewItemsCannotBypassReviewDecisionToComplete() {
 		TaskItemStore items = mock(TaskItemStore.class);
-		TaskVersionStore versions = mock(TaskVersionStore.class);
+		TaskStore tasks = mock(TaskStore.class);
 		TaskItem item = item(TaskItemStatus.SUBMITTED, 5);
 		when(items.findById("item-1")).thenReturn(Optional.of(item));
-		when(versions.findById("version-1")).thenReturn(Optional.of(version(true)));
-		TaskItemAdministrationService service = new TaskItemAdministrationService(items, versions, CLOCK);
+		stubTask(tasks, version(true));
+		TaskItemAdministrationService service = new TaskItemAdministrationService(items, tasks, CLOCK);
 
 		assertCode(() -> service.changeStatus(
 			"item-1", TaskItemStatus.COMPLETED, null, "op-complete", 5, admin()
@@ -163,18 +163,24 @@ class TaskItemAdministrationServiceTests {
 	private TaskItem item(TaskItemStatus status, long revision) {
 		TaskItem item = new TaskItem();
 		item.setId("item-1");
-		item.setTaskVersionId("version-1");
+		item.setTaskId("task-1");
 		item.setStatus(status);
 		item.setRevision(revision);
 		return item;
 	}
 
-	private TaskVersion version(boolean review) {
-		TaskVersion version = new TaskVersion();
-		version.setId("version-1");
-		version.setHumanReviewEnabled(review);
-		version.setAiEnabled(false);
-		return version;
+	private TaskConfiguration version(boolean review) {
+		TaskConfiguration configuration = new TaskConfiguration();
+		configuration.setHumanReviewEnabled(review);
+		configuration.setAiEnabled(false);
+		return configuration;
+	}
+
+	private void stubTask(TaskStore tasks, TaskConfiguration configuration) {
+		TaskRecord task = new TaskRecord();
+		task.setId("task-1");
+		task.setConfiguration(configuration);
+		when(tasks.findById("task-1")).thenReturn(Optional.of(task));
 	}
 
 	private PlatformPrincipal admin() {

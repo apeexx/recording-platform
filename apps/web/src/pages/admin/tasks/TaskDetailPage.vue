@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router'
 import AsyncState from '../../../components/admin/AsyncState.vue'
 import PageActions from '../../../components/admin/PageActions.vue'
 import PaginationControls from '../../../components/admin/PaginationControls.vue'
+import BaseSelect from '../../../components/form/BaseSelect.vue'
 import { taskApi } from '../../../lib/taskApi.js'
 import { operationId } from '../../../lib/apiUtils.js'
 import { statusLabel } from '../../../lib/statusLabels.js'
@@ -13,7 +14,6 @@ const notifications = useNotifications()
 const route = useRoute()
 const itemPageSize = ref(10)
 const task = ref(null)
-const taskVersion = ref(null)
 const items = ref([])
 const page = ref(0)
 const total = ref(0)
@@ -22,6 +22,7 @@ const error = ref('')
 const notice = ref('')
 const selected = ref(new Set())
 const targetStatus = ref('COMPLETED')
+const statusOptions = ref([])
 const importFile = ref(null)
 const job = ref(null)
 const itemForm = reactive({ referenceText: '', referenceAudioUrl: '', referenceVideoUrl: '' })
@@ -42,12 +43,14 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    const [taskData, versions] = await Promise.all([
-      taskApi.get(route.params.id),
-      taskApi.versions(route.params.id),
-    ])
+    const taskData = await taskApi.get(route.params.id)
     task.value = taskData
-    taskVersion.value = versions.find((version) => version.id === taskData.currentVersionId)
+    statusOptions.value = [
+      { value: 'RECORDING_PENDING', label: '待录制' },
+      taskData.configuration?.humanReviewEnabled
+        ? { value: 'SUBMITTED', label: '已提交' }
+        : { value: 'COMPLETED', label: '已完成' },
+    ]
     await loadItems()
   } catch (exception) {
     error.value = exception.message
@@ -162,17 +165,17 @@ onMounted(load)
 
 <template>
   <section class="admin-page">
-    <PageActions :title="task?.name || '任务详情'" :description="task ? `${task.taskCode} · v${task.currentVersionNumber} · ${statusLabel('task', task.lifecycle)}` : ''">
-      <router-link class="button-secondary" :to="`/admin/tasks/${route.params.id}/edit`">修改结构</router-link>
+    <PageActions :title="task?.name || '任务详情'" :description="task ? `${task.taskCode} · ${statusLabel('task', task.lifecycle)}` : ''">
+      <router-link v-if="task?.lifecycle === 'DRAFT'" class="button-secondary" :to="`/admin/tasks/${route.params.id}/edit`">编辑草稿</router-link>
       <router-link class="button-primary" :to="`/admin/tasks/${route.params.id}/permissions`">采集权限</router-link>
     </PageActions>
     <AsyncState :loading="loading" :error="error" :empty="!task" @retry="load">
       <div class="business-grid">
         <form class="business-card business-form" @submit.prevent="add">
           <h3>添加池数据</h3>
-          <label v-if="taskVersion?.referenceTypes?.includes('TEXT')">参考文字<textarea v-model.trim="itemForm.referenceText" rows="4" /></label>
-          <label v-if="taskVersion?.referenceTypes?.includes('AUDIO')">参考音频 URL<input v-model.trim="itemForm.referenceAudioUrl" type="url" /></label>
-          <label v-if="taskVersion?.referenceTypes?.includes('VIDEO')">参考视频 URL<input v-model.trim="itemForm.referenceVideoUrl" type="url" /></label>
+          <label v-if="task?.configuration?.referenceTypes?.includes('TEXT')">参考文字<textarea v-model.trim="itemForm.referenceText" rows="4" /></label>
+          <label v-if="task?.configuration?.referenceTypes?.includes('AUDIO')">参考音频 URL<input v-model.trim="itemForm.referenceAudioUrl" type="url" /></label>
+          <label v-if="task?.configuration?.referenceTypes?.includes('VIDEO')">参考视频 URL<input v-model.trim="itemForm.referenceVideoUrl" type="url" /></label>
           <p class="business-note">条目编号由系统自动生成；仅显示任务启用的参考内容，远程 URL 由后端安全下载。</p>
           <button class="button-primary">添加</button>
           <hr>
@@ -186,11 +189,7 @@ onMounted(load)
           <div class="business-heading">
             <h3>数据池（共 {{ total }} 条）</h3>
             <div class="business-actions">
-              <select v-model="targetStatus">
-                <option value="RECORDING_PENDING">待录制</option>
-                <option v-if="taskVersion?.humanReviewEnabled" value="SUBMITTED">已提交</option>
-                <option v-if="!taskVersion?.humanReviewEnabled" value="COMPLETED">已完成</option>
-              </select>
+              <BaseSelect v-model="targetStatus" :options="statusOptions" aria-label="目标状态" />
               <button class="button-secondary" :disabled="!selected.size" @click="changeStatus">调整状态</button>
               <button class="button-secondary" :disabled="!selected.size" @click="batch('release')">批量释放</button>
               <button class="button-secondary is-danger" :disabled="!selected.size" @click="batch('discard')">批量废弃</button>

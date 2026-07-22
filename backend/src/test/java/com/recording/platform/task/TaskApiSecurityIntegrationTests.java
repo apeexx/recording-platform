@@ -212,7 +212,7 @@ class TaskApiSecurityIntegrationTests {
 		String body = """
 			{
 			  "name":"朗读任务",
-			  "version":{"referenceTypes":["TEXT"],"resultType":"AUDIO","recordingFormat":"WAV","sampleRates":[16000],"channels":1,"minDurationMillis":1000,"maxDurationMillis":60000}
+			  "configuration":{"referenceTypes":["TEXT"],"resultType":"AUDIO","recordingFormat":"WAV","sampleRates":[16000],"channels":1,"minDurationMillis":1000,"maxDurationMillis":60000}
 			}
 			""";
 		mockMvc.perform(post("/api/tasks")
@@ -327,16 +327,10 @@ class TaskApiSecurityIntegrationTests {
 	}
 
 	@Test
-	void taskVersionReadReusesCollectorGrantBoundary() throws Exception {
-		PlatformPrincipal collector = principal("collector-1", UserRole.COLLECTOR, SessionType.MINIPROGRAM);
-		when(taskQueryService.get("task-private", collector)).thenThrow(
-			new ApiException(HttpStatus.FORBIDDEN, "TASK_GRANT_REQUIRED", "没有该任务的有效授权")
-		);
-
+	void removedTaskVersionsRouteReturnsNotFound() throws Exception {
 		mockMvc.perform(get("/api/tasks/task-private/versions")
-				.with(authentication(new TestingAuthenticationToken(collector, null, "ROLE_COLLECTOR"))))
-			.andExpect(status().isForbidden())
-			.andExpect(jsonPath("$.code").value("TASK_GRANT_REQUIRED"));
+				.with(user("admin").roles("ADMIN")))
+			.andExpect(status().isNotFound());
 	}
 
 	private PlatformPrincipal principal(String id, UserRole role, SessionType sessionType) {

@@ -4,9 +4,15 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 @Component
+@ConditionalOnProperty(
+	name = "recording.local-reset.enabled",
+	havingValue = "false",
+	matchIfMissing = true
+)
 final class TaskItemStatusMigrationRunner implements ApplicationRunner {
 	private static final Logger log = LoggerFactory.getLogger(TaskItemStatusMigrationRunner.class);
 	private final TaskItemStatusMigrationService service;

@@ -2,6 +2,7 @@
 import { nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import PageActions from '../../../components/admin/PageActions.vue'
 import AsyncState from '../../../components/admin/AsyncState.vue'
+import BaseSelect from '../../../components/form/BaseSelect.vue'
 import { useNotifications } from '../../../composables/useNotifications.js'
 import { statusLabel } from '../../../lib/statusLabels.js'
 import { userApi } from '../../../lib/userApi.js'
@@ -17,6 +18,7 @@ const creating = ref(false)
 const createTrigger = ref(null)
 const createPanel = ref(null)
 const form = reactive({ username: '', name: '', role: 'REVIEWER', initialPassword: '' })
+const roleOptions = [{ value: 'REVIEWER', label: '审核员' }, { value: 'ADMIN', label: '管理员' }]
 let loadSequence = 0
 
 async function load() {
@@ -63,7 +65,7 @@ function handleCreateKeydown(event) {
     return
   }
   if (event.key !== 'Tab') return
-  const controls = [...(createPanel.value?.querySelectorAll('input:not(:disabled), select:not(:disabled), button:not(:disabled)') || [])]
+  const controls = [...(createPanel.value?.querySelectorAll('input:not(:disabled), button:not(:disabled)') || [])]
   if (!controls.length) return
   const first = controls[0]
   const last = controls[controls.length - 1]
@@ -184,7 +186,7 @@ onBeforeUnmount(() => {
           <form class="create-modal-form" @submit.prevent="create">
             <label>用户名<input v-model.trim="form.username" required autocomplete="off" placeholder="请输入用户名"></label>
             <label>姓名<input v-model.trim="form.name" required autocomplete="off" placeholder="请输入姓名"></label>
-            <label>角色<select v-model="form.role"><option value="REVIEWER">审核员</option><option value="ADMIN">管理员</option></select></label>
+            <label>角色<BaseSelect v-model="form.role" :options="roleOptions" aria-label="角色" /></label>
             <label>初始密码<input v-model="form.initialPassword" type="password" required minlength="8" autocomplete="new-password" placeholder="至少 8 个字符"></label>
             <div class="create-modal-actions">
               <button type="button" data-testid="create-user-cancel" class="modal-secondary" :disabled="creating" @click="closeCreate">取消</button>

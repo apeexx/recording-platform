@@ -6,7 +6,8 @@ import com.recording.platform.security.PlatformPrincipal;
 import com.recording.platform.task.model.TaskItem;
 import com.recording.platform.task.model.TaskItemStatus;
 import com.recording.platform.task.model.TaskItemResult;
-import com.recording.platform.task.model.TaskVersion;
+import com.recording.platform.task.model.TaskConfiguration;
+import com.recording.platform.task.model.TaskRecord;
 import com.recording.platform.task.model.TaskResultType;
 import com.recording.platform.task.model.CurrentRejection;
 import com.recording.platform.task.store.ReviewClaimMutation;
@@ -17,7 +18,6 @@ import com.recording.platform.task.store.AdminReviewApproveMutation;
 import com.recording.platform.task.store.AdminReviewDecisionMutation;
 import com.recording.platform.task.store.ReviewReleaseMutation;
 import com.recording.platform.task.store.TaskItemStore;
-import com.recording.platform.task.store.TaskVersionStore;
 import com.recording.platform.task.store.TaskStore;
 import java.time.Clock;
 import java.time.Instant;
@@ -39,23 +39,17 @@ import org.springframework.beans.factory.annotation.Autowired;
 @Service
 public class ReviewService {
 	private final TaskItemStore items;
-	private final TaskVersionStore versions;
 	private final Clock clock;
 	private final IdentityDirectory users;
 	private final TaskStore tasks;
 
-	public ReviewService(TaskItemStore items, TaskVersionStore versions, Clock clock) {
-		this(items, versions, null, null, clock);
-	}
-
-	public ReviewService(TaskItemStore items, TaskVersionStore versions, IdentityDirectory users, Clock clock) {
-		this(items, versions, users, null, clock);
+	public ReviewService(TaskItemStore items, TaskStore tasks, Clock clock) {
+		this(items, null, tasks, clock);
 	}
 
 	@Autowired
-	public ReviewService(TaskItemStore items, TaskVersionStore versions, IdentityDirectory users, TaskStore tasks, Clock clock) {
+	public ReviewService(TaskItemStore items, IdentityDirectory users, TaskStore tasks, Clock clock) {
 		this.items = items;
-		this.versions = versions;
 		this.users = users;
 		this.tasks = tasks;
 		this.clock = clock;
@@ -176,7 +170,7 @@ public class ReviewService {
 					|| item.getReviewerId() == null || item.getReviewAssignmentId() == null
 					|| item.getRevision() != command.expectedRevision()) throw stale();
 				TaskItemResult current = item.getCurrentResult();
-				TaskItemResult result = reviewResult(requireVersion(item.getTaskVersionId()), current, command.text());
+				TaskItemResult result = reviewResult(requireConfiguration(item), current, command.text());
 				AdminReviewApproveMutation mutation = new AdminReviewApproveMutation(
 					item.getId(), actor.userId(), actorName(actor), command.expectedRevision(),
 					batchId + ":" + index, result, latestSubmissionOperationId(item), Instant.now(clock)
@@ -224,23 +218,20 @@ public class ReviewService {
 	) {
 		TaskItem item = requireDecisionItem(itemId, expectedRevision, actor);
 		TaskItemResult current = item.getCurrentResult();
-		TaskItemResult result = reviewResult(requireVersion(item.getTaskVersionId()), current, text);
+		TaskItemResult result = reviewResult(requireConfiguration(item), current, text);
 		return decide(item, operationId, actor, TaskItemStatus.COMPLETED, result, "审核通过", null);
 	}
 
-	private TaskItemResult reviewResult(TaskVersion version, TaskItemResult current, String requestedText) {
+	private TaskItemResult reviewResult(TaskConfiguration configuration, TaskItemResult current, String requestedText) {
 		String normalizedText = trimToNull(requestedText);
-		if (version.getResultType() == TaskResultType.TEXT) {
+		if (configuration.getResultType() == TaskResultType.TEXT) {
 			String finalText = normalizedText == null && current != null ? trimToNull(current.text()) : normalizedText;
-			if (finalText == null) {
-				throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "TEXT_REQUIRED", "文本成果不能为空");
+			if (finalText == null && (current == null || current.audio() == null)) {
+				throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "RESULT_REQUIRED", "文本或录音至少保留一项");
 			}
-			if (current == null || current.audio() == null) {
-				throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "AUDIO_REQUIRED", "录音成果不能为空");
-			}
-			return new TaskItemResult(current.audio(), finalText);
+			return new TaskItemResult(current == null ? null : current.audio(), finalText);
 		}
-		if (version.getResultType() == TaskResultType.AUDIO) {
+		if (configuration.getResultType() == TaskResultType.AUDIO) {
 			if (normalizedText != null) {
 				throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "TEXT_NOT_ALLOWED", "音频任务不允许提交文字成果");
 			}
@@ -257,11 +248,11 @@ public class ReviewService {
 		List<String> reasons, String note, PlatformPrincipal actor
 	) {
 		TaskItem item = requireDecisionItem(itemId, expectedRevision, actor);
-		TaskVersion version = requireVersion(item.getTaskVersionId());
+		TaskConfiguration configuration = requireConfiguration(item);
 		List<String> normalizedReasons = reasons == null ? List.of() : reasons.stream()
 			.map(this::trimToNull).filter(java.util.Objects::nonNull).distinct().toList();
 		for (String reason : normalizedReasons) {
-			if (!version.getRejectionReasons().contains(reason)) {
+			if (!configuration.getRejectionReasons().contains(reason)) {
 				throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "INVALID_REJECTION_REASON", "包含任务未配置的驳回原因");
 			}
 		}
@@ -319,11 +310,16 @@ public class ReviewService {
 		return item;
 	}
 
-	private TaskVersion requireVersion(String versionId) {
-		TaskVersion version = versions.findById(versionId)
-			.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "TASK_VERSION_NOT_FOUND", "任务版本不存在"));
-		if (!version.isHumanReviewEnabled()) throw stale();
-		return version;
+	private TaskConfiguration requireConfiguration(TaskItem item) {
+		if (tasks == null) throw new ApiException(HttpStatus.NOT_FOUND, "TASK_NOT_FOUND", "任务不存在");
+		TaskRecord task = tasks.findById(item.getTaskId())
+			.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "TASK_NOT_FOUND", "任务不存在"));
+		TaskConfiguration configuration = task.getConfiguration();
+		if (configuration == null) {
+			throw new ApiException(HttpStatus.CONFLICT, "TASK_CONFIGURATION_MISSING", "任务配置不存在");
+		}
+		if (!configuration.isHumanReviewEnabled()) throw stale();
+		return configuration;
 	}
 
 	private String latestSubmissionOperationId(TaskItem item) {

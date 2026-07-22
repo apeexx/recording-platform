@@ -52,7 +52,7 @@ describe('用户管理类型页签', () => {
 
     expect(document.querySelector('[data-testid="create-user-modal"]')).not.toBeNull()
     expect(document.querySelectorAll('[data-testid="create-user-modal"] input')).toHaveLength(3)
-    expect(document.querySelector('[data-testid="create-user-modal"] select')).not.toBeNull()
+    expect(document.querySelector('[data-testid="create-user-modal"] [role="combobox"]')).not.toBeNull()
     wrapper.unmount()
   })
 

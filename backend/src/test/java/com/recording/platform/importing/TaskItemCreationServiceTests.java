@@ -22,10 +22,9 @@ import com.recording.platform.task.model.TaskItem;
 import com.recording.platform.task.model.TaskItemStatus;
 import com.recording.platform.task.model.TaskLifecycle;
 import com.recording.platform.task.model.TaskRecord;
-import com.recording.platform.task.model.TaskVersion;
+import com.recording.platform.task.model.TaskConfiguration;
 import com.recording.platform.task.store.TaskItemStore;
 import com.recording.platform.task.store.TaskStore;
-import com.recording.platform.task.store.TaskVersionStore;
 import java.net.URI;
 import java.time.Clock;
 import java.time.Duration;
@@ -40,18 +39,16 @@ import org.mockito.ArgumentCaptor;
 class TaskItemCreationServiceTests {
 	private TaskItemCreationService service;
 	private TaskStore tasks;
-	private TaskVersionStore versions;
 	private TaskItemStore items;
 	private SafeRemoteMediaDownloader downloader;
 	private MediaAssetStore assets;
 	private RecordingMediaStorage cleanupStorage;
-	private TaskVersion version;
+	private TaskConfiguration configuration;
 	private PlatformPrincipal admin;
 
 	@BeforeEach
 	void setUp() {
 		tasks = org.mockito.Mockito.mock(TaskStore.class);
-		versions = org.mockito.Mockito.mock(TaskVersionStore.class);
 		items = org.mockito.Mockito.mock(TaskItemStore.class);
 		downloader = org.mockito.Mockito.mock(SafeRemoteMediaDownloader.class);
 		assets = org.mockito.Mockito.mock(MediaAssetStore.class);
@@ -59,21 +56,16 @@ class TaskItemCreationServiceTests {
 		task.setId("task-1");
 		task.setTaskCode("T000001");
 		task.setLifecycle(TaskLifecycle.RUNNING);
-		task.setCurrentVersionId("version-2");
-		task.setCurrentVersionNumber(2);
+		configuration = new TaskConfiguration();
+		configuration.setReferenceTypes(Set.of(ReferenceType.TEXT, ReferenceType.AUDIO, ReferenceType.VIDEO));
+		task.setConfiguration(configuration);
 		when(tasks.findById("task-1")).thenReturn(Optional.of(task));
 		when(tasks.nextItemSequence("task-1")).thenReturn(1L);
-		version = new TaskVersion();
-		version.setId("version-2");
-		version.setVersionNumber(2);
-		version.setPublished(true);
-		version.setReferenceTypes(Set.of(ReferenceType.TEXT, ReferenceType.AUDIO, ReferenceType.VIDEO));
-		when(versions.findById("version-2")).thenReturn(Optional.of(version));
 		when(items.findByTaskIdAndCreationOperationId(any(), any())).thenReturn(Optional.empty());
 		when(items.save(any())).thenAnswer((invocation) -> invocation.getArgument(0));
 		when(assets.save(any())).thenAnswer((invocation) -> invocation.getArgument(0));
 		service = new TaskItemCreationService(
-			tasks, versions, items, downloader, assets,
+			tasks, items, downloader, assets,
 			Clock.fixed(Instant.parse("2026-07-11T12:00:00Z"), ZoneOffset.UTC)
 		);
 		admin = new PlatformPrincipal("session-1", "admin-1", "admin", "管理员", UserRole.ADMIN, SessionType.WEB, false);
@@ -90,7 +82,7 @@ class TaskItemCreationServiceTests {
 	}
 
 	@Test
-	void itemUsesCurrentVersionAtomicSequenceAndLocallyDownloadedReferences() {
+	void itemUsesTaskConfigurationAtomicSequenceAndLocallyDownloadedReferences() {
 		MediaAsset audio = asset("audio-1", MediaKind.REFERENCE_AUDIO);
 		MediaAsset video = asset("video-1", MediaKind.REFERENCE_VIDEO);
 		when(downloader.download(
@@ -107,8 +99,7 @@ class TaskItemCreationServiceTests {
 			admin
 		);
 
-		assertThat(created.getTaskVersionId()).isEqualTo("version-2");
-		assertThat(created.getTaskVersionNumber()).isEqualTo(2);
+		assertThat(created.getTaskId()).isEqualTo("task-1");
 		assertThat(created.getSequence()).isEqualTo(1);
 		assertThat(created.getItemCode()).isEqualTo("T000001-0000001");
 		assertThat(created.getReferenceAudioMediaId()).isEqualTo("audio-1");
@@ -238,7 +229,6 @@ class TaskItemCreationServiceTests {
 		));
 		service = new TaskItemCreationService(
 			tasks,
-			versions,
 			items,
 			downloader,
 			assets,

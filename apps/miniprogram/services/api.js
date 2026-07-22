@@ -89,7 +89,6 @@ module.exports = {
   deleteAvatar: ()=>request('/api/auth/miniprogram/avatar',{method:'DELETE'}),
   tasks: ()=>request('/api/tasks?page=0&size=100'),
   task: id=>request(`/api/tasks/${encodeURIComponent(id)}`),
-  versions: id=>request(`/api/tasks/${encodeURIComponent(id)}/versions`),
   requestAccess: id=>request(`/api/tasks/${encodeURIComponent(id)}/access-requests`,{method:'POST',idempotencyKey:operationId('access')}),
   start: (id, idempotencyKey=operationId('claim'))=>request(`/api/tasks/${encodeURIComponent(id)}/items/start`,{method:'POST',idempotencyKey}),
   item: id=>request(`/api/task-items/${encodeURIComponent(id)}`),

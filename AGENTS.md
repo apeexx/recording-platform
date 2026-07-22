@@ -32,13 +32,13 @@
 Java Spring Boot 后端项目
 MongoDB 身份、会话与统一 API 错误基础
 语音生成 Web 生产台
-任务版本、授权、任务池、录音媒体与导入后端闭环
+任务配置、授权、任务池、录音媒体与导入后端闭环
 根目录 README.md
 根目录 log.md
 本文件 AGENTS.md
 ```
 
-当前已实现身份、会话、后台用户管理、微信登录边界、语音生成持久化，以及不可变任务版本、授权申请、任务池领取、录音提交/返修/释放、人工审核、动态状态、软废弃恢复、媒体读取和 CSV 导入后端闭环；Web 已实现后台身份、任务/版本、数据池/导入、权限、审核、用户、操作记录与统计页面。平台领域已整体移除，仍不实现机器审核执行或真实 AI 转写。
+当前已实现身份、会话、后台用户管理、微信登录边界、语音生成持久化，以及嵌入式任务配置、授权申请、任务池领取、录音提交/返修/释放、人工审核、动态状态、软废弃恢复、媒体读取和 CSV 导入后端闭环；Web 已实现后台身份、任务配置、数据池/导入、权限、审核、用户、操作记录与统计页面。平台领域已整体移除，仍不实现机器审核执行或真实 AI 转写。
 
 Spring Security 已配置为不透明服务端会话，不使用 JWT。除 Web/微信登录与接管接口外，其余 `/api/**` 默认认证；管理员、任务管理、授权管理、导入和语音生成接口按角色保护，采集写接口仅允许 `COLLECTOR` 小程序 Bearer 身份。
 
@@ -208,7 +208,7 @@ WEB_SESSION_COOKIE_SECURE（默认 false，生产 HTTPS 应设 true）
 
 ## 6.5 任务池、媒体与导入规则
 
-任务结构固定使用 `tasks` + `task_versions`。任务发布后版本快照不可原地覆盖；结构修改必须创建下一版本，已有条目继续绑定旧版本。任务至少启用 TEXT/AUDIO/VIDEO 一种参考组件，所有任务都必须录音；最终成果为 `TEXT` 时提交录音和文本，为 `AUDIO` 时只提交录音。录音格式、采样率、声道和时长规则对两种成果类型均生效。关闭人工审核时不得保存驳回预设原因；首期 `aiEnabled` 必须为 false。任务编码由数据库序列自动生成 `T000001`，条目编码为 `{taskCode}-{7位序号}`，不接受前端输入且序号不复用。
+任务结构固定使用 `tasks`，配置嵌入 `configuration`；不再维护 `task_versions`。任务仅在 DRAFT 状态允许修改名称、说明和配置，发布后永久冻结；暂停、恢复和结束只改变生命周期。任务至少启用 TEXT/AUDIO/VIDEO 一种参考组件。最终成果为 `TEXT` 时文本或录音至少提交一项，也允许同时提交；`AUDIO` 必须提交录音且不得夹带文本。只有实际提交录音时才校验格式、采样率、单声道、大小和时长。录音时长配置固定为 1–600 秒。关闭人工审核时不得保存驳回预设原因；首期 `aiEnabled` 必须为 false。任务编码由数据库序列自动生成 `T000001`，条目编码为 `{taskCode}-{7位序号}`，不接受前端输入且序号不复用。
 
 采集员领取必须同时满足任务 RUNNING 和 ACTIVE grant；普通 `RECORDING_PENDING` 不限制采集员持有数量，每个新的 `Idempotency-Key` 使用 Mongo `findAndModify` 从 `AVAILABLE` 按 sequence 原子领取一条新数据，相同幂等键重放仍返回首次结果。驳回进入独立 `REWORK_PENDING`，保留原采集员、assignment 和驳回原因；授权撤销只阻止新领取，不影响已领取条目的提交和释放。
 
@@ -224,7 +224,7 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 
 ## 7. 接口说明
 
-当前后端提供身份、会话、后台用户管理、语音生成、任务版本、授权、任务池、人工审核、动态状态、软废弃恢复、录音媒体和导入 API；尚不提供机器审核执行或真实 AI 转写 API。
+当前后端提供身份、会话、后台用户管理、语音生成、任务配置、授权、任务池、人工审核、动态状态、软废弃恢复、录音媒体和导入 API；尚不提供机器审核执行或真实 AI 转写 API。
 当前同时提供操作记录与统计 API：条目操作记录按权限读取，全局操作记录仅 ADMIN/REVIEWER；任务和指定采集员汇总仅 ADMIN，审核员可查看本人统计，采集员可查看本人汇总及逐次提交明细。
 
 所有 API 响应必须带 `X-Request-Id`；错误响应统一为 `{ code, message, requestId, details? }`。未预期异常只能返回脱敏摘要，不得返回堆栈、数据库内部消息、密钥或完整第三方 payload。统一状态至少覆盖 400、401、403、404、409、413、415、422、429、500 和 503。
@@ -324,23 +324,12 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 ```text
 请求方法：POST / GET / PUT
 请求路径：/api/tasks、/api/tasks/{taskId}、/api/tasks/{taskId}/publish|pause|resume|end
-请求参数：创建含 name、description、version，taskCode 由服务端生成；结构编辑含 name、description、version；所有写操作携带 Idempotency-Key；列表 page、size
+请求参数：创建和草稿编辑含 name、description、configuration，taskCode 由服务端生成；configuration 含 referenceTypes、resultType、humanReviewEnabled、recordingFormat、sampleRates、channels、minDurationMillis、maxDurationMillis、rejectionReasons、aiEnabled；所有写操作携带 Idempotency-Key；列表 page、size
 响应结构：任务/权限视图或 {items,page,size,total}；创建返回 201
-错误码：404 TASK_NOT_FOUND/TASK_VERSION_NOT_FOUND；409 INVALID_TASK_STATE；422 REFERENCE_REQUIRED、RESULT_TYPE_REQUIRED、RESULT_CONTENT_MISMATCH、AI_NOT_SUPPORTED 等
-权限要求：写操作仅 ADMIN；ADMIN/REVIEWER 查询全部，COLLECTOR 查询进行中/已暂停任务及 ACTIVE/PENDING/NONE 权限状态，单任务详情与版本仍需 ACTIVE 授权
-数据一致性要求：taskCode 使用 Mongo 原子序列生成且不复用；发布后版本不可变；结构修改创建下一版本；所有任务均要求录音，TEXT 提交录音和文本，AUDIO 仅提交录音；关闭人工审核时 rejectionReasons 固定为空；旧条目继续绑定旧版本；写操作持久化幂等；aiEnabled 首期必须 false
+错误码：404 TASK_NOT_FOUND；409 INVALID_TASK_STATE；422 REFERENCE_REQUIRED、RESULT_TYPE_REQUIRED、RESULT_CONTENT_MISMATCH、AI_NOT_SUPPORTED 等
+权限要求：写操作仅 ADMIN；ADMIN/REVIEWER 查询全部，COLLECTOR 查询进行中/已暂停任务及 ACTIVE/PENDING/NONE 权限状态，单任务详情仍需 ACTIVE 授权
+数据一致性要求：taskCode 使用 Mongo 原子序列生成且不复用；仅 DRAFT 可编辑，发布后定义永久冻结；TEXT 允许纯文本、纯录音或两者同时提交，AUDIO 只允许录音；时长范围固定 1–600 秒；关闭人工审核时 rejectionReasons 固定为空；写操作持久化幂等；aiEnabled 首期必须 false
 前端调用位置：apps/web/src/lib/taskApi.js、apps/web/src/pages/admin/tasks/*、apps/miniprogram/pages/tasks/*
-```
-
-```text
-请求方法：GET
-请求路径：/api/tasks/{taskId}/versions
-请求参数：任务 ID
-响应结构：按 versionNumber 升序的不可变 TaskVersion 列表
-错误码：404 TASK_NOT_FOUND
-权限要求：ADMIN/REVIEWER；COLLECTOR 仍受任务授权边界保护
-数据一致性要求：只读版本快照，不修改 published 或历史条目绑定
-前端调用位置：apps/web/src/lib/taskApi.js、任务编辑与审核工作台、apps/miniprogram/pages/work/*
 ```
 
 ```text
@@ -361,7 +350,7 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 响应结构：TaskItem 或 {items,page,size,total}；TaskItem 可包含 referenceAudioUrl、referenceVideoUrl，历史条目可为空
 错误码：404 NO_AVAILABLE_ITEM/TASK_ITEM_NOT_FOUND；409 ITEM_CONFLICT；422 ITEM_REFERENCE_REQUIRED/远程媒体错误
 权限要求：添加和任务条目列表仅 ADMIN；start 仅 COLLECTOR；详情仅 ADMIN/REVIEWER/当前采集员
-数据一致性要求：新条目绑定 currentVersion；远程媒体完成安全校验和后端副本保存后同时保存规范化公网 URL；itemCode 任务内递增唯一且是条目唯一业务编号；添加和领取均持久化幂等；每个新领取幂等键使用 findAndModify 原子更新一条 AVAILABLE，并以同一更新递增 revision、追加新 revision 的操作历史，不限制同一采集员的普通待录制数量；mine 在各 kind 状态集合内统一按 updatedAt 倒序、sequence 升序后由 MongoDB 分页，不再按状态流程 rank 分组
+数据一致性要求：新条目只绑定 taskId，校验时读取任务内嵌 configuration；远程媒体完成安全校验和后端副本保存后同时保存规范化公网 URL；itemCode 任务内递增唯一且是条目唯一业务编号；添加和领取均持久化幂等；每个新领取幂等键使用 findAndModify 原子更新一条 AVAILABLE，并以同一更新递增 revision、追加新 revision 的操作历史，不限制同一采集员的普通待录制数量；mine 在各 kind 状态集合内统一按 updatedAt 倒序、sequence 升序后由 MongoDB 分页，不再按状态流程 rank 分组
 前端调用位置：apps/web/src/pages/admin/tasks/TaskDetailPage.vue 与 TaskPoolPage.vue、apps/miniprogram/pages/tasks/*、apps/miniprogram/pages/work/*；任务详情使用数字分页并支持每页 5/10/20 条（默认 10），小程序任务数据固定每页 10 条，独立 Web 任务数据池固定每页 20 条
 ```
 
@@ -571,26 +560,14 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 
 ```text
 集合名称：tasks
-字段名称：taskCode、name、description、lifecycle、currentVersionId、currentVersionNumber、itemSequence、createdAt、updatedAt
-字段类型：字符串、枚举、整数、UTC Instant
-默认值：DRAFT、currentVersionNumber=1、itemSequence=0
+字段名称：taskCode、name、description、lifecycle、configuration、itemSequence、createdAt、updatedAt；configuration 含 referenceTypes、resultType、humanReviewEnabled、recordingFormat、sampleRates、channels、minDurationMillis、maxDurationMillis、rejectionReasons、aiEnabled、aiProvider、aiModel
+字段类型：字符串、枚举、嵌套文档、集合、布尔值、整数、UTC Instant
+默认值：DRAFT、itemSequence=0、humanReviewEnabled=true、channels=1、minDurationMillis=1000、maxDurationMillis=600000、aiEnabled=false
 唯一约束：taskCode
 索引：taskCode 唯一；lifecycle
-数据兼容策略：只通过 currentVersionId 指向当前版本，旧条目保存自身 taskVersionId
-迁移步骤：本阶段首次建立，无旧任务迁移
-回滚方式：先备份 tasks/task_versions，不直接删除任务或重置序号
-```
-
-```text
-集合名称：task_versions
-字段名称：taskId、versionNumber、referenceTypes、resultType、humanReviewEnabled、recordingFormat、sampleRates、channels、minDurationMillis、maxDurationMillis、rejectionReasons、aiEnabled、aiProvider、aiModel、published、createdAt、publishedAt
-字段类型：字符串、集合、布尔值、枚举、整数、UTC Instant
-默认值：humanReviewEnabled=true、channels=1、minDurationMillis=1000、maxDurationMillis=600000、aiEnabled=false
-唯一约束：(taskId, versionNumber)
-索引：(taskId, versionNumber) 唯一
-数据兼容策略：发布后不可原地覆盖；新结构写下一版本
-迁移步骤：本阶段首次建立，无旧版本迁移
-回滚方式：保留已被条目引用的版本，不降写 versionNumber
+数据兼容策略：本次不迁移旧开发数据；发布后任务定义不再修改，条目通过 taskId 读取配置
+迁移步骤：停止服务后使用受保护脚本清空本地开发数据库并按新模型重建；不在生产数据上直接执行
+回滚方式：恢复代码与重置前备份；不得在存在业务数据的环境直接删除集合
 ```
 
 ```text
@@ -607,12 +584,12 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 
 ```text
 集合名称：task_items
-字段名称：taskId、taskVersionId/Number、sequence、itemCode、creationOperationId、status、collectorId、reviewerId、assignmentId、reviewAssignmentId、revision、参考字段、currentResult、currentRejection、submissions（含提交时 collectorId）、operations、discardedPreviousStatus、createdAt、updatedAt
+字段名称：taskId、sequence、itemCode、creationOperationId、status、collectorId、reviewerId、assignmentId、reviewAssignmentId、revision、参考字段、currentResult、currentRejection、submissions（含提交时 collectorId）、operations、discardedPreviousStatus、createdAt、updatedAt
 字段类型：字符串、枚举、数值、嵌套文档、数组、UTC Instant
 默认值：新条目 AVAILABLE、revision=0、历史数组为空
 唯一约束：(taskId,itemCode)；creationOperationId 存在时任务内唯一；普通 RECORDING_PENDING 与 REWORK_PENDING 均不设采集员持有数量唯一约束
 索引：上述业务唯一索引；(taskId,status,sequence) 领取索引；(collectorId,status)；普通查询索引 (collectorId,taskId,status)
-数据兼容策略：条目固定绑定创建时版本；当前结果可替换/清除，提交与操作历史只追加
+数据兼容策略：条目通过 taskId 读取已冻结任务配置；当前结果可替换/清除，提交与操作历史只追加
 迁移步骤：应用启动时先确保普通索引 `collector_task_status` 创建成功，再幂等删除旧 `unique_collector_recording_pending` 与 `unique_collector_task_recording_pending`；失败则终止启动，不改写现有条目
 回滚方式：备份集合与本地媒体；恢复任一旧唯一索引前必须先处理与其口径冲突的多条普通 RECORDING_PENDING，否则索引无法重建；不得只回滚 Mongo 或只回滚文件
 ```
@@ -720,7 +697,7 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 
 当前已实现可配置的单层人工审核：先选择有已提交或待审核数据的任务，再进入对应审核池。采集员提交后处于 `SUBMITTED` 并可继续修改；管理员或审核员领取、或管理员分配后才进入 `REVIEW_PENDING` 并锁定采集修改。审核员可在所选任务内单条或批量领取、释放本人占用、补改文本、通过或驳回；管理员可领取指定条目、指定审核员并对已领取/已分配条目作出单条或批量决定，不得直接决定未领取的 `SUBMITTED`。驳回进入原采集员的 `REWORK_PENDING` 返修队列，提交和操作历史永久保留。前端不得向未占用该条目的审核员展示决定按钮；后端服务和 Spring Security 的角色规则必须保持一致。
 
-管理员状态管理支持任务版本允许的动态阶段、批量逐条结果、媒体安全释放、软废弃和恢复。普通状态调整不能进入待领取、待审核，也不能绕过人工审核直接进入已完成；返回池必须调用释放，人工审核完成必须走领取或分配后的审核决定。废弃不删除归属、结果或文件，恢复回废弃前状态并重新校验版本阶段和 revision。
+管理员状态管理支持任务配置允许的动态阶段、批量逐条结果、媒体安全释放、软废弃和恢复。普通状态调整不能进入待领取、待审核，也不能绕过人工审核直接进入已完成；返回池必须调用释放，人工审核完成必须走领取或分配后的审核决定。废弃不删除归属、结果或文件，恢复回废弃前状态并重新校验任务配置和 revision。
 
 机器审核、真实 AI 转写及多级一审/二审仍属于后续范围，启用前必须另行确认状态与接口契约。
 

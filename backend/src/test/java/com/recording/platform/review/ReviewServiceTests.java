@@ -20,8 +20,9 @@ import com.recording.platform.task.store.ReviewItemClaimMutation;
 import com.recording.platform.task.store.ReviewReleaseMutation;
 import com.recording.platform.task.store.ReviewDecisionMutation;
 import com.recording.platform.task.store.TaskItemStore;
-import com.recording.platform.task.store.TaskVersionStore;
-import com.recording.platform.task.model.TaskVersion;
+import com.recording.platform.task.store.TaskStore;
+import com.recording.platform.task.model.TaskConfiguration;
+import com.recording.platform.task.model.TaskRecord;
 import com.recording.platform.task.model.TaskResultType;
 import com.recording.platform.identity.model.IdentityUser;
 import com.recording.platform.identity.model.UserType;
@@ -51,7 +52,7 @@ class ReviewServiceTests {
 		when(items.findById("item-1")).thenReturn(Optional.of(submitted));
 		TaskItem claimed = assigned("item-1", 4);
 		when(items.claimReviewItem(any())).thenReturn(Optional.of(claimed));
-		ReviewService service = new ReviewService(items, mock(TaskVersionStore.class), CLOCK);
+		ReviewService service = new ReviewService(items, mock(TaskStore.class), CLOCK);
 
 		TaskItem result = service.claimItem("item-1", "claim-item-1", 3, admin());
 
@@ -62,13 +63,13 @@ class ReviewServiceTests {
 	@Test
 	void reviewerClaimsOnePendingItemWithAReviewAssignment() {
 		TaskItemStore items = mock(TaskItemStore.class);
-		TaskVersionStore versions = mock(TaskVersionStore.class);
+		TaskStore tasks = mock(TaskStore.class);
 		TaskItem claimed = pending("item-1", 4);
 		claimed.setReviewerId("reviewer-1");
 		claimed.setReviewAssignmentId("review-assignment-1");
 		claimed.setRevision(5);
 		when(items.claimReview(any())).thenReturn(Optional.of(claimed));
-		ReviewService service = new ReviewService(items, versions, CLOCK);
+		ReviewService service = new ReviewService(items, tasks, CLOCK);
 
 		TaskItem result = service.claim("task-1", "operation-1", reviewer());
 
@@ -82,7 +83,7 @@ class ReviewServiceTests {
 	void secondReviewerGetsConflictWhenAtomicClaimFindsNoItem() {
 		TaskItemStore items = mock(TaskItemStore.class);
 		when(items.claimReview(any())).thenReturn(Optional.empty());
-		ReviewService service = new ReviewService(items, mock(TaskVersionStore.class), CLOCK);
+		ReviewService service = new ReviewService(items, mock(TaskStore.class), CLOCK);
 
 		assertThatThrownBy(() -> service.claim("task-1", "operation-2", reviewer()))
 			.isInstanceOfSatisfying(ApiException.class,
@@ -98,7 +99,7 @@ class ReviewServiceTests {
 		when(items.findById("item-1")).thenReturn(Optional.of(existing));
 		TaskItem released = pending("item-1", 8);
 		when(items.releaseReviewIfCurrent(any())).thenReturn(Optional.of(released));
-		ReviewService service = new ReviewService(items, mock(TaskVersionStore.class), CLOCK);
+		ReviewService service = new ReviewService(items, mock(TaskStore.class), CLOCK);
 
 		TaskItem result = service.release("item-1", "operation-release", 7, reviewer());
 
@@ -111,17 +112,17 @@ class ReviewServiceTests {
 	@Test
 	void reviewerApprovesAndMayReplaceTheCollectedText() {
 		TaskItemStore items = mock(TaskItemStore.class);
-		TaskVersionStore versions = mock(TaskVersionStore.class);
+		TaskStore tasks = mock(TaskStore.class);
 		TaskItem existing = assigned("item-1", 7);
 		when(items.findById("item-1")).thenReturn(Optional.of(existing));
-		when(versions.findById("version-1")).thenReturn(Optional.of(reviewVersion()));
+		stubTask(tasks, reviewVersion());
 		TaskItem approved = assigned("item-1", 8);
 		approved.setStatus(TaskItemStatus.COMPLETED);
 		approved.setReviewerId(null);
 		approved.setReviewAssignmentId(null);
 		approved.setCurrentResult(new TaskItemResult(recording(), "审核修订文本"));
 		when(items.decideReviewIfCurrent(any())).thenReturn(Optional.of(approved));
-		ReviewService service = new ReviewService(items, versions, CLOCK);
+		ReviewService service = new ReviewService(items, tasks, CLOCK);
 
 		TaskItem result = service.approve(
 			"item-1", "operation-approve", 7, "审核修订文本", reviewer()
@@ -136,7 +137,7 @@ class ReviewServiceTests {
 	@Test
 	void audioResultCannotBeApprovedWithText() {
 		TaskItemStore items = mock(TaskItemStore.class);
-		TaskVersionStore versions = mock(TaskVersionStore.class);
+		TaskStore tasks = mock(TaskStore.class);
 		TaskItem existing = assigned("item-audio", 3);
 		existing.setCurrentResult(new TaskItemResult(
 			new com.recording.platform.task.model.SubmittedRecording(
@@ -145,10 +146,10 @@ class ReviewServiceTests {
 			), null
 		));
 		when(items.findById("item-audio")).thenReturn(Optional.of(existing));
-		TaskVersion version = reviewVersion();
-		version.setResultType(TaskResultType.AUDIO);
-		when(versions.findById("version-1")).thenReturn(Optional.of(version));
-		ReviewService service = new ReviewService(items, versions, CLOCK);
+		TaskConfiguration configuration = reviewVersion();
+		configuration.setResultType(TaskResultType.AUDIO);
+		stubTask(tasks, configuration);
+		ReviewService service = new ReviewService(items, tasks, CLOCK);
 
 		assertThatThrownBy(() -> service.approve(
 			"item-audio", "approve-audio", 3, "不应出现的文字", reviewer()
@@ -159,16 +160,16 @@ class ReviewServiceTests {
 	@Test
 	void reviewerRejectsToOriginalCollectorWithConfiguredReasonsAndNote() {
 		TaskItemStore items = mock(TaskItemStore.class);
-		TaskVersionStore versions = mock(TaskVersionStore.class);
+		TaskStore tasks = mock(TaskStore.class);
 		TaskItem existing = assigned("item-1", 7);
 		when(items.findById("item-1")).thenReturn(Optional.of(existing));
-		when(versions.findById("version-1")).thenReturn(Optional.of(reviewVersion()));
+		stubTask(tasks, reviewVersion());
 		TaskItem rejected = assigned("item-1", 8);
 		rejected.setStatus(TaskItemStatus.REWORK_PENDING);
 		rejected.setReviewerId(null);
 		rejected.setReviewAssignmentId(null);
 		when(items.decideReviewIfCurrent(any())).thenReturn(Optional.of(rejected));
-		ReviewService service = new ReviewService(items, versions, CLOCK);
+		ReviewService service = new ReviewService(items, tasks, CLOCK);
 
 		TaskItem result = service.reject(
 			"item-1", "operation-reject", 7, List.of("空音频", "内容不符"), "请重新录制", reviewer()
@@ -182,11 +183,11 @@ class ReviewServiceTests {
 	@Test
 	void rejectionRequiresConfiguredReasonOrAFreeformNote() {
 		TaskItemStore items = mock(TaskItemStore.class);
-		TaskVersionStore versions = mock(TaskVersionStore.class);
+		TaskStore tasks = mock(TaskStore.class);
 		TaskItem existing = assigned("item-1", 7);
 		when(items.findById("item-1")).thenReturn(Optional.of(existing));
-		when(versions.findById("version-1")).thenReturn(Optional.of(reviewVersion()));
-		ReviewService service = new ReviewService(items, versions, CLOCK);
+		stubTask(tasks, reviewVersion());
+		ReviewService service = new ReviewService(items, tasks, CLOCK);
 
 		assertThatThrownBy(() -> service.reject(
 			"item-1", "operation-reject", 7, List.of(), " ", reviewer()
@@ -205,7 +206,7 @@ class ReviewServiceTests {
 		when(items.claimReview(any()))
 			.thenReturn(Optional.of(first))
 			.thenReturn(Optional.of(second));
-		ReviewService service = new ReviewService(items, mock(TaskVersionStore.class), CLOCK);
+		ReviewService service = new ReviewService(items, mock(TaskStore.class), CLOCK);
 
 		assertThat(service.pool(page, reviewer()).getContent()).containsExactly(available);
 		assertThat(service.claimBatch("task-1", 2, "batch-operation", reviewer())).containsExactly(first, second);
@@ -217,7 +218,7 @@ class ReviewServiceTests {
 		PageRequest page = PageRequest.of(0, 20);
 		TaskItem assigned = assigned("item-assigned", 2);
 		when(items.findAllReviewPending(page)).thenReturn(new PageImpl<>(List.of(assigned), page, 1));
-		ReviewService service = new ReviewService(items, mock(TaskVersionStore.class), CLOCK);
+		ReviewService service = new ReviewService(items, mock(TaskStore.class), CLOCK);
 
 		assertThat(service.pool(page, admin()).getContent()).containsExactly(assigned);
 		verify(items).findAllReviewPending(page);
@@ -235,7 +236,7 @@ class ReviewServiceTests {
 			.thenReturn(new PageImpl<>(List.of(own), page, 1));
 		IdentityUser collector = new IdentityUser("collector-1",UserType.MINIPROGRAM,null,"采集员一",UserRole.COLLECTOR,UserStatus.ACTIVE,false,null,null);
 		when(users.findAllByIdIn(List.of("collector-1"))).thenReturn(List.of(collector));
-		ReviewService service = new ReviewService(items, mock(TaskVersionStore.class), users, CLOCK);
+		ReviewService service = new ReviewService(items, users, mock(TaskStore.class), CLOCK);
 
 		var result = service.pool("task-1", page, reviewer());
 
@@ -250,7 +251,7 @@ class ReviewServiceTests {
 		TaskItemStore items = mock(TaskItemStore.class);
 		TaskItem first = assigned("item-1", 2);
 		when(items.claimReview(any())).thenReturn(Optional.of(first)).thenReturn(Optional.empty());
-		ReviewService service = new ReviewService(items, mock(TaskVersionStore.class), CLOCK);
+		ReviewService service = new ReviewService(items, mock(TaskStore.class), CLOCK);
 
 		assertThat(service.claimBatch("task-1", 3, "batch-operation", reviewer())).containsExactly(first);
 	}
@@ -267,7 +268,7 @@ class ReviewServiceTests {
 		assigned.setReviewerId("reviewer-2");
 		assigned.setReviewAssignmentId("review-assignment-2");
 		when(items.assignReviewIfCurrent(any())).thenReturn(Optional.of(assigned));
-		ReviewService service = new ReviewService(items, mock(TaskVersionStore.class), users, CLOCK);
+		ReviewService service = new ReviewService(items, users, mock(TaskStore.class), CLOCK);
 
 		TaskItem result = service.assign("item-1", "reviewer-2", "assign-operation", 3, admin());
 
@@ -281,7 +282,7 @@ class ReviewServiceTests {
 		IdentityDirectory users = mock(IdentityDirectory.class);
 		IdentityUser disabled = new IdentityUser("reviewer-disabled",UserType.WEB,"reviewer-disabled","禁用审核员",UserRole.REVIEWER,UserStatus.DISABLED,false,null,null);
 		when(users.findById("reviewer-disabled")).thenReturn(Optional.of(disabled));
-		ReviewService service = new ReviewService(items, mock(TaskVersionStore.class), users, CLOCK);
+		ReviewService service = new ReviewService(items, users, mock(TaskStore.class), CLOCK);
 
 		assertThatThrownBy(() -> service.assign(
 			"item-1", "reviewer-disabled", "assign-operation", 3, admin()
@@ -293,11 +294,9 @@ class ReviewServiceTests {
 	void adminBatchApproveReturnsPerItemSuccessAndConflict() {
 		TaskItemStore items = mock(TaskItemStore.class);
 		TaskItem first = assigned("item-1", 3);
-		first.setTaskVersionId("version-1");
 		TaskItem second = assigned("item-2", 5);
-		second.setTaskVersionId("version-1");
-		TaskVersionStore versions = mock(TaskVersionStore.class);
-		when(versions.findById("version-1")).thenReturn(Optional.of(reviewVersion()));
+		TaskStore tasks = mock(TaskStore.class);
+		stubTask(tasks, reviewVersion());
 		when(items.findById("item-1")).thenReturn(Optional.of(first));
 		when(items.findById("item-2")).thenReturn(Optional.of(second));
 		TaskItem completed = pending("item-1", 4);
@@ -305,7 +304,7 @@ class ReviewServiceTests {
 		when(items.adminApproveReviewIfCurrent(any()))
 			.thenReturn(Optional.of(completed))
 			.thenReturn(Optional.empty());
-		ReviewService service = new ReviewService(items, versions, mock(IdentityDirectory.class), CLOCK);
+		ReviewService service = new ReviewService(items, mock(IdentityDirectory.class), tasks, CLOCK);
 
 		List<BatchReviewResult> results = service.batchApprove(
 			"batch-approve",
@@ -324,12 +323,11 @@ class ReviewServiceTests {
 	@Test
 	void adminMustClaimOrAssignBeforeApprovingFromTheReviewWorkbench() {
 		TaskItemStore items = mock(TaskItemStore.class);
-		TaskVersionStore versions = mock(TaskVersionStore.class);
+		TaskStore tasks = mock(TaskStore.class);
 		TaskItem existing = pending("item-admin", 6);
-		existing.setTaskVersionId("version-1");
 		when(items.findById("item-admin")).thenReturn(Optional.of(existing));
-		when(versions.findById("version-1")).thenReturn(Optional.of(reviewVersion()));
-		ReviewService service = new ReviewService(items, versions, mock(IdentityDirectory.class), CLOCK);
+		stubTask(tasks, reviewVersion());
+		ReviewService service = new ReviewService(items, mock(IdentityDirectory.class), tasks, CLOCK);
 
 		assertThatThrownBy(() -> service.approve(
 			"item-admin", "admin-single-approve", 6, "管理员修订文本", admin()
@@ -341,15 +339,14 @@ class ReviewServiceTests {
 	@Test
 	void adminRejectionReachesTheAtomicDecisionInsteadOfBeingDeniedByRole() {
 		TaskItemStore items = mock(TaskItemStore.class);
-		TaskVersionStore versions = mock(TaskVersionStore.class);
+		TaskStore tasks = mock(TaskStore.class);
 		TaskItem existing = assigned("item-admin", 6);
-		existing.setTaskVersionId("version-1");
 		when(items.findById("item-admin")).thenReturn(Optional.of(existing));
-		when(versions.findById("version-1")).thenReturn(Optional.of(reviewVersion()));
+		stubTask(tasks, reviewVersion());
 		TaskItem rejected = pending("item-admin", 7);
 		rejected.setStatus(TaskItemStatus.RECORDING_PENDING);
 		when(items.adminDecideReviewIfCurrent(any())).thenReturn(Optional.of(rejected));
-		ReviewService service = new ReviewService(items, versions, mock(IdentityDirectory.class), CLOCK);
+		ReviewService service = new ReviewService(items, mock(IdentityDirectory.class), tasks, CLOCK);
 
 		TaskItem result = service.reject(
 			"item-admin", "admin-single-reject", 6, List.of("空音频"), "返修", admin()
@@ -362,7 +359,7 @@ class ReviewServiceTests {
 	@Test
 	void reviewerCannotBatchApprove() {
 		ReviewService service = new ReviewService(
-			mock(TaskItemStore.class), mock(TaskVersionStore.class), mock(IdentityDirectory.class), CLOCK
+			mock(TaskItemStore.class), mock(IdentityDirectory.class), mock(TaskStore.class), CLOCK
 		);
 
 		assertThatThrownBy(() -> service.batchApprove(
@@ -374,6 +371,7 @@ class ReviewServiceTests {
 	private TaskItem pending(String id, long revision) {
 		TaskItem item = new TaskItem();
 		item.setId(id);
+		item.setTaskId("task-1");
 		item.setStatus(TaskItemStatus.REVIEW_PENDING);
 		item.setRevision(revision);
 		item.setCollectorId("collector-1");
@@ -390,19 +388,24 @@ class ReviewServiceTests {
 
 	private TaskItem assigned(String id, long revision) {
 		TaskItem item = pending(id, revision);
-		item.setTaskVersionId("version-1");
 		item.setReviewerId("reviewer-1");
 		item.setReviewAssignmentId("review-assignment-1");
 		return item;
 	}
 
-	private TaskVersion reviewVersion() {
-		TaskVersion version = new TaskVersion();
-		version.setId("version-1");
-		version.setHumanReviewEnabled(true);
-		version.setResultType(com.recording.platform.task.model.TaskResultType.TEXT);
-		version.setRejectionReasons(List.of("空音频", "内容不符"));
-		return version;
+	private TaskConfiguration reviewVersion() {
+		TaskConfiguration configuration = new TaskConfiguration();
+		configuration.setHumanReviewEnabled(true);
+		configuration.setResultType(com.recording.platform.task.model.TaskResultType.TEXT);
+		configuration.setRejectionReasons(List.of("空音频", "内容不符"));
+		return configuration;
+	}
+
+	private void stubTask(TaskStore tasks, TaskConfiguration configuration) {
+		TaskRecord task = new TaskRecord();
+		task.setId("task-1");
+		task.setConfiguration(configuration);
+		when(tasks.findById("task-1")).thenReturn(Optional.of(task));
 	}
 
 	private com.recording.platform.task.model.SubmittedRecording recording() {

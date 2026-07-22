@@ -63,14 +63,13 @@ public class TaskQueryService {
 		String name,
 		String description,
 		com.recording.platform.task.model.TaskLifecycle lifecycle,
-		String currentVersionId,
-		int currentVersionNumber,
+		com.recording.platform.task.model.TaskConfiguration configuration,
 		String permissionStatus
 	) {
 		static TaskView from(TaskRecord task, String permissionStatus) {
 			return new TaskView(
 				task.getId(), task.getTaskCode(), task.getName(), task.getDescription(),
-				task.getLifecycle(), task.getCurrentVersionId(), task.getCurrentVersionNumber(), permissionStatus
+				task.getLifecycle(), task.getConfiguration(), permissionStatus
 			);
 		}
 	}

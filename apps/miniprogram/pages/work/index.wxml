@@ -4,7 +4,7 @@
   <block wx:else>
     <view class="card task-card">
       <view class="task-heading">
-        <view class="task-identity"><view class="title work-title">数据 {{item.itemCode}}</view><view class="subtle">任务版本 v{{item.taskVersionNumber}}</view></view>
+        <view class="task-identity"><view class="title work-title">数据 {{item.itemCode}}</view></view>
         <view class="status-actions"><view class="tag">{{statusText}}</view><button wx:if="{{canRelease}}" class="trash-button" loading="{{releasing}}" aria-label="释放任务" bindtap="release"><image src="../../assets/icons/iconfont/trash.svg" mode="aspectFit" /></button></view>
       </view>
       <view wx:if="{{item.currentRejection}}" class="rejection-box"><text>驳回原因：</text><text wx:for="{{item.currentRejection.reasons}}" wx:key="*this">{{item}} </text><text>{{item.currentRejection.note}}</text></view>
@@ -22,6 +22,7 @@
 
         <view wx:elif="{{recordState==='recording'||recordState==='paused'}}" class="recorder-state active-state">
           <view class="recording-status"><view class="status-dot {{recordState==='paused'?'paused':''}}"></view><text>{{recordState==='paused'?'已暂停':'录音中'}}</text></view>
+          <view class="recording-duration">{{recordingDurationText}}</view>
           <view class="wave"><view wx:for="{{levelBars}}" wx:key="index" class="wave-bar" style="height:{{recordState==='paused'?8:item}}rpx" /></view>
           <view class="record-actions">
             <button wx:if="{{recordState==='recording'}}" class="record-control" bindtap="pauseRecord"><image src="../../assets/icons/iconfont/pause.svg" mode="aspectFit" /><text>暂停</text></button>
@@ -44,10 +45,10 @@
       <view wx:else class="subtle">暂无可播放录音</view>
     </view>
 
-    <view wx:if="{{version.resultType==='TEXT'&&editable}}" class="card"><view class="section-title">文本结果</view><textarea class="textarea work-textarea" maxlength="-1" placeholder="请输入文本" value="{{text}}" bindinput="textInput" /></view>
-    <view wx:if="{{version.resultType==='TEXT'&&readOnly}}" class="card"><view class="section-title">文本结果</view><view class="readonly-text">{{text||'暂无文本'}}</view></view>
+    <view wx:if="{{configuration.resultType==='TEXT'&&editable}}" class="card"><view class="section-title">文本结果</view><view class="result-hint">文本或录音至少提交一项，也可以同时提交</view><textarea class="textarea work-textarea" maxlength="-1" placeholder="请输入文本" value="{{text}}" bindinput="textInput" /></view>
+    <view wx:if="{{configuration.resultType==='TEXT'&&readOnly}}" class="card"><view class="section-title">文本结果</view><view class="readonly-text">{{text||'暂无文本'}}</view></view>
     <view wx:if="{{editable}}" class="card submit-card">
-      <view wx:if="{{showAutoClaimNext}}" class="auto-next-row"><view><view class="auto-next-title">提交后自动领取下一条</view><view class="subtle">提交成功后直接进入下一条作业</view></view><switch checked="{{autoClaimNextEnabled}}" color="#2563eb" bindchange="autoClaimNextChange" /></view>
+      <view wx:if="{{showAutoClaimNext}}" class="auto-next-row"><view><view class="auto-next-title">提交后自动领取下一条</view><view class="subtle">提交成功后直接进入下一条作业</view></view><switch class="capsule-switch" checked="{{autoClaimNextEnabled}}" color="#2563eb" bindchange="autoClaimNextChange" /></view>
       <button class="button submit-button" loading="{{submitting}}" disabled="{{submitting||recordState==='recording'||recordState==='paused'||recordState==='stopping'}}" bindtap="submit">{{submitLabel}}</button>
     </view>
   </block>

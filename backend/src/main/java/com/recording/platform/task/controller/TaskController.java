@@ -10,7 +10,7 @@ import com.recording.platform.task.model.TaskResultType;
 import com.recording.platform.task.service.CreateTaskCommand;
 import com.recording.platform.task.service.TaskManagementService;
 import com.recording.platform.task.service.TaskQueryService;
-import com.recording.platform.task.service.TaskVersionSpec;
+import com.recording.platform.task.service.TaskConfigurationSpec;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import java.util.List;
@@ -54,7 +54,7 @@ public class TaskController {
 	) {
 		return idempotency.execute(authentication, "task:create", operationId, TaskRecord.class, () ->
 			management.create(new CreateTaskCommand(
-				request.name(), request.description(), request.version().spec()
+				request.name(), request.description(), request.configuration().spec()
 			))
 		);
 	}
@@ -67,7 +67,7 @@ public class TaskController {
 		Authentication authentication
 	) {
 		return idempotency.execute(authentication, "task:update:" + taskId, operationId, TaskRecord.class, () ->
-			management.updateStructure(taskId, request.name(), request.description(), request.version().spec())
+			management.updateStructure(taskId, request.name(), request.description(), request.configuration().spec())
 		);
 	}
 
@@ -104,15 +104,6 @@ public class TaskController {
 		return queries.get(taskId, actor);
 	}
 
-	@GetMapping("/{taskId}/versions")
-	public java.util.List<com.recording.platform.task.model.TaskVersion> versions(
-		@PathVariable String taskId,
-		@AuthenticationPrincipal PlatformPrincipal actor
-	) {
-		queries.get(taskId, actor);
-		return management.versions(taskId);
-	}
-
 	private TaskRecord transition(
 		Authentication authentication,
 		String action,
@@ -128,10 +119,10 @@ public class TaskController {
 	public record CreateTaskRequest(
 		@NotNull String name,
 		String description,
-		@NotNull @Valid TaskVersionRequest version
+		@NotNull @Valid TaskConfigurationRequest configuration
 	) { }
-	public record UpdateTaskRequest(@NotNull String name, String description, @NotNull @Valid TaskVersionRequest version) { }
-	public record TaskVersionRequest(
+	public record UpdateTaskRequest(@NotNull String name, String description, @NotNull @Valid TaskConfigurationRequest configuration) { }
+	public record TaskConfigurationRequest(
 		@NotNull Set<ReferenceType> referenceTypes,
 		@NotNull TaskResultType resultType,
 		Boolean humanReviewEnabled,
@@ -145,8 +136,8 @@ public class TaskController {
 		String aiProvider,
 		String aiModel
 	) {
-		TaskVersionSpec spec() {
-			return new TaskVersionSpec(
+		TaskConfigurationSpec spec() {
+			return new TaskConfigurationSpec(
 				referenceTypes,
 				resultType,
 				humanReviewEnabled == null || humanReviewEnabled,

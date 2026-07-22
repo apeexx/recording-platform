@@ -11,10 +11,9 @@ import com.recording.platform.task.model.TaskItem;
 import com.recording.platform.task.model.TaskItemStatus;
 import com.recording.platform.task.model.TaskLifecycle;
 import com.recording.platform.task.model.TaskRecord;
-import com.recording.platform.task.model.TaskVersion;
+import com.recording.platform.task.model.TaskConfiguration;
 import com.recording.platform.task.store.TaskItemStore;
 import com.recording.platform.task.store.TaskStore;
-import com.recording.platform.task.store.TaskVersionStore;
 import java.net.URI;
 import java.time.Clock;
 import java.time.Instant;
@@ -33,7 +32,6 @@ import org.springframework.stereotype.Service;
 public class TaskItemCreationService {
 	private static final Logger LOGGER = LoggerFactory.getLogger(TaskItemCreationService.class);
 	private final TaskStore tasks;
-	private final TaskVersionStore versions;
 	private final TaskItemStore items;
 	private final SafeRemoteMediaDownloader downloader;
 	private final MediaAssetStore assets;
@@ -41,14 +39,12 @@ public class TaskItemCreationService {
 
 	public TaskItemCreationService(
 		TaskStore tasks,
-		TaskVersionStore versions,
 		TaskItemStore items,
 		SafeRemoteMediaDownloader downloader,
 		MediaAssetStore assets,
 		Clock clock
 	) {
 		this.tasks = tasks;
-		this.versions = versions;
 		this.items = items;
 		this.downloader = downloader;
 		this.assets = assets;
@@ -70,18 +66,14 @@ public class TaskItemCreationService {
 		if (task.getLifecycle() != TaskLifecycle.RUNNING && task.getLifecycle() != TaskLifecycle.PAUSED) {
 			throw new ApiException(HttpStatus.CONFLICT, "TASK_VERSION_NOT_PUBLISHED", "任务发布后才能添加数据");
 		}
-		TaskVersion version = versions.findById(task.getCurrentVersionId())
-			.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "TASK_VERSION_NOT_FOUND", "任务版本不存在"));
-		if (!version.isPublished()) {
-			throw new ApiException(HttpStatus.CONFLICT, "TASK_VERSION_NOT_PUBLISHED", "任务版本尚未发布");
-		}
+		TaskConfiguration configuration = task.getConfiguration();
 		String text = trimToNull(command.referenceText());
 		String audioUrl = trimToNull(command.referenceAudioUrl());
 		String videoUrl = trimToNull(command.referenceVideoUrl());
 		if (text == null && audioUrl == null && videoUrl == null) {
 			throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "ITEM_REFERENCE_REQUIRED", "每条数据至少需要一种参考内容");
 		}
-		validateEnabledReferences(version, text, audioUrl, videoUrl);
+		validateEnabledReferences(configuration, text, audioUrl, videoUrl);
 		long sequence = tasks.nextItemSequence(taskId);
 		if (sequence < 1) throw new ApiException(HttpStatus.CONFLICT, "TASK_STATE_CHANGED", "任务状态已变化");
 		if (sequence > 1_000_000) {
@@ -91,8 +83,6 @@ public class TaskItemCreationService {
 		TaskItem item = new TaskItem();
 		item.setId(UUID.randomUUID().toString());
 		item.setTaskId(taskId);
-		item.setTaskVersionId(version.getId());
-		item.setTaskVersionNumber(version.getVersionNumber());
 		item.setSequence(sequence);
 		item.setItemCode(itemCode);
 		item.setCreationOperationId(normalizedOperationId);
@@ -137,11 +127,14 @@ public class TaskItemCreationService {
 		}
 	}
 
-	private void validateEnabledReferences(TaskVersion version, String text, String audio, String video) {
-		if (text != null && !version.getReferenceTypes().contains(ReferenceType.TEXT)
-			|| audio != null && !version.getReferenceTypes().contains(ReferenceType.AUDIO)
-			|| video != null && !version.getReferenceTypes().contains(ReferenceType.VIDEO)) {
-			throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "REFERENCE_TYPE_NOT_ENABLED", "参考内容类型未在任务版本中启用");
+	private void validateEnabledReferences(TaskConfiguration configuration, String text, String audio, String video) {
+		if (configuration == null) {
+			throw new ApiException(HttpStatus.CONFLICT, "TASK_CONFIGURATION_MISSING", "任务配置不存在");
+		}
+		if (text != null && !configuration.getReferenceTypes().contains(ReferenceType.TEXT)
+			|| audio != null && !configuration.getReferenceTypes().contains(ReferenceType.AUDIO)
+			|| video != null && !configuration.getReferenceTypes().contains(ReferenceType.VIDEO)) {
+			throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "REFERENCE_TYPE_NOT_ENABLED", "参考内容类型未在任务中启用");
 		}
 	}
 

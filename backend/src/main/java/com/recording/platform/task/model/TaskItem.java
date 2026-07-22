@@ -35,8 +35,6 @@ public class TaskItem {
 	@Version
 	private Long version;
 	private String taskId;
-	private String taskVersionId;
-	private int taskVersionNumber;
 	private long sequence;
 	private String itemCode;
 	private String creationOperationId;
