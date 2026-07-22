@@ -30,12 +30,15 @@ describe('任务页面 API', () => {
   it('任务详情数据池每页十条并提供服务端分页', () => {
     const detail = fs.readFileSync(path.resolve('src/pages/admin/tasks/TaskDetailPage.vue'), 'utf8')
     expect(detail).toContain("import PaginationControls from '../../../components/admin/PaginationControls.vue'")
-    expect(detail).toContain('const ITEM_PAGE_SIZE = 10')
-    expect(detail).toContain('taskApi.items(route.params.id, page.value, ITEM_PAGE_SIZE)')
+    expect(detail).toContain('const itemPageSize = ref(10)')
+    expect(detail).toContain('taskApi.items(route.params.id, page.value, itemPageSize.value)')
     expect(detail).toContain('function changePage(value)')
+    expect(detail).toContain('async function changePageSize(value)')
+    expect(detail).toContain('itemPageSize.value = value')
+    expect(detail).toMatch(/changePageSize\(value\)[\s\S]*page\.value = 0[\s\S]*selected\.value = new Set\(\)/)
     expect(detail).toContain('selected.value = new Set()')
     expect(detail).toContain('数据池（共 {{ total }} 条）')
-    expect(detail).toContain('<PaginationControls :page="page" :size="ITEM_PAGE_SIZE" :total="total" @change="changePage" />')
+    expect(detail).toContain('<PaginationControls numbered :page="page" :size="itemPageSize" :page-sizes="[5, 10, 20]" :total="total" @change="changePage" @size-change="changePageSize" />')
     expect(detail).not.toContain('taskApi.items(route.params.id, 0, 100)')
   })
   it('任务状态和数据池请求使用后端真实路径', async () => {

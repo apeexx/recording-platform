@@ -62,7 +62,7 @@ Web 端已建立基础主题变量，变量文件位于 `apps/web/src/styles/the
 
 Web 管理端已建立 Vue Router 导航壳。未登录访问后台会进入 `/login`；ADMIN 默认进入 `/admin/dashboard`，REVIEWER 默认进入 `/admin/review` 并先选择任务。首次登录待改密账号只能访问 `/first-password`，改密后清除会话并要求重新登录。
 
-侧边栏菜单统一配置在 `apps/web/src/config/adminSidebar.js`，路由统一位于 `apps/web/src/router/`。菜单按 ADMIN/REVIEWER 动态过滤，未业务化的旧静态原型不再暴露在生产导航和路由。`apps/web/src/lib/httpClient.js` 统一处理 Cookie、CSRF、JSON/multipart、幂等头、结构化错误和会话接管下线；CSRF 失效时只刷新令牌并自动重试一次，真实角色越权不会重试。任务、数据池、授权、审核、用户、记录和统计页面均通过该请求层接入真实接口。任务详情中的数据池使用每页 10 条的服务端分页，独立“任务数据池”页面保持每页 20 条。
+侧边栏菜单统一配置在 `apps/web/src/config/adminSidebar.js`，路由统一位于 `apps/web/src/router/`。菜单按 ADMIN/REVIEWER 动态过滤，未业务化的旧静态原型不再暴露在生产导航和路由。`apps/web/src/lib/httpClient.js` 统一处理 Cookie、CSRF、JSON/multipart、幂等头、结构化错误和会话接管下线；CSRF 失效时只刷新令牌并自动重试一次，真实角色越权不会重试。任务、数据池、授权、审核、用户、记录和统计页面均通过该请求层接入真实接口。任务详情中的数据池使用数字服务端分页，支持每页 5/10/20 条并默认 10 条；独立“任务数据池”页面保持每页 20 条。
 
 “语音生成”模块位于 `apps/web/src/pages/admin/voice-generation/`，当前已接入后端真实接口，支持 0 元试听、付费克隆、日常合成、声音配置和生成记录。
 

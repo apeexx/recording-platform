@@ -11,7 +11,7 @@ import { useNotifications } from '../../../composables/useNotifications.js'
 
 const notifications = useNotifications()
 const route = useRoute()
-const ITEM_PAGE_SIZE = 10
+const itemPageSize = ref(10)
 const task = ref(null)
 const taskVersion = ref(null)
 const items = ref([])
@@ -27,9 +27,9 @@ const job = ref(null)
 const itemForm = reactive({ referenceText: '', referenceAudioUrl: '', referenceVideoUrl: '' })
 
 async function loadItems() {
-  const result = await taskApi.items(route.params.id, page.value, ITEM_PAGE_SIZE)
+  const result = await taskApi.items(route.params.id, page.value, itemPageSize.value)
   const nextTotal = Number(result.total) || 0
-  const lastPage = Math.max(Math.ceil(nextTotal / ITEM_PAGE_SIZE) - 1, 0)
+  const lastPage = Math.max(Math.ceil(nextTotal / itemPageSize.value) - 1, 0)
   if (page.value > lastPage) {
     page.value = lastPage
     return loadItems()
@@ -120,6 +120,13 @@ async function changePage(value) {
   await load()
 }
 
+async function changePageSize(value) {
+  itemPageSize.value = value
+  page.value = 0
+  selected.value = new Set()
+  await load()
+}
+
 async function batch(action) {
   if (!selected.value.size || !confirm(`确认批量执行 ${action}，共 ${selected.value.size} 条？`)) return
   const commands = items.value.filter((row) => selected.value.has(row.id)).map((row) => ({ itemId: row.id, expectedRevision: row.revision }))
@@ -197,7 +204,7 @@ onMounted(load)
                 <tbody><tr v-for="row in items" :key="row.id"><td><input type="checkbox" :checked="selected.has(row.id)" @change="toggle(row)"></td><td>{{ row.itemCode }}</td><td>{{ statusLabel('item', row.status) }}</td><td>{{ row.collectorId || '-' }}</td><td>{{ row.currentResult?.audio?.durationMillis ? `${Math.round(row.currentResult.audio.durationMillis / 1000)}秒` : row.currentResult?.text ? '文本' : '-' }}</td><td><button v-if="row.status !== 'DISCARDED'" class="button-link is-danger" @click="itemAction(row, 'discard')">废弃</button><button v-else class="button-link" @click="itemAction(row, 'restore')">恢复</button><router-link class="button-link" :to="`/admin/items/${row.id}/operations`">记录</router-link></td></tr></tbody>
               </table>
             </div>
-            <PaginationControls :page="page" :size="ITEM_PAGE_SIZE" :total="total" @change="changePage" />
+            <PaginationControls numbered :page="page" :size="itemPageSize" :page-sizes="[5, 10, 20]" :total="total" @change="changePage" @size-change="changePageSize" />
           </AsyncState>
         </div>
       </div>
