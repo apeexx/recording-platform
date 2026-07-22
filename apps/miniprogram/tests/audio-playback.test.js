@@ -3,9 +3,8 @@ const assert = require('node:assert/strict')
 
 let createAudioPlayback
 let formatDuration
-let pauseActiveAudio
 try {
-	({ createAudioPlayback, formatDuration, pauseActiveAudio } = require('../services/audioPlayback.js'))
+	({ createAudioPlayback, formatDuration } = require('../services/audioPlayback.js'))
 } catch (_) { }
 
 function fakeContext() {
@@ -80,7 +79,7 @@ test('资源可播放后会补齐未知总时长', () => {
 	player.dispose()
 })
 
-test('后播放的实例会暂停上一实例并转发播放错误', () => {
+test('多个音频实例可以同时播放并转发各自错误', () => {
 	assert.equal(typeof createAudioPlayback, 'function')
 	const firstContext = fakeContext()
 	const secondContext = fakeContext()
@@ -91,21 +90,18 @@ test('后播放的实例会暂停上一实例并转发播放错误', () => {
 	second.setSource('/tmp/second.wav', 1_000)
 	first.toggle()
 	second.toggle()
-	assert.equal(firstContext.pauseCount, 1)
+	assert.equal(firstContext.playCount, 1)
+	assert.equal(secondContext.playCount, 1)
+	assert.equal(firstContext.pauseCount, 0)
 	secondContext.emit('error', { errMsg: 'decode failed' })
 	assert.deepEqual(errors, ['音频播放失败'])
 	first.dispose()
 	second.dispose()
 })
 
-test('页面媒体协调器可以暂停当前活动音频', () => {
-	const context = fakeContext()
-	const player = createAudioPlayback({ createContext: () => context })
-	player.setSource('/tmp/reference.wav', 1_000)
-	player.play()
-	pauseActiveAudio()
-	assert.equal(context.pauseCount, 1)
-	player.dispose()
+test('音频播放模块不再暴露全局活动播放器暂停入口', () => {
+	const playback = require('../services/audioPlayback.js')
+	assert.equal(playback.pauseActiveAudio, undefined)
 })
 
 test('资源切换会暂停旧音频、复位进度并在销毁后停止响应', () => {

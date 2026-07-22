@@ -1,7 +1,6 @@
 const { validateSubmission } = require('../../services/recorder.js')
 const { createRecordingSession } = require('../../services/recordingSession.js')
 const { waveformBars } = require('../../services/pcm.js')
-const { pauseActiveAudio } = require('../../services/audioPlayback.js')
 const { claimNextWithRetry } = require('../../services/workflow.js')
 const feedback = require('../../services/feedback.js')
 
@@ -30,7 +29,7 @@ Page({
     const { requireCompleteProfile } = require('../../services/profileGuard.js')
     if (await requireCompleteProfile(getApp())) this.load()
   },
-  async onUnload() { pauseActiveAudio(); this.videoContext?.pause(); await this.session?.dispose() },
+  async onUnload() { await this.session?.dispose() },
   setupRecorder() {
     this.session = createRecordingSession({
       recorder: wx.getRecorderManager(), fs: wx.getFileSystemManager(), userDataPath: wx.env.USER_DATA_PATH,
@@ -89,7 +88,6 @@ Page({
   },
   startRecord() {
     if (!this.data.editable || !this.session) return
-    this.pauseAllPlayback()
     this.setData({ audioPath: '', audioDuration: 0, levelBars: waveformBars(0) })
     this.session.start()
   },
@@ -100,7 +98,6 @@ Page({
   },
   resumeRecord() {
     if (!this.data.editable) return
-    this.pauseAllPlayback()
     this.session?.resume()
   },
   async stopRecord() {
@@ -109,20 +106,6 @@ Page({
       const result = await this.session.stop()
       this.setData({ audioPath: result.filePath, audioDuration: result.durationMillis })
     } catch (error) { feedback.error(error.message || '录音保存失败') }
-  },
-  pauseAllPlayback() {
-    pauseActiveAudio()
-    if (!this.videoContext) this.videoContext = wx.createVideoContext('reference-video', this)
-    this.videoContext.pause()
-  },
-  audioPlayRequest() {
-    if (this.data.recordState === 'recording') this.pauseRecord()
-    if (!this.videoContext) this.videoContext = wx.createVideoContext('reference-video', this)
-    this.videoContext.pause()
-  },
-  videoPlay() {
-    if (this.data.recordState === 'recording') this.pauseRecord()
-    pauseActiveAudio()
   },
   textInput(event) { if (this.data.editable) this.setData({ text: event.detail.value }) },
   audioPlaybackError(event) {

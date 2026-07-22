@@ -21,12 +21,10 @@ test('作业页成功领取后直接重定向，失败回当前任务数据页',
   assert.match(script, /\/pages\/work-list\/index\?taskId=/)
 })
 
-test('录音、音频和视频播放入口统一暂停其他媒体', () => {
-  assert.match(script, /pauseAllPlayback/)
-  assert.match(script, /audioPlayRequest/)
-  assert.match(script, /videoPlay/)
-  assert.match(template, /bindplayrequest="audioPlayRequest"/)
-  assert.match(template, /bindplay="videoPlay"/)
+test('录音、音频和视频播放入口保持独立', () => {
+  assert.doesNotMatch(script, /pauseActiveAudio|pauseAllPlayback|audioPlayRequest|\bvideoPlay\s*\(|createVideoContext/)
+  assert.doesNotMatch(template, /bindplayrequest=/)
+  assert.doesNotMatch(template, /bindplay="videoPlay"/)
 })
 
 test('操作错误不再作为作业卡片底部文字渲染', () => {

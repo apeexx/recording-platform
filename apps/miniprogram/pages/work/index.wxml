@@ -9,8 +9,8 @@
       </view>
       <view wx:if="{{item.currentRejection}}" class="rejection-box"><text>驳回原因：</text><text wx:for="{{item.currentRejection.reasons}}" wx:key="*this">{{item}} </text><text>{{item.currentRejection.note}}</text></view>
       <view wx:if="{{item.referenceText}}" class="reference-text">{{item.referenceText}}</view>
-      <audio-player wx:if="{{referenceAudioPath}}" class="reference-player" src="{{referenceAudioPath}}" label="参考音频" duration-millis="0" bindplayrequest="audioPlayRequest" binderror="referenceAudioPlaybackError" />
-      <video wx:if="{{referenceVideoPath}}" id="reference-video" class="media" src="{{referenceVideoPath}}" controls bindplay="videoPlay" binderror="videoPlaybackError" />
+      <audio-player wx:if="{{referenceAudioPath}}" class="reference-player" src="{{referenceAudioPath}}" label="参考音频" duration-millis="0" binderror="referenceAudioPlaybackError" />
+      <video wx:if="{{referenceVideoPath}}" class="media" src="{{referenceVideoPath}}" controls binderror="videoPlaybackError" />
     </view>
 
     <view wx:if="{{editable}}" class="card recorder-card">
@@ -33,18 +33,18 @@
         <view wx:elif="{{recordState==='stopping'}}" class="recorder-state processing-state"><view class="processing-ring"></view><view class="recorder-hint">正在生成音频…</view></view>
 
         <view wx:elif="{{audioPath&&recordState==='stopped'}}" class="recorder-state completed-state">
-          <audio-player src="{{audioPath}}" label="录制音频" duration-millis="{{audioDuration}}" bindplayrequest="audioPlayRequest" binderror="audioPlaybackError" />
+          <audio-player src="{{audioPath}}" label="录制音频" duration-millis="{{audioDuration}}" binderror="audioPlaybackError" />
           <button class="rerecord-button" bindtap="startRecord">重新录制</button>
         </view>
       </view>
     </view>
 
     <view wx:if="{{readOnly}}" class="card readonly-result">
-      <audio-player wx:if="{{audioPath}}" src="{{audioPath}}" label="已提交录音" duration-millis="{{audioDuration}}" bindplayrequest="audioPlayRequest" binderror="audioPlaybackError" />
+      <audio-player wx:if="{{audioPath}}" src="{{audioPath}}" label="已提交录音" duration-millis="{{audioDuration}}" binderror="audioPlaybackError" />
       <view wx:else class="subtle">暂无可播放录音</view>
     </view>
 
-    <view wx:if="{{version.resultType==='TEXT'&&editable}}" class="card"><view class="section-title">文本结果</view><textarea class="textarea" maxlength="-1" placeholder="请输入文本" value="{{text}}" bindinput="textInput" /></view>
+    <view wx:if="{{version.resultType==='TEXT'&&editable}}" class="card"><view class="section-title">文本结果</view><textarea class="textarea work-textarea" maxlength="-1" placeholder="请输入文本" value="{{text}}" bindinput="textInput" /></view>
     <view wx:if="{{version.resultType==='TEXT'&&readOnly}}" class="card"><view class="section-title">文本结果</view><view class="readonly-text">{{text||'暂无文本'}}</view></view>
     <view wx:if="{{editable}}" class="card submit-card">
       <view wx:if="{{showAutoClaimNext}}" class="auto-next-row"><view><view class="auto-next-title">提交后自动领取下一条</view><view class="subtle">提交成功后直接进入下一条作业</view></view><switch checked="{{autoClaimNextEnabled}}" color="#2563eb" bindchange="autoClaimNextChange" /></view>

@@ -13,8 +13,8 @@
 .media{display:block;width:100%;margin-top:22rpx;border-radius:18rpx;overflow:hidden}
 
 .recorder-card{padding:0;overflow:hidden}
-.recorder-stage{box-sizing:border-box;display:flex;align-items:center;justify-content:center;width:100%;min-height:620rpx;padding:34rpx}
-.recorder-state{box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;min-height:552rpx}
+.recorder-stage{box-sizing:border-box;display:flex;align-items:center;justify-content:center;width:100%;min-height:460rpx;padding:28rpx}
+.recorder-state{box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;min-height:392rpx}
 .mic-button{display:grid;place-items:center;width:156rpx;height:156rpx;margin:0;padding:0;border-radius:50%;background:#d95f45;box-shadow:0 0 0 12rpx #fff,0 0 0 14rpx #f4ad9e,0 18rpx 36rpx rgba(217,95,69,.2)}
 .mic-button::after{border:none}
 .mic-button image{width:66rpx;height:66rpx;filter:brightness(0) invert(1)}
@@ -38,6 +38,7 @@
 
 .readonly-result{padding:28rpx}
 .section-title{font-weight:700;color:#334155}
+.work-textarea{height:200rpx;min-height:200rpx}
 .readonly-text{margin-top:18rpx;line-height:1.7;white-space:pre-wrap}
 .submit-card{padding:28rpx}
 .auto-next-row{display:flex;align-items:center;justify-content:space-between;gap:24rpx;margin-bottom:24rpx}

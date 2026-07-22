@@ -1,9 +1,3 @@
-let activePlayer = null
-
-function pauseActiveAudio() {
-	activePlayer?.pause()
-}
-
 function formatDuration(milliseconds) {
 	const seconds = Math.max(0, Math.round((Number(milliseconds) || 0) / 1000))
 	return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
@@ -31,7 +25,6 @@ function createAudioPlayback({ createContext, onState = () => {}, onError = () =
 	const player = {
 		setSource(nextSource, nextDurationMillis = 0) {
 			if (disposed) return
-			if (activePlayer === player) activePlayer = null
 			if (source) context.pause()
 			source = nextSource || ''
 			durationMillis = Math.max(0, Number(nextDurationMillis) || 0)
@@ -42,8 +35,6 @@ function createAudioPlayback({ createContext, onState = () => {}, onError = () =
 		},
 		play() {
 			if (disposed || !source) return
-			if (activePlayer && activePlayer !== player) activePlayer.pause()
-			activePlayer = player
 			context.play()
 		},
 		pause() {
@@ -61,7 +52,6 @@ function createAudioPlayback({ createContext, onState = () => {}, onError = () =
 		dispose() {
 			if (disposed) return
 			disposed = true
-			if (activePlayer === player) activePlayer = null
 			context.destroy()
 		},
 	}
@@ -74,7 +64,6 @@ function createAudioPlayback({ createContext, onState = () => {}, onError = () =
 	context.onPause(() => {
 		if (disposed) return
 		playing = false
-		if (activePlayer === player) activePlayer = null
 		emit()
 	})
 	context.onCanplay(() => {
@@ -94,14 +83,12 @@ function createAudioPlayback({ createContext, onState = () => {}, onError = () =
 		if (disposed) return
 		playing = false
 		currentMillis = 0
-		if (activePlayer === player) activePlayer = null
 		context.seek(0)
 		emit()
 	})
 	context.onError(() => {
 		if (disposed) return
 		playing = false
-		if (activePlayer === player) activePlayer = null
 		emit()
 		onError('音频播放失败')
 	})
@@ -109,4 +96,4 @@ function createAudioPlayback({ createContext, onState = () => {}, onError = () =
 	return player
 }
 
-module.exports = { createAudioPlayback, formatDuration, pauseActiveAudio }
+module.exports = { createAudioPlayback, formatDuration }
