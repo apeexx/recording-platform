@@ -81,7 +81,8 @@ Page({
       if (resultAudio.status === 'rejected') feedback.error('已提交录音加载失败')
       if (editable) this.setupRecorder()
     } catch (error) {
-      this.setData({ loadError: error.message || '加载作业失败' })
+      const loadError = error.network ? '网络链接失败，请检查网络。' : (error.message || '加载作业失败')
+      this.setData({ loadError })
     } finally {
       this.setData({ loading: false })
     }

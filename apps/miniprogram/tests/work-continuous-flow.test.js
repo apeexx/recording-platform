@@ -31,3 +31,10 @@ test('操作错误不再作为作业卡片底部文字渲染', () => {
   assert.doesNotMatch(template, /referenceAudioError|referenceVideoError|resultAudioError/)
   assert.doesNotMatch(template, /class="media-error"/)
 })
+
+test('作业页将网络加载失败转换为可读提示并保留重试入口', () => {
+  assert.match(script, /error\.network\s*\?\s*'网络链接失败，请检查网络。'/)
+  assert.match(script, /error\.message\s*\|\|\s*'加载作业失败'/)
+  assert.match(template, /\{\{loadError\}\}/)
+  assert.match(template, /bindtap="load"[^>]*>重新加载</)
+})
