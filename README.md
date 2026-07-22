@@ -168,9 +168,11 @@ POST /api/admin/users/{userId}/reset-password
 
 - 任务：`/api/tasks` 提供创建、结构编辑、发布、暂停、恢复、结束和分页查询。任务编码由数据库序列自动生成 `T000001` 格式，不允许前端输入或修改；任务条目编码使用 `{taskCode}-{7位序号}`，单任务支持至 100 万条且序号不回收。所有任务都必须录音；最终成果为 `TEXT` 时提交录音和文本，为 `AUDIO` 时只提交录音。关闭人工审核时不显示也不保存驳回预设原因。已发布任务修改结构时创建下一不可变版本，旧条目继续绑定旧版本；首期固定 `aiEnabled=false`。
 - 授权：`/api/tasks/{taskId}/grants` 与 `/access-requests` 管理直接授权、申请、原子批准/驳回和撤销。撤销只阻止新领取，不影响已领取条目的提交或释放；批准申请重放不会复活后来已撤销的授权。
-- 数据池：ADMIN 使用 `POST /api/tasks/{taskId}/items` 单条添加并传 `Idempotency-Key`，或通过 `/api/import-jobs` 异步导入。COLLECTOR 使用 `POST /api/tasks/{taskId}/items/start` 原子领取；每个任务最多保留一条普通待录制作业，同一任务再次调用返回已有条目，其他任务可分别领取。
-- 提交与返修：`POST /api/task-items/{itemId}/submit` 接收 multipart 的 `operationId`、`assignmentId`、`expectedRevision` 以及与任务成果类型匹配的文字或录音；重复 operationId 返回首次结果，过期修订返回 `409 STALE_STATE`。驳回进入独立 `REWORK_PENDING` 队列并保留原因、原采集员和 assignment；采集员可在每个任务持有一条普通待录制，并同时持有多条返修。释放清除当前结果但保留提交和操作历史。
-- 待录制唯一索引从全局 `collectorId` 调整为 `(collectorId,taskId)`。普通启动会先确保新索引创建成功，再按精确名称删除旧索引；该过程不改写 `task_items`。若需回滚，必须先确认同一采集员没有跨任务的多条 `RECORDING_PENDING`，否则旧全局唯一索引无法恢复。
+- 数据池：ADMIN 使用 `POST /api/tasks/{taskId}/items` 单条添加并传 `Idempotency-Key`，或通过 `/api/import-jobs` 异步导入。COLLECTOR 使用 `POST /api/tasks/{taskId}/items/start` 原子领取；普通待录制作业不设持有数量上限，每个新的 `Idempotency-Key` 领取一条新数据，相同幂等键重放仍返回首次条目。
+- 提交与返修：`POST /api/task-items/{itemId}/submit` 接收 multipart 的 `operationId`、`assignmentId`、`expectedRevision` 以及与任务成果类型匹配的文字或录音；重复 operationId 返回首次结果，过期修订返回 `409 STALE_STATE`。驳回进入独立 `REWORK_PENDING` 队列并保留原因、原采集员和 assignment；普通待录制和返修均可同时持有多条。释放清除当前结果但保留提交和操作历史。
+- 待录制索引迁移在应用启动时先确保普通查询索引 `(collectorId,taskId,status)`，再按精确名称幂等删除旧全局和任务级待录制唯一索引；失败则终止启动且不改写 `task_items`。若需回滚任一旧唯一索引，必须先处理与旧口径冲突的多条 `RECORDING_PENDING`，否则索引无法恢复。
+- 小程序作业页的“提交后自动领取下一条”首次默认开启并使用本地 `autoClaimNextEnabled` 记忆。待录制或待返修提交成功后直接领取并打开下一条；领取失败会提示原因并进入当前任务数据页；关闭开关时返回上一页，`SUBMITTED` 的“保存修改”不触发自动领取。
+- 作业页统一协调录音、参考音频、参考视频和录制结果：任一媒体开始时只暂停其他活动媒体，不自动恢复。普通操作错误使用悬浮 Toast；任务大厅、任务数据、个人统计和作业整体加载失败保留可重试阻塞状态。
 - 录音文件：`RECORDING_STORAGE_DIR` 的相对值按仓库根目录解析，目录下只使用相对媒体路径；当前录音固定为 `{taskCode}/{itemCode}.wav|mp3`。上传先进入 `temp/`，完成扩展名、魔数、100MB、单声道、采样率和时长校验后原子替换，失败恢复旧文件。待删除的旧稳定文件会先移动到 `temp/backups/` 唯一路径，避免后续重录复用同一路径时误删新文件；`GET /api/media/{mediaId}` 鉴权读取录音及受保护媒体并支持单 Range。`GET /api/media/public/reference/{mediaId}` 只公开参考音频和参考视频，历史条目由小程序使用该 URL 直接播放；录音结果通过此路径固定返回 404。
 - 导入固定列为 `referenceText`、`referenceAudioUrl`、`referenceVideoUrl`，仅支持 `.csv`，支持部分成功、失败行重试及幂等。条目不再接收或保存外部编号，只使用系统生成的条目编号。单文件最多 50000 个数据行；每 100 行持久化一次进度，行错误摘要最多保存 1000 条，完整失败行号单独保留用于重试。
 - 本地批量导入正向测试可直接使用 `docs/test-data/task-items-import-valid.csv`。该文件包含 8 条中文参考文字，不包含远程音频或视频 URL，可用于验证 CSV 解析、异步导入和数据池新增闭环。

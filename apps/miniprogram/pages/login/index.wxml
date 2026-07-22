@@ -14,7 +14,6 @@
       <input class="login-input" password placeholder="请输入密码" data-field="password" bindinput="input"/>
       <button class="account-button" loading="{{loading}}" bindtap="accountLogin">登录</button>
     </block>
-    <view wx:if="{{error}}" class="error">{{error}}</view>
     <view class="switch" bindtap="switchMode">{{mode==='wechat'?'切换账号登录':'切换微信登录'}} ›</view>
   </view>
 </view>

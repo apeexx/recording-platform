@@ -2,18 +2,20 @@
   <view class="title">任务数据</view>
   <view class="subtle">按最新修改时间倒序排列；已提交可修改，待审核和已完成仅可查看。</view>
   <scroll-view class="filters" scroll-x><button wx:for="{{filters}}" wx:key="value" class="filter {{kind===item.value?'active':''}}" data-kind="{{item.value}}" disabled="{{loading}}" bindtap="filter">{{item.label}}</button></scroll-view>
-  <view wx:if="{{error}}" class="error">{{error}}</view>
-  <view wx:if="{{loading}}" class="empty">正在加载…</view>
-  <view wx:elif="{{!items.length}}" class="empty">当前页签没有任务数据</view>
-  <view wx:for="{{items}}" wx:key="id" class="card work-row" data-id="{{item.id}}" bindtap="open">
-    <view class="row"><view><strong>{{item.itemCode}}</strong><view class="subtle">{{item.taskCode}} · {{item.taskName}}</view></view><view class="tag status-{{item.status}}">{{item.statusText}}</view></view>
-    <view wx:if="{{item.currentRejection}}" class="rework-reason"><text wx:for="{{item.currentRejection.reasons}}" wx:key="*this">{{item}} </text><text>{{item.currentRejection.note}}</text></view>
-  </view>
-  <view class="pagination" wx:if="{{total>0}}">
-    <button class="page-button" disabled="{{loading||page===0}}" bindtap="previousPage">上一页</button>
-    <picker class="page-picker" mode="selector" range="{{pageOptions}}" value="{{page}}" disabled="{{loading}}" bindchange="selectPage">
-      <view class="page-summary">第 {{page+1}} 页 / 共 {{totalPages}} 页</view>
-    </picker>
-    <button class="page-button" disabled="{{loading||page+1>=totalPages}}" bindtap="nextPage">下一页</button>
-  </view>
+  <view wx:if="{{loadError}}" class="empty"><view>{{loadError}}</view><button class="button" bindtap="load">重新加载</button></view>
+  <block wx:else>
+    <view wx:if="{{loading}}" class="empty">正在加载…</view>
+    <view wx:elif="{{!items.length}}" class="empty">当前页签没有任务数据</view>
+    <view wx:for="{{items}}" wx:key="id" class="card work-row" data-id="{{item.id}}" bindtap="open">
+      <view class="row"><view><strong>{{item.itemCode}}</strong><view class="subtle">{{item.taskCode}} · {{item.taskName}}</view></view><view class="tag status-{{item.status}}">{{item.statusText}}</view></view>
+      <view wx:if="{{item.currentRejection}}" class="rework-reason"><text wx:for="{{item.currentRejection.reasons}}" wx:key="*this">{{item}} </text><text>{{item.currentRejection.note}}</text></view>
+    </view>
+    <view class="pagination" wx:if="{{total>0}}">
+      <button class="page-button" disabled="{{loading||page===0}}" bindtap="previousPage">上一页</button>
+      <picker class="page-picker" mode="selector" range="{{pageOptions}}" value="{{page}}" disabled="{{loading}}" bindchange="selectPage">
+        <view class="page-summary">第 {{page+1}} 页 / 共 {{totalPages}} 页</view>
+      </picker>
+      <button class="page-button" disabled="{{loading||page+1>=totalPages}}" bindtap="nextPage">下一页</button>
+    </view>
+  </block>
 </view>

@@ -1,12 +1,15 @@
 <view class="page">
-  <view wx:if="{{error}}" class="error">{{error}}</view>
-  <view wx:if="{{!loading && !tasks.length}}" class="empty">暂无可参与任务</view>
-  <view wx:for="{{tasks}}" wx:key="id" class="card">
-    <view class="row"><view class="title task-title">{{item.name}}</view><view class="tag">{{item.permissionText}}</view></view>
-    <view class="subtle">{{item.taskCode}} · {{item.lifecycleText}}</view>
-    <view wx:if="{{item.description}}">{{item.description}}</view>
-	<view wx:if="{{item.permissionStatus==='ACTIVE'}}" class="grid"><button class="button secondary" data-id="{{item.id}}" bindtap="openWorkList">查看任务</button><button class="button" data-id="{{item.id}}" loading="{{actingId===item.id}}" disabled="{{item.lifecycle!=='RUNNING'}}" bindtap="start">领取新数据</button></view>
-    <button wx:elif="{{item.permissionStatus==='PENDING'}}" class="button secondary" disabled>申请审批中</button>
-    <button wx:else class="button secondary" data-id="{{item.id}}" loading="{{actingId===item.id}}" bindtap="requestAccess">申请采集权限</button>
-  </view>
+  <view wx:if="{{loadError}}" class="empty"><view>{{loadError}}</view><button class="button" bindtap="load">重新加载</button></view>
+  <block wx:else>
+    <view wx:if="{{loading && !tasks.length}}" class="empty">正在加载任务…</view>
+    <view wx:elif="{{!tasks.length}}" class="empty">暂无可参与任务</view>
+    <view wx:for="{{tasks}}" wx:key="id" class="card">
+      <view class="row"><view class="title task-title">{{item.name}}</view><view class="tag">{{item.permissionText}}</view></view>
+      <view class="subtle">{{item.taskCode}} · {{item.lifecycleText}}</view>
+      <view wx:if="{{item.description}}">{{item.description}}</view>
+	  <view wx:if="{{item.permissionStatus==='ACTIVE'}}" class="grid"><button class="button secondary" data-id="{{item.id}}" bindtap="openWorkList">查看任务</button><button class="button" data-id="{{item.id}}" loading="{{actingId===item.id}}" disabled="{{item.lifecycle!=='RUNNING'}}" bindtap="start">领取新数据</button></view>
+      <button wx:elif="{{item.permissionStatus==='PENDING'}}" class="button secondary" disabled>申请审批中</button>
+      <button wx:else class="button secondary" data-id="{{item.id}}" loading="{{actingId===item.id}}" bindtap="requestAccess">申请采集权限</button>
+    </view>
+  </block>
 </view>

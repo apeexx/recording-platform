@@ -30,6 +30,17 @@ test('权限申请携带唯一幂等键', async () => {
   assert.match(captured.header['Idempotency-Key'], /^access-/)
 })
 
+test('连续领取允许调用方复用稳定幂等键', async () => {
+  let captured
+  const api = loadApi({
+    getStorageSync: () => ({token:'opaque-token'}),
+    request: options => { captured=options;options.success({statusCode:200,data:{id:'item-next'}}) }
+  })
+  await api.start('task-1', 'stable-claim-next')
+  assert.equal(captured.header['Idempotency-Key'], 'stable-claim-next')
+  assert.match(captured.url, /\/api\/tasks\/task-1\/items\/start$/)
+})
+
 test('鉴权媒体先下载为临时文件再交给播放器', async () => {
   let captured
   const api = loadApi({

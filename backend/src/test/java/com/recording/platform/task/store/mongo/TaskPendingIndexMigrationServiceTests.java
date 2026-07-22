@@ -33,15 +33,17 @@ class TaskPendingIndexMigrationServiceTests {
 	}
 
 	@Test
-	void ensuresTheTaskScopedIndexBeforeDroppingTheLegacyGlobalIndex() {
+	void ensuresTheQueryIndexBeforeDroppingBothPendingUniqueIndexes() {
 		MongoTemplate mongo = org.mockito.Mockito.mock(MongoTemplate.class);
 		IndexOperations indexes = org.mockito.Mockito.mock(IndexOperations.class);
 		IndexInfo legacy = org.mockito.Mockito.mock(IndexInfo.class);
+		IndexInfo taskScoped = org.mockito.Mockito.mock(IndexInfo.class);
 		when(mongo.indexOps(TaskItem.class)).thenReturn(indexes);
 		when(indexes.createIndex(any(IndexDefinition.class)))
-			.thenReturn(TaskPendingIndexMigrationService.TASK_SCOPED_INDEX);
+			.thenReturn(TaskPendingIndexMigrationService.QUERY_INDEX);
 		when(legacy.getName()).thenReturn(TaskPendingIndexMigrationService.LEGACY_GLOBAL_INDEX);
-		when(indexes.getIndexInfo()).thenReturn(List.of(legacy));
+		when(taskScoped.getName()).thenReturn(TaskPendingIndexMigrationService.TASK_SCOPED_INDEX);
+		when(indexes.getIndexInfo()).thenReturn(List.of(legacy, taskScoped));
 
 		boolean changed = new TaskPendingIndexMigrationService(mongo).migrate();
 
@@ -49,16 +51,16 @@ class TaskPendingIndexMigrationServiceTests {
 		ordered.verify(indexes).createIndex(any(IndexDefinition.class));
 		ordered.verify(indexes).getIndexInfo();
 		ordered.verify(indexes).dropIndex(TaskPendingIndexMigrationService.LEGACY_GLOBAL_INDEX);
+		ordered.verify(indexes).dropIndex(TaskPendingIndexMigrationService.TASK_SCOPED_INDEX);
 		assertThat(changed).isTrue();
 		ArgumentCaptor<IndexDefinition> definition = ArgumentCaptor.forClass(IndexDefinition.class);
 		verify(indexes).createIndex(definition.capture());
 		assertThat(definition.getValue().getIndexKeys())
-			.isEqualTo(new Document("collectorId", 1).append("taskId", 1));
+			.isEqualTo(new Document("collectorId", 1).append("taskId", 1).append("status", 1));
 		assertThat(definition.getValue().getIndexOptions())
-			.containsEntry("name", TaskPendingIndexMigrationService.TASK_SCOPED_INDEX)
-			.containsEntry("unique", true);
-		assertThat(definition.getValue().getIndexOptions().get("partialFilterExpression").toString())
-			.contains("status", "RECORDING_PENDING");
+			.containsEntry("name", TaskPendingIndexMigrationService.QUERY_INDEX)
+			.doesNotContainKey("unique")
+			.doesNotContainKey("partialFilterExpression");
 	}
 
 	@Test
@@ -68,8 +70,8 @@ class TaskPendingIndexMigrationServiceTests {
 		IndexInfo current = org.mockito.Mockito.mock(IndexInfo.class);
 		when(mongo.indexOps(TaskItem.class)).thenReturn(indexes);
 		when(indexes.createIndex(any(IndexDefinition.class)))
-			.thenReturn(TaskPendingIndexMigrationService.TASK_SCOPED_INDEX);
-		when(current.getName()).thenReturn(TaskPendingIndexMigrationService.TASK_SCOPED_INDEX);
+			.thenReturn(TaskPendingIndexMigrationService.QUERY_INDEX);
+		when(current.getName()).thenReturn(TaskPendingIndexMigrationService.QUERY_INDEX);
 		when(indexes.getIndexInfo()).thenReturn(List.of(current));
 
 		boolean changed = new TaskPendingIndexMigrationService(mongo).migrate();

@@ -22,7 +22,8 @@ function loadPage({api={},profile={profileComplete:true,hasCustomAvatar:false}}=
     reLaunch(){}
   }
   const session={refreshProfile:async()=>profile,completeProfile:async()=>profile,setName:async()=>profile,clear(){}}
-  vm.runInNewContext(source,{Page:value=>{definition=value},wx,getApp:()=>({globalData:{api:apiStub,session}})},{filename:'pages/profile-settings/index.js'})
+  const requireStub=()=>({success:title=>wx.showToast({title}),info:title=>wx.showToast({title,icon:'none'}),error:title=>wx.showToast({title,icon:'none'})})
+  vm.runInNewContext(source,{Page:value=>{definition=value},wx,require:requireStub,getApp:()=>({globalData:{api:apiStub,session}})},{filename:'pages/profile-settings/index.js'})
   const page={...definition,data:{...definition.data},setData(patch){Object.assign(this.data,patch)}}
   return {page,toasts,wx}
 }
@@ -68,31 +69,31 @@ test('自定义头像读取失败静默回退默认头像',async()=>{
   page.setData({avatarSrc:'/tmp/old-avatar.png'})
   await page.load()
   assert.equal(page.data.avatarSrc,'/assets/icons/default-collector-avatar.svg')
-  assert.equal(page.data.error,'')
+  assert.equal('error' in page.data,false)
   assert.equal(toasts.length,0)
 })
 
-test('资料成功重新加载会清除历史请求错误',async()=>{
+test('资料成功重新加载不维护底部错误状态',async()=>{
   const {page}=loadPage({profile:{profileComplete:true,hasCustomAvatar:false,name:'测试用户',account:'123456'}})
-  page.setData({error:'请求资源不存在',avatarSrc:'/tmp/old-avatar.png'})
+  page.setData({avatarSrc:'/tmp/old-avatar.png'})
   await page.load()
-  assert.equal(page.data.error,'')
+  assert.equal('error' in page.data,false)
   assert.equal(page.data.avatarSrc,'/assets/icons/default-collector-avatar.svg')
 })
 
-test('较慢的资料加载完成时不会覆盖加载期间产生的新错误',async()=>{
+test('较慢的资料加载完成时不会产生底部错误状态',async()=>{
   let resolveProfile
   const pendingProfile=new Promise(resolve=>{resolveProfile=resolve})
   // 用延迟完成的 refreshProfile 模拟页面加载与用户操作并发。
   const source=fs.readFileSync(path.resolve('pages/profile-settings/index.js'),'utf8')
   let definition
-  vm.runInNewContext(source,{Page:value=>{definition=value},wx:{showToast(){},showModal(){},reLaunch(){}},getApp:()=>({globalData:{api:{avatar:async()=>'/tmp/avatar.png'},session:{refreshProfile:()=>pendingProfile}}})})
+  const wx={showToast(){},showModal(){},reLaunch(){}}
+  vm.runInNewContext(source,{Page:value=>{definition=value},wx,require:()=>({success(){},info(){},error(){}}),getApp:()=>({globalData:{api:{avatar:async()=>'/tmp/avatar.png'},session:{refreshProfile:()=>pendingProfile}}})})
   const slowPage={...definition,data:{...definition.data},setData(patch){Object.assign(this.data,patch)}}
   const loading=slowPage.load()
-  slowPage.setData({error:'头像保存失败，请重试'})
   resolveProfile({profileComplete:true,hasCustomAvatar:false})
   await loading
-  assert.equal(slowPage.data.error,'头像保存失败，请重试')
+  assert.equal('error' in slowPage.data,false)
 })
 
 test('没有自定义头像时不会请求头像文件',async()=>{

@@ -27,7 +27,6 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
-import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
@@ -64,8 +63,6 @@ public class TaskPoolService {
 	public TaskItem start(String taskId, PlatformPrincipal actor) {
 		requireCollector(actor);
 		requireProfile(actor);
-		Optional<TaskItem> existing = items.findCurrentByCollectorAndTask(actor.userId(), taskId);
-		if (existing.isPresent()) return existing.get();
 		TaskRecord task = requireTask(taskId);
 		if (task.getLifecycle() != TaskLifecycle.RUNNING) {
 			throw new ApiException(HttpStatus.CONFLICT, "TASK_NOT_RUNNING", "只有进行中的任务可以领取");
@@ -80,15 +77,9 @@ public class TaskPoolService {
 			UUID.randomUUID().toString(),
 			Instant.now(clock)
 		);
-		try {
-			return items.claimAvailable(mutation).orElseThrow(() ->
-				new ApiException(HttpStatus.NOT_FOUND, "NO_AVAILABLE_ITEM", "当前没有可领取的数据")
-			);
-		} catch (DuplicateKeyException exception) {
-			return items.findCurrentByCollectorAndTask(actor.userId(), taskId).orElseThrow(() ->
-				new ApiException(HttpStatus.CONFLICT, "CLAIM_CONFLICT", "领取状态已变化，请重试")
-			);
-		}
+		return items.claimAvailable(mutation).orElseThrow(() ->
+			new ApiException(HttpStatus.NOT_FOUND, "NO_AVAILABLE_ITEM", "当前没有可领取的数据")
+		);
 	}
 
 	public TaskItemActionResult submit(String itemId, SubmitTaskItemCommand command, PlatformPrincipal actor) {

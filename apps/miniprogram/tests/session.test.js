@@ -57,11 +57,13 @@ function loadLoginPage({session,modalResult={confirm:false}}){
   const source=fs.readFileSync(path.join(__dirname,'../pages/login/index.js'),'utf8')
   const modalCalls=[]
   const switchTabs=[]
+  const toasts=[]
   let definition
-  const wx={showModal:options=>{modalCalls.push(options);options.success(modalResult)},switchTab:options=>switchTabs.push(options)}
-  vm.runInNewContext(source,{Page:value=>{definition=value},wx,getApp:()=>({globalData:{session}})},{filename:'pages/login/index.js'})
+  const wx={showModal:options=>{modalCalls.push(options);options.success(modalResult)},showToast:options=>toasts.push(options),switchTab:options=>switchTabs.push(options)}
+  const requireStub=()=>({success:title=>wx.showToast({title}),info:title=>wx.showToast({title,icon:'none'}),error:title=>wx.showToast({title,icon:'none'})})
+  vm.runInNewContext(source,{Page:value=>{definition=value},wx,require:requireStub,getApp:()=>({globalData:{session}})},{filename:'pages/login/index.js'})
   const page={...definition,data:{...definition.data},setData(patch){Object.assign(this.data,patch)}}
-  return {page,modalCalls,switchTabs}
+  return {page,modalCalls,switchTabs,toasts}
 }
 
 function accountInUse(){return {code:'ACCOUNT_IN_USE',details:{takeoverToken:'one-time-token'},message:'账号已在其他设备登录'}}
@@ -78,13 +80,13 @@ test('微信登录确认接管后只调用一次 takeover 并进入任务页',as
 
 test('数字账号登录取消接管时不调用 takeover 且停留在登录页',async()=>{
   let takeoverCalls=0
-  const {page,modalCalls,switchTabs}=loadLoginPage({session:{accountLogin:async()=>{throw accountInUse()},takeover:async()=>{takeoverCalls+=1}},modalResult:{confirm:false}})
+  const {page,modalCalls,switchTabs,toasts}=loadLoginPage({session:{accountLogin:async()=>{throw accountInUse()},takeover:async()=>{takeoverCalls+=1}},modalResult:{confirm:false}})
   page.setData({account:'123456',password:'Password-1'})
   await page.accountLogin()
   assert.equal(modalCalls.length,1)
   assert.equal(takeoverCalls,0)
   assert.equal(switchTabs.length,0)
-  assert.equal(page.data.error,'已取消强制登录，原设备会话保持不变')
+  assert.equal(toasts.at(-1).title,'已取消强制登录')
 })
 
 test('登录请求进行中再次触发 perform 会被忽略',async()=>{

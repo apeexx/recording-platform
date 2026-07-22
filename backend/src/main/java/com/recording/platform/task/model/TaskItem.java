@@ -17,10 +17,8 @@ import org.springframework.data.mongodb.core.mapping.Document;
 @CompoundIndexes({
 	@CompoundIndex(name = "unique_task_item_code", def = "{'taskId': 1, 'itemCode': 1}", unique = true),
 	@CompoundIndex(
-		name = "unique_collector_task_recording_pending",
-		def = "{'collectorId': 1, 'taskId': 1}",
-		unique = true,
-		partialFilter = "{'status': 'RECORDING_PENDING'}"
+		name = "collector_task_status",
+		def = "{'collectorId': 1, 'taskId': 1, 'status': 1}"
 	),
 	@CompoundIndex(name = "task_item_claim", def = "{'taskId': 1, 'status': 1, 'sequence': 1}"),
 	@CompoundIndex(name = "collector_item_status", def = "{'collectorId': 1, 'status': 1}"),

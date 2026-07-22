@@ -10,7 +10,7 @@
   </view>
   <view class="title section-title">提交记录</view>
   <view wx:if="{{loading}}" class="records-state">正在加载提交记录</view>
-  <view wx:elif="{{error}}" class="records-state error">加载失败：{{error}}</view>
+  <view wx:elif="{{loadError}}" class="records-state error"><view>加载失败：{{loadError}}</view><button class="button" bindtap="load">重新加载</button></view>
   <view wx:elif="{{!submissions.length}}" class="records-state empty">暂无提交记录</view>
   <view wx:else>
     <view wx:for="{{submissions}}" wx:key="operationId" class="card record-card">

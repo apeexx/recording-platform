@@ -1,5 +1,9 @@
 let activePlayer = null
 
+function pauseActiveAudio() {
+	activePlayer?.pause()
+}
+
 function formatDuration(milliseconds) {
 	const seconds = Math.max(0, Math.round((Number(milliseconds) || 0) / 1000))
 	return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
@@ -105,4 +109,4 @@ function createAudioPlayback({ createContext, onState = () => {}, onError = () =
 	return player
 }
 
-module.exports = { createAudioPlayback, formatDuration }
+module.exports = { createAudioPlayback, formatDuration, pauseActiveAudio }

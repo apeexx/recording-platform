@@ -91,7 +91,7 @@ module.exports = {
   task: id=>request(`/api/tasks/${encodeURIComponent(id)}`),
   versions: id=>request(`/api/tasks/${encodeURIComponent(id)}/versions`),
   requestAccess: id=>request(`/api/tasks/${encodeURIComponent(id)}/access-requests`,{method:'POST',idempotencyKey:operationId('access')}),
-  start: id=>request(`/api/tasks/${encodeURIComponent(id)}/items/start`,{method:'POST',idempotencyKey:operationId('claim')}),
+  start: (id, idempotencyKey=operationId('claim'))=>request(`/api/tasks/${encodeURIComponent(id)}/items/start`,{method:'POST',idempotencyKey}),
   item: id=>request(`/api/task-items/${encodeURIComponent(id)}`),
 	myWork: ({taskId='',kind='ALL',page=0,size=20}={})=>request(`/api/task-items/mine?taskId=${encodeURIComponent(taskId)}&kind=${encodeURIComponent(kind)}&page=${page}&size=${size}`),
   media: downloadMedia,

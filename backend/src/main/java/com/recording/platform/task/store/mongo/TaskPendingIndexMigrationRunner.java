@@ -23,7 +23,7 @@ final class TaskPendingIndexMigrationRunner implements ApplicationRunner {
 
 	@Override
 	public void run(ApplicationArguments args) {
-		boolean legacyIndexRemoved = service.migrate();
-		log.info("Task pending index migration completed: legacyIndexRemoved={}", legacyIndexRemoved);
+		boolean uniqueIndexesRemoved = service.migrate();
+		log.info("Task pending index migration completed: uniqueIndexesRemoved={}", uniqueIndexesRemoved);
 	}
 }

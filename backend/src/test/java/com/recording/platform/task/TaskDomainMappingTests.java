@@ -48,7 +48,7 @@ class TaskDomainMappingTests {
 	}
 
 	@Test
-	void accessRequestsAndItemsUsePartialUniqueIndexesForPendingWork() {
+	void accessRequestsAndItemsExposeRequiredIndexes() {
 		assertCollection(TaskAccessRequest.class, "task_access_requests");
 		CompoundIndex pendingRequest = findCompoundIndex(TaskAccessRequest.class, "taskId", "userId");
 		assertThat(pendingRequest.unique()).isTrue();
@@ -59,9 +59,10 @@ class TaskDomainMappingTests {
 		assertThat(Arrays.stream(TaskItem.class.getDeclaredFields()).map(Field::getName))
 			.doesNotContain("externalItemId");
 		CompoundIndex collectorPending = findCompoundIndex(TaskItem.class, "collectorId", "taskId");
-		assertThat(collectorPending.unique()).isTrue();
-		assertThat(collectorPending.name()).isEqualTo("unique_collector_task_recording_pending");
-		assertThat(collectorPending.partialFilter()).contains("RECORDING_PENDING");
+		assertThat(collectorPending.unique()).isFalse();
+		assertThat(collectorPending.name()).isEqualTo("collector_task_status");
+		assertThat(collectorPending.def()).contains("status");
+		assertThat(collectorPending.partialFilter()).isEmpty();
 		CompoundIndex creationOperation = findCompoundIndex(TaskItem.class, "taskId", "creationOperationId");
 		assertThat(creationOperation.unique()).isTrue();
 		assertThat(creationOperation.partialFilter()).contains("creationOperationId").contains("$type");

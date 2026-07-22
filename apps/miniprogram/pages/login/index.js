@@ -1,19 +1,20 @@
+const feedback=require('../../services/feedback.js')
 Page({
-  data:{mode:'wechat',account:'',password:'',loading:false,error:''},
+  data:{mode:'wechat',account:'',password:'',loading:false},
   onShow(){if(getApp().globalData.session.current()?.token)wx.switchTab({url:'/pages/tasks/index'})},
-  switchMode(){this.setData({mode:this.data.mode==='wechat'?'account':'wechat',error:''})},
+  switchMode(){this.setData({mode:this.data.mode==='wechat'?'account':'wechat'})},
   input(e){this.setData({[e.currentTarget.dataset.field]:e.detail.value})},
   async wechatLogin(){await this.perform(()=>getApp().globalData.session.login())},
-  async accountLogin(){if(!/^[1-9][0-9]{5,11}$/.test(this.data.account)){this.setData({error:'请输入 6–12 位非零开头数字账号'});return}await this.perform(()=>getApp().globalData.session.accountLogin(this.data.account,this.data.password))},
+  async accountLogin(){if(!/^[1-9][0-9]{5,11}$/.test(this.data.account)){feedback.error('请输入 6–12 位非零开头数字账号');return}await this.perform(()=>getApp().globalData.session.accountLogin(this.data.account,this.data.password))},
   async perform(action){
     if(this.data.loading)return
-    this.setData({loading:true,error:''})
+    this.setData({loading:true})
     try{
       await action()
       wx.switchTab({url:'/pages/tasks/index'})
     }catch(e){
       if(e.code==='ACCOUNT_IN_USE'&&e.details?.takeoverToken)await this.confirmTakeover(e.details.takeoverToken)
-      else this.setData({error:this.loginError(e)})
+      else feedback.error(this.loginError(e))
     }finally{this.setData({loading:false})}
   },
   loginError(e){
@@ -30,14 +31,14 @@ Page({
       confirmColor:'#c2413b',
       success:async result=>{
         if(!result.confirm){
-          this.setData({error:'已取消强制登录，原设备会话保持不变'})
+          feedback.info('已取消强制登录')
           resolve()
           return
         }
         try{
           await getApp().globalData.session.takeover(takeoverToken)
           wx.switchTab({url:'/pages/tasks/index'})
-        }catch(e){this.setData({error:this.loginError(e)})}
+        }catch(e){feedback.error(this.loginError(e))}
         resolve()
       }
     }))

@@ -210,7 +210,7 @@ WEB_SESSION_COOKIE_SECURE（默认 false，生产 HTTPS 应设 true）
 
 任务结构固定使用 `tasks` + `task_versions`。任务发布后版本快照不可原地覆盖；结构修改必须创建下一版本，已有条目继续绑定旧版本。任务至少启用 TEXT/AUDIO/VIDEO 一种参考组件，所有任务都必须录音；最终成果为 `TEXT` 时提交录音和文本，为 `AUDIO` 时只提交录音。录音格式、采样率、声道和时长规则对两种成果类型均生效。关闭人工审核时不得保存驳回预设原因；首期 `aiEnabled` 必须为 false。任务编码由数据库序列自动生成 `T000001`，条目编码为 `{taskCode}-{7位序号}`，不接受前端输入且序号不复用。
 
-采集员领取必须同时满足任务 RUNNING 和 ACTIVE grant；每名采集员在每个任务中最多一条普通 `RECORDING_PENDING`，同一任务再次领取直接返回已有条目，其他任务可分别领取。领取使用 Mongo `findAndModify` 与 `(collectorId,taskId)` 部分唯一索引双重保证。驳回进入独立 `REWORK_PENDING`，保留原采集员、assignment 和驳回原因；同一采集员可以同时持有多条返修。授权撤销只阻止新领取，不影响已领取条目的提交和释放。
+采集员领取必须同时满足任务 RUNNING 和 ACTIVE grant；普通 `RECORDING_PENDING` 不限制采集员持有数量，每个新的 `Idempotency-Key` 使用 Mongo `findAndModify` 从 `AVAILABLE` 按 sequence 原子领取一条新数据，相同幂等键重放仍返回首次结果。驳回进入独立 `REWORK_PENDING`，保留原采集员、assignment 和驳回原因；授权撤销只阻止新领取，不影响已领取条目的提交和释放。
 
 启用人工审核时，采集员提交进入 `SUBMITTED`，审核领取或管理员分配后才原子进入 `REVIEW_PENDING`；`SUBMITTED` 期间本人可使用相同 assignment 与最新 revision 覆盖提交，继续复用录音原子替换、历史和旧媒体清理。审核释放回到 `SUBMITTED`，审核通过进入 `COMPLETED`，驳回进入 `REWORK_PENDING`；关闭人工审核时提交仍直接进入 `COMPLETED`。提交修改与审核领取必须以状态和 revision/CAS 竞争，失败统一返回 `STALE_STATE`。应用启动时仅将 reviewerId、reviewAssignmentId 均为空的旧 `REVIEW_PENDING` 幂等迁移为 `SUBMITTED`，不修改已领取记录，日志只输出迁移数量。
 
@@ -361,7 +361,7 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 响应结构：TaskItem 或 {items,page,size,total}；TaskItem 可包含 referenceAudioUrl、referenceVideoUrl，历史条目可为空
 错误码：404 NO_AVAILABLE_ITEM/TASK_ITEM_NOT_FOUND；409 ITEM_CONFLICT；422 ITEM_REFERENCE_REQUIRED/远程媒体错误
 权限要求：添加和任务条目列表仅 ADMIN；start 仅 COLLECTOR；详情仅 ADMIN/REVIEWER/当前采集员
-数据一致性要求：新条目绑定 currentVersion；远程媒体完成安全校验和后端副本保存后同时保存规范化公网 URL；itemCode 任务内递增唯一且是条目唯一业务编号；添加和领取均持久化幂等；领取 findAndModify 原子更新并以同一更新递增 revision、追加新 revision 的操作历史，同时保持同一采集员在同一任务内唯一待录制；同一任务再次领取返回已有条目，其他任务不受影响；mine 在各 kind 状态集合内统一按 updatedAt 倒序、sequence 升序后由 MongoDB 分页，不再按状态流程 rank 分组
+数据一致性要求：新条目绑定 currentVersion；远程媒体完成安全校验和后端副本保存后同时保存规范化公网 URL；itemCode 任务内递增唯一且是条目唯一业务编号；添加和领取均持久化幂等；每个新领取幂等键使用 findAndModify 原子更新一条 AVAILABLE，并以同一更新递增 revision、追加新 revision 的操作历史，不限制同一采集员的普通待录制数量；mine 在各 kind 状态集合内统一按 updatedAt 倒序、sequence 升序后由 MongoDB 分页，不再按状态流程 rank 分组
 前端调用位置：apps/web/src/pages/admin/tasks/TaskDetailPage.vue 与 TaskPoolPage.vue、apps/miniprogram/pages/tasks/*、apps/miniprogram/pages/work/*；任务详情使用数字分页并支持每页 5/10/20 条（默认 10），小程序任务数据固定每页 10 条，独立 Web 任务数据池固定每页 20 条
 ```
 
@@ -610,11 +610,11 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 字段名称：taskId、taskVersionId/Number、sequence、itemCode、creationOperationId、status、collectorId、reviewerId、assignmentId、reviewAssignmentId、revision、参考字段、currentResult、currentRejection、submissions（含提交时 collectorId）、operations、discardedPreviousStatus、createdAt、updatedAt
 字段类型：字符串、枚举、数值、嵌套文档、数组、UTC Instant
 默认值：新条目 AVAILABLE、revision=0、历史数组为空
-唯一约束：(taskId,itemCode)；creationOperationId 存在时任务内唯一；仅普通 RECORDING_PENDING 的 (collectorId,taskId) 唯一，REWORK_PENDING 不限条数
-索引：上述唯一/部分唯一索引；(taskId,status,sequence) 领取索引；(collectorId,status)
+唯一约束：(taskId,itemCode)；creationOperationId 存在时任务内唯一；普通 RECORDING_PENDING 与 REWORK_PENDING 均不设采集员持有数量唯一约束
+索引：上述业务唯一索引；(taskId,status,sequence) 领取索引；(collectorId,status)；普通查询索引 (collectorId,taskId,status)
 数据兼容策略：条目固定绑定创建时版本；当前结果可替换/清除，提交与操作历史只追加
-迁移步骤：应用启动时先确保 `unique_collector_task_recording_pending` 创建成功，再幂等删除旧 `unique_collector_recording_pending`；不改写现有条目
-回滚方式：备份集合与本地媒体；恢复旧索引前必须确认每名采集员最多只有一条普通 RECORDING_PENDING，否则旧全局唯一索引无法重建；不得只回滚 Mongo 或只回滚文件
+迁移步骤：应用启动时先确保普通索引 `collector_task_status` 创建成功，再幂等删除旧 `unique_collector_recording_pending` 与 `unique_collector_task_recording_pending`；失败则终止启动，不改写现有条目
+回滚方式：备份集合与本地媒体；恢复任一旧唯一索引前必须先处理与其口径冲突的多条普通 RECORDING_PENDING，否则索引无法重建；不得只回滚 Mongo 或只回滚文件
 ```
 
 ```text

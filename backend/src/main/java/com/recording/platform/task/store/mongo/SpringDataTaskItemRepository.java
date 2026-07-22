@@ -9,9 +9,6 @@ import org.springframework.data.mongodb.repository.MongoRepository;
 import java.util.Collection;
 
 interface SpringDataTaskItemRepository extends MongoRepository<TaskItem, String> {
-	Optional<TaskItem> findFirstByCollectorIdAndTaskIdAndStatus(
-		String collectorId, String taskId, TaskItemStatus status
-	);
 	Optional<TaskItem> findByTaskIdAndCreationOperationId(String taskId, String creationOperationId);
 	Page<TaskItem> findAllByTaskId(String taskId, Pageable pageable);
 	Page<TaskItem> findAllByStatusAndReviewerIdIsNull(TaskItemStatus status, Pageable pageable);

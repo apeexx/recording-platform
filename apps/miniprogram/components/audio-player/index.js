@@ -28,7 +28,11 @@ Component({
 		},
 	},
 	methods: {
-		toggle() { this.player?.toggle() },
+		toggle() {
+			if (!this.data.playing) this.triggerEvent('playrequest')
+			this.player?.toggle()
+		},
+		pause() { this.player?.pause() },
 		seek(event) { this.player?.seekPercent(event.detail.value) },
 	},
 })
