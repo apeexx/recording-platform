@@ -98,7 +98,23 @@ class TaskManagementServiceTests {
 		assertThat(service.publish(task.getId()).getLifecycle()).isEqualTo(TaskLifecycle.RUNNING);
 		assertThat(service.pause(task.getId()).getLifecycle()).isEqualTo(TaskLifecycle.PAUSED);
 		assertThat(service.resume(task.getId()).getLifecycle()).isEqualTo(TaskLifecycle.RUNNING);
+		assertThat(service.pause(task.getId()).getLifecycle()).isEqualTo(TaskLifecycle.PAUSED);
 		assertThat(service.end(task.getId()).getLifecycle()).isEqualTo(TaskLifecycle.ENDED);
+	}
+
+	@Test
+	void runningTaskMustBePausedBeforeItCanEnd() {
+		TaskRecord task = service.create(command(spec(
+			Set.of(ReferenceType.TEXT), TaskResultType.TEXT, 1_000, 600_000, false
+		)));
+		service.publish(task.getId());
+
+		assertThatThrownBy(() -> service.end(task.getId()))
+			.isInstanceOfSatisfying(ApiException.class, error -> {
+				assertThat(error.getStatus().value()).isEqualTo(409);
+				assertThat(error.getCode()).isEqualTo("INVALID_TASK_STATE");
+				assertThat(error.getMessage()).isEqualTo("只有暂停任务可以结束");
+			});
 	}
 
 	@Test

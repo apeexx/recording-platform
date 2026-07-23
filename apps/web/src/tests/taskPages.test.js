@@ -30,7 +30,8 @@ describe('任务页面 API', () => {
 	  expect(source).toContain('<label class="duration-range-field">录音时长范围')
 	  expect(source).not.toContain('<label class="business-span">录音时长范围')
 	  expect(source).toContain('colored-checkbox')
-	  expect(controls).toContain('.duration-range-card')
+	  expect(controls).toContain('.duration-range-track')
+	  expect(controls).not.toContain('.duration-range-card')
 	  expect(business).toContain('.colored-checkbox input')
 	  expect(business).toContain('appearance:none')
 	})
@@ -43,7 +44,9 @@ describe('任务页面 API', () => {
 	  expect(source).toContain('时长范围')
 	  expect(source).toContain("row.lifecycle === 'DRAFT'")
 	  expect(source).toContain('@click="deleteTask(row)">删除')
-	  expect(source).toContain("['RUNNING', 'PAUSED'].includes(row.lifecycle)")
+	  expect(source).toContain("row.lifecycle === 'RUNNING'")
+	  expect(source).toContain("row.lifecycle === 'PAUSED'")
+	  expect(source).not.toContain("['RUNNING', 'PAUSED'].includes(row.lifecycle)")
 	  expect(source).not.toContain("row.lifecycle !== 'ENDED'")
 	})
   it('任务数据池完全不显示或提交外部编号', () => {
@@ -97,9 +100,10 @@ describe('任务页面 API', () => {
 
   it('侧栏品牌区与顶部栏共享同一高度变量',()=>{
     const styles=fs.readFileSync(path.resolve('src/styles/admin-layout.css'),'utf8')
-    expect(styles).toMatch(/--admin-header-height:\s*68px/)
-    expect(styles).toMatch(/height:\s*var\(--admin-header-height\)/)
-    expect(styles).toMatch(/min-height:\s*var\(--admin-header-height\)/)
+    expect(styles).toMatch(/--admin-header-height:\s*72px/)
+    expect(styles).toMatch(/\.admin-sidebar__brand\s*\{[^}]*height:\s*var\(--admin-header-height\)[^}]*margin:\s*0 -14px/)
+    expect(styles).toMatch(/\.admin-header\s*\{[^}]*height:\s*var\(--admin-header-height\)[^}]*min-height:\s*var\(--admin-header-height\)[^}]*padding:\s*8px 28px/)
+    expect(styles).toMatch(/@media \(max-width:\s*620px\)[\s\S]*?\.admin-header\s*\{[^}]*height:\s*auto/)
   })
   it('导入使用 multipart 且不手写内容类型', async () => {
     httpRequest.mockResolvedValue({ importJobId: 'j1' })

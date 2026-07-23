@@ -207,7 +207,7 @@ WEB_SESSION_COOKIE_SECURE（默认 false，生产 HTTPS 应设 true）
 
 ## 6.5 任务池、媒体与导入规则
 
-任务结构固定使用 `tasks`，配置嵌入 `configuration`；不再维护 `task_versions`。任务仅在 DRAFT 状态允许修改名称、说明和配置，发布后永久冻结；暂停、恢复和结束只改变生命周期。任务至少启用 TEXT/AUDIO/VIDEO 一种参考组件。最终成果为 `TEXT` 时文本或录音至少提交一项，也允许同时提交；`AUDIO` 必须提交录音且不得夹带文本。只有实际提交录音时才校验格式、采样率、单声道、大小和时长。录音时长配置固定为 1–600 秒。关闭人工审核时不得保存驳回预设原因；首期 `aiEnabled` 必须为 false。任务编码由数据库序列自动生成 `T000001`，条目编码为 `{taskCode}-{7位序号}`，不接受前端输入且序号不复用。
+任务结构固定使用 `tasks`，配置嵌入 `configuration`；不再维护 `task_versions`。任务仅在 DRAFT 状态允许修改名称、说明和配置，发布后永久冻结；运行中任务必须先暂停，只有 PAUSED 状态允许结束。任务至少启用 TEXT/AUDIO/VIDEO 一种参考组件。最终成果为 `TEXT` 时文本或录音至少提交一项，也允许同时提交；`AUDIO` 必须提交录音且不得夹带文本。只有实际提交录音时才校验格式、采样率、单声道、大小和时长。录音时长配置固定为 1–600 秒。关闭人工审核时不得保存驳回预设原因；首期 `aiEnabled` 必须为 false。任务编码由数据库序列自动生成 `T000001`，条目编码为 `{taskCode}-{7位序号}`，不接受前端输入且序号不复用。
 
 采集员领取必须同时满足任务 RUNNING 和 ACTIVE grant；普通 `RECORDING_PENDING` 不限制采集员持有数量，每个新的 `Idempotency-Key` 使用 Mongo `findAndModify` 从 `AVAILABLE` 按 sequence 原子领取一条新数据，相同幂等键重放仍返回首次结果。驳回进入独立 `REWORK_PENDING`，保留原采集员、assignment 和驳回原因；授权撤销只阻止新领取，不影响已领取条目的提交和释放。
 
@@ -327,7 +327,7 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 响应结构：任务/权限视图或 {items,page,size,total}；创建返回 201
 错误码：404 TASK_NOT_FOUND；409 INVALID_TASK_STATE；422 REFERENCE_REQUIRED、RESULT_TYPE_REQUIRED、RESULT_CONTENT_MISMATCH、AI_NOT_SUPPORTED 等
 权限要求：写操作仅 ADMIN；ADMIN/REVIEWER 查询全部，COLLECTOR 查询进行中/已暂停任务及 ACTIVE/PENDING/NONE 权限状态，单任务详情仍需 ACTIVE 授权
-数据一致性要求：taskCode 使用 Mongo 原子序列生成且不复用；仅 DRAFT 可编辑或真正删除，删除先隔离活动导入，安全重试后级联清理条目、导入记录/源文件、授权与申请；发布后定义永久冻结；DRAFT/RUNNING/PAUSED 均允许管理员准备数据，ENDED 拒绝新增；时长范围固定 1–600 秒；写操作持久化幂等
+数据一致性要求：taskCode 使用 Mongo 原子序列生成且不复用；仅 DRAFT 可编辑或真正删除，删除先隔离活动导入，安全重试后级联清理条目、导入记录/源文件、授权与申请；发布后定义永久冻结；RUNNING 必须先暂停，只有 PAUSED 可结束；DRAFT/RUNNING/PAUSED 均允许管理员准备数据，ENDED 拒绝新增；时长范围固定 1–600 秒；写操作持久化幂等
 前端调用位置：apps/web/src/lib/taskApi.js、apps/web/src/pages/admin/tasks/*、apps/miniprogram/pages/tasks/*
 ```
 

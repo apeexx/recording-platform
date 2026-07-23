@@ -74,8 +74,8 @@ public class TaskManagementService {
 
 	public TaskRecord end(String taskId) {
 		TaskRecord task = requireTask(taskId);
-		if (task.getLifecycle() != TaskLifecycle.RUNNING && task.getLifecycle() != TaskLifecycle.PAUSED) {
-			throw invalidState("只有进行中或暂停任务可以结束");
+		if (task.getLifecycle() != TaskLifecycle.PAUSED) {
+			throw invalidState("只有暂停任务可以结束");
 		}
 		task.setLifecycle(TaskLifecycle.ENDED);
 		task.setUpdatedAt(Instant.now(clock));

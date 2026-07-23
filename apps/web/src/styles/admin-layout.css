@@ -1,5 +1,5 @@
 .admin-shell {
-  --admin-header-height: 68px;
+  --admin-header-height: 72px;
   display: flex;
   min-height: 100vh;
   background: var(--background);
@@ -24,8 +24,10 @@
   align-items: center;
   gap: 12px;
   height: var(--admin-header-height);
-  padding: 0 8px;
-  border-bottom: 1px solid var(--sidebar-border);
+  min-height: var(--admin-header-height);
+  margin: 0 -14px;
+  padding: 0 22px;
+  border-bottom: 1px solid var(--border);
 }
 
 .admin-avatar {
@@ -222,8 +224,9 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  height: var(--admin-header-height);
   min-height: var(--admin-header-height);
-  padding: 14px 28px;
+  padding: 8px 28px;
   border-bottom: 1px solid var(--border);
   background: var(--popover);
   color: var(--popover-foreground);
@@ -919,6 +922,8 @@
   .admin-header {
     align-items: flex-start;
     flex-direction: column;
+    height: auto;
+    padding: 12px 16px;
   }
 
   .admin-content {
