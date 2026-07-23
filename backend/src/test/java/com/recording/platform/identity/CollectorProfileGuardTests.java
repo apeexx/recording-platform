@@ -16,7 +16,7 @@ import org.junit.jupiter.api.Test;
 class CollectorProfileGuardTests {
 	@Test void rejectsCollectorWhoseProfileIsIncomplete() {
 		MiniProgramUserStore users = org.mockito.Mockito.mock(MiniProgramUserStore.class);
-		MiniProgramUser user = new MiniProgramUser(); user.setId("MINI-0123456789abcdef01234567"); user.setName("张三");
+		MiniProgramUser user = new MiniProgramUser(); user.setId("MINI-0123456789abcdef01234567");
 		when(users.findById(user.getId())).thenReturn(Optional.of(user));
 		var actor = new PlatformPrincipal("s",user.getId(),null,"张三",UserRole.COLLECTOR,SessionType.MINIPROGRAM,false);
 		assertThatThrownBy(() -> new CollectorProfileGuard(users).requireComplete(actor))

@@ -474,6 +474,10 @@ public class MongoTaskItemStore implements TaskItemStore {
 		return repository.findAllByTaskId(taskId, pageable);
 	}
 
+	@Override public void deleteAllByTaskId(String taskId) {
+		repository.deleteAllByTaskId(taskId);
+	}
+
 	@Override public Page<TaskItem> findAllByCollectorIdAndStatusIn(
 		String collectorId, String taskId, java.util.Collection<TaskItemStatus> statuses, Pageable pageable
 	) {

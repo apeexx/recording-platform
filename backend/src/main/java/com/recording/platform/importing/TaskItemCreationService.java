@@ -72,8 +72,8 @@ public class TaskItemCreationService {
 		if (replay.isPresent()) return replay.get();
 		TaskRecord task = tasks.findById(taskId)
 			.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "TASK_NOT_FOUND", "任务不存在"));
-		if (task.getLifecycle() != TaskLifecycle.RUNNING && task.getLifecycle() != TaskLifecycle.PAUSED) {
-			throw new ApiException(HttpStatus.CONFLICT, "TASK_VERSION_NOT_PUBLISHED", "任务发布后才能添加数据");
+		if (task.getLifecycle() == TaskLifecycle.ENDED) {
+			throw new ApiException(HttpStatus.CONFLICT, "INVALID_TASK_STATE", "已结束任务不能添加数据");
 		}
 		TaskConfiguration configuration = task.getConfiguration();
 		String text = trimToNull(command.referenceText());

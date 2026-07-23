@@ -15,8 +15,6 @@ public final class CollectorProfilePolicy {
 
 	public static boolean isComplete(MiniProgramUser user) {
 		return user != null
-			&& StringUtils.hasText(user.getName())
-			&& isValidAccount(user.getAccount())
-			&& StringUtils.hasText(user.getPasswordHash());
+			&& StringUtils.hasText(user.getName());
 	}
 }

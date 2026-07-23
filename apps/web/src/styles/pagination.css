@@ -9,8 +9,16 @@
 }
 
 .pagination-numbered {
+  justify-content: space-between;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.pagination-pages {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
 }
 
 .pagination-size,
@@ -28,6 +36,11 @@
   width: 112px;
   min-width: 112px;
   margin-right: 14px;
+}
+
+.pagination-size .base-select-menu {
+  top: auto;
+  bottom: calc(100% + 8px);
 }
 
 .pagination-page,
@@ -62,4 +75,14 @@
 .pagination-ellipsis {
   min-width: 26px;
   text-align: center;
+}
+
+@media (max-width: 620px) {
+  .pagination-numbered {
+    align-items: flex-start;
+  }
+
+  .pagination-pages {
+    flex-wrap: wrap;
+  }
 }

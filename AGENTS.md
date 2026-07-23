@@ -279,11 +279,11 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 ```text
 请求方法：POST / GET / PUT / DELETE
 请求路径：/api/auth/miniprogram/login、/account-login、/takeover、/profile、/profile/complete、/name、/password、/avatar
-请求参数：微信登录 JSON code；账号登录 JSON account/password；首次资料 JSON name/account/password；改密 currentPassword/newPassword；头像 multipart avatar
+请求参数：微信登录 JSON code；账号登录 JSON account/password；资料完成 JSON name、可选成对 account/password；改密 currentPassword/newPassword；头像 multipart avatar
 响应结构：登录返回不透明 Bearer token、account、profileComplete、hasCustomAvatar；资料接口返回采集员摘要；头像 GET 返回文件流
-错误码：503 WECHAT_NOT_CONFIGURED/WECHAT_UNAVAILABLE；401 WECHAT_LOGIN_FAILED/INVALID_CREDENTIALS/TAKEOVER_TOKEN_INVALID；409 ACCOUNT_IN_USE（details.takeoverToken 为短时一次性接管凭证）/USERNAME_EXISTS；413 AVATAR_TOO_LARGE；422 INVALID_NAME/INVALID_COLLECTOR_ACCOUNT/PASSWORD_TOO_WEAK/INVALID_AVATAR_FILE
+错误码：503 WECHAT_NOT_CONFIGURED/WECHAT_UNAVAILABLE；401 WECHAT_LOGIN_FAILED/INVALID_CREDENTIALS/TAKEOVER_TOKEN_INVALID；409 ACCOUNT_IN_USE（details.takeoverToken 为短时一次性接管凭证）/USERNAME_EXISTS；413 AVATAR_TOO_LARGE；422 INVALID_NAME/ACCOUNT_PASSWORD_REQUIRED/INVALID_COLLECTOR_ACCOUNT/PASSWORD_TOO_WEAK/INVALID_AVATAR_FILE
 权限要求：两种登录公开；其余仅 COLLECTOR 小程序 Bearer
-数据一致性要求：微信和数字账号登录始终映射同一 `MINI-...` 小程序用户 ID；两种登录模式均只允许一个 ACTIVE 小程序会话，冲突后必须通过 `POST /api/auth/miniprogram/takeover` 确认接管，旧设备下次请求返回 SESSION_REPLACED；首次资料设置原子写入；数字账号仅在 `miniprogram_users` 内唯一；头像只保存安全相对路径，JPEG/PNG/WebP 最大 5MB 并校验魔数、原子替换
+数据一致性要求：微信和数字账号登录始终映射同一 `MINI-...` 小程序用户 ID；有效姓名存在即 profileComplete=true；数字账号和密码必须同时提供或同时省略，未设置时可后补一次，设置后用户不可自行修改；数字账号仅在 `miniprogram_users` 内唯一；头像 DELETE 接口保留兼容但小程序无入口
 前端调用位置：apps/miniprogram/services/session.js、services/api.js、pages/login、pages/profile-settings
 ```
 
@@ -327,7 +327,7 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 响应结构：任务/权限视图或 {items,page,size,total}；创建返回 201
 错误码：404 TASK_NOT_FOUND；409 INVALID_TASK_STATE；422 REFERENCE_REQUIRED、RESULT_TYPE_REQUIRED、RESULT_CONTENT_MISMATCH、AI_NOT_SUPPORTED 等
 权限要求：写操作仅 ADMIN；ADMIN/REVIEWER 查询全部，COLLECTOR 查询进行中/已暂停任务及 ACTIVE/PENDING/NONE 权限状态，单任务详情仍需 ACTIVE 授权
-数据一致性要求：taskCode 使用 Mongo 原子序列生成且不复用；仅 DRAFT 可编辑或真正删除，删除同时清理关联授权与申请，发布后定义永久冻结；TEXT 允许纯文本、纯录音或两者同时提交，AUDIO 只允许录音；时长范围固定 1–600 秒；关闭人工审核时 rejectionReasons 固定为空；写操作持久化幂等；aiEnabled 首期必须 false
+数据一致性要求：taskCode 使用 Mongo 原子序列生成且不复用；仅 DRAFT 可编辑或真正删除，删除先隔离活动导入，安全重试后级联清理条目、导入记录/源文件、授权与申请；发布后定义永久冻结；DRAFT/RUNNING/PAUSED 均允许管理员准备数据，ENDED 拒绝新增；时长范围固定 1–600 秒；写操作持久化幂等
 前端调用位置：apps/web/src/lib/taskApi.js、apps/web/src/pages/admin/tasks/*、apps/miniprogram/pages/tasks/*
 ```
 
@@ -347,9 +347,9 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 请求路径：/api/tasks/{taskId}/items、/api/tasks/{taskId}/items/start、/api/task-items/{itemId}、/api/task-items/mine
 请求参数：单条添加 JSON referenceText/referenceAudioUrl/referenceVideoUrl + Idempotency-Key；start 携带 Idempotency-Key；列表 page、size；mine 支持 taskId、kind=PENDING|SUBMITTED|FINISHED，兼容 ALL|RECORDING|REWORK
 响应结构：TaskItem 或 {items,page,size,total}；TaskItem 可包含 referenceAudioUrl、referenceVideoUrl，历史条目可为空
-错误码：404 NO_AVAILABLE_ITEM/TASK_ITEM_NOT_FOUND；409 ITEM_CONFLICT；422 ITEM_REFERENCE_REQUIRED/REMOTE_URL_INVALID
+错误码：404 NO_AVAILABLE_ITEM/TASK_ITEM_NOT_FOUND；409 ITEM_CONFLICT/INVALID_TASK_STATE；422 ITEM_REFERENCE_REQUIRED/REMOTE_URL_INVALID
 权限要求：添加和任务条目列表仅 ADMIN；start 仅 COLLECTOR；详情仅 ADMIN/REVIEWER/当前采集员
-数据一致性要求：新条目只绑定 taskId，校验时读取任务内嵌 configuration；参考音视频只保存通过轻量语法校验的 HTTPS URL，媒体 ID 为空且不创建本地文件或媒体资产；itemCode 任务内递增唯一且是条目唯一业务编号；添加和领取均持久化幂等；每个新领取幂等键使用 findAndModify 原子更新一条 AVAILABLE，并以同一更新递增 revision、追加新 revision 的操作历史，不限制同一采集员的普通待录制数量；mine 在各 kind 状态集合内统一按 updatedAt 倒序、sequence 升序后由 MongoDB 分页，不再按状态流程 rank 分组
+数据一致性要求：DRAFT/RUNNING/PAUSED 可新增，ENDED 返回 INVALID_TASK_STATE；新条目只绑定 taskId，参考音视频只保存通过轻量语法校验的 HTTPS URL；itemCode 任务内递增唯一且不复用；添加和领取均持久化幂等
 前端调用位置：apps/web/src/pages/admin/tasks/TaskDetailPage.vue 与 TaskPoolPage.vue、apps/miniprogram/pages/tasks/*、apps/miniprogram/pages/work/*；任务详情使用数字分页并支持每页 5/10/20 条（默认 10），小程序任务数据固定每页 10 条，独立 Web 任务数据池固定每页 20 条
 ```
 

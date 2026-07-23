@@ -5,5 +5,6 @@ public enum ImportJobStatus {
 	PROCESSING,
 	PARTIAL_SUCCESS,
 	COMPLETED,
-	FAILED
+	FAILED,
+	CANCELLED
 }

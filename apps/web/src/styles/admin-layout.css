@@ -1,4 +1,5 @@
 .admin-shell {
+  --admin-header-height: 68px;
   display: flex;
   min-height: 100vh;
   background: var(--background);
@@ -11,7 +12,7 @@
   width: 264px;
   height: 100vh;
   flex: 0 0 264px;
-  padding: 20px 14px;
+  padding: 0 14px 20px;
   overflow-y: auto;
   border-right: 1px solid var(--sidebar-border);
   background: var(--sidebar);
@@ -22,7 +23,8 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 4px 8px 20px;
+  height: var(--admin-header-height);
+  padding: 0 8px;
   border-bottom: 1px solid var(--sidebar-border);
 }
 
@@ -220,7 +222,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 68px;
+  min-height: var(--admin-header-height);
   padding: 14px 28px;
   border-bottom: 1px solid var(--border);
   background: var(--popover);

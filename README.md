@@ -126,8 +126,8 @@ Windows PowerShell 本地联调可使用一键启动脚本：
 - 已登录 Web 用户先调用 `GET /api/auth/web/csrf` 获取可读的 `XSRF-TOKEN` Cookie；执行退出、改密或管理员写操作等非安全方法时，同时通过 `X-XSRF-TOKEN` 请求头回传该值。首次登录待改密账号也允许获取 CSRF token。
 - 每个后台账号只允许一个活动 Web 会话，每个小程序采集员也只允许一个活动小程序会话。任一端重复登录均返回 `409 ACCOUNT_IN_USE` 和短时一次性 `takeoverToken`；必须调用对应端的 takeover 接口确认接管，接管后旧设备下次请求返回 `401 SESSION_REPLACED`。
 - 小程序只向后端提交 `wx.login` 临时 `code`。后端使用 `WECHAT_APP_ID`、`WECHAT_APP_SECRET` 调用微信 `jscode2session`，不接受客户端直接提交 OpenID；兼容微信以 `text/plain` 返回 JSON 内容的实际响应，且不保存或输出 `session_key`；小程序 Bearer token 默认 30 天。
-- 微信登录和 6–12 位数字账号密码登录映射到同一个 `MINI-...` 采集员用户 ID。首次资料设置原子写入姓名、在小程序集合内唯一的数字账号和密码；任务列表允许浏览，但申请、待办、领取、继续及提交前后端均校验资料完整性。发生小程序会话占用时，登录页先提示用户确认，再以返回的短时一次性凭证调用 `POST /api/auth/miniprogram/takeover`；不得自动接管。自定义头像保存到 `AVATAR_STORAGE_DIR`，仅支持魔数有效的 JPEG/PNG/WebP、最大 5MB；MongoDB 只保存相对路径和内容类型。
-- 小程序登录页为“砚数声采”A 版，使用正式品牌图标。个人资料页的头像卡直接调用微信原生 `chooseAvatar` 面板，选择后仍需预览确认；恢复默认头像位于同一头像卡底部右侧。头像读取失败会静默回退本地默认头像，文件上传仍由既有后端执行 JPEG/PNG/WebP 和 5MB 限制。原生“任务”“我的”Tab 使用 81×81 本地 PNG 图标，不依赖运行时外链。
+- 微信登录和 6–12 位数字账号密码登录映射到同一个 `MINI-...` 采集员用户 ID。资料完整性只要求有效姓名；数字账号和密码为成对可选字段，未设置时可继续微信快捷登录并正常申请、领取和处理任务，也可在资料页后补一次。发生小程序会话占用时仍需用户确认接管。自定义头像保存到 `AVATAR_STORAGE_DIR`，仅支持魔数有效的 JPEG/PNG/WebP、最大 5MB。
+- 小程序个人资料页的头像卡直接调用微信原生 `chooseAvatar` 面板，选择后仍需预览确认；不再提供恢复默认头像入口，读取失败时静默回退本地默认头像。数字账号旁的帮助按钮说明其为可选登录方式。
 - 小程序将当前账号资料摘要缓存在 `recSession.user`：已完善资料时任务入口优先使用缓存并静默后台刷新，断网不再误弹“请先完善个人资料”；缓存未知且联网失败时仅显示网络 Toast。退出登录或修改密码重新登录会删除整个会话缓存，新登录或接管成功会整体覆盖旧账号资料；头像二进制文件不额外缓存。
 - “我的”统计页不再显示用户 ID，只保留姓名、资料状态和设置入口；资料设置页的基本信息区继续展示完整 `MINI-...` userId，点击整行即可复制并显示成功或失败 Toast。“我的”页面同时展示最近 5 条提交记录及其状态。
 - `/api/voice-generation/**` 与 `/api/admin/**` 仅 `ADMIN` 可访问；除 Web/微信登录与接管接口外，其余 `/api/**` 默认要求认证。
@@ -166,7 +166,7 @@ POST /api/admin/users/{userId}/reset-password
 
 ## 任务池、录音媒体与导入
 
-- 任务：`/api/tasks` 提供创建、草稿编辑/删除、发布、暂停、恢复、结束和分页查询。`DELETE /api/tasks/{taskId}` 仅允许 DRAFT，使用 `Idempotency-Key`，删除关联授权与申请；任务编码由数据库序列自动生成 `T000001` 格式且删除后不复用。任务条目编码使用 `{taskCode}-{7位序号}`，单任务支持至 100 万条且序号不回收。配置直接嵌入任务的 `configuration`，仅 DRAFT 状态允许修改名称、说明与配置，发布后永久冻结；不再维护任务版本接口或 `task_versions` 集合。`TEXT` 成果允许纯文本、纯录音或两者同时提交，两项皆空返回 `RESULT_REQUIRED`；`AUDIO` 必须提交录音且不得夹带文本。只有实际上传录音时才执行媒体校验，配置时长固定为 1–600 秒。关闭人工审核时不显示也不保存驳回预设原因；首期固定 `aiEnabled=false`。
+- 任务：`/api/tasks` 提供创建、草稿编辑/删除、发布、暂停、恢复、结束和分页查询。`DELETE /api/tasks/{taskId}` 仅允许 DRAFT 并使用 `Idempotency-Key`；若存在活动导入，先取消并隔离租约后返回 `IMPORT_JOB_ACTIVE`，安全重试时再级联删除条目、导入记录与源文件、授权和申请。任务编码及条目序号均不复用。仅 DRAFT 可修改配置；DRAFT、RUNNING 和 PAUSED 均可由管理员准备数据，ENDED 拒绝新增。配置时长固定为 1–600 秒。
 - 授权：`/api/tasks/{taskId}/grants` 与 `/access-requests` 管理直接授权、申请、原子批准/驳回和撤销。撤销只阻止新领取，不影响已领取条目的提交或释放；批准申请重放不会复活后来已撤销的授权。
 - 数据池：ADMIN 使用 `POST /api/tasks/{taskId}/items` 单条添加并传 `Idempotency-Key`，或通过 `/api/import-jobs` 异步导入。仅 `AVAILABLE` 条目可通过 `PUT /api/task-items/{itemId}` 按 `expectedRevision` 编辑参考内容，或通过 `DELETE /api/task-items/{itemId}?expectedRevision=...` 真正删除；两者均要求 `Idempotency-Key`，媒体替换/删除进入持久化清理任务，条目编号不复用。其他状态必须先释放回待领取。COLLECTOR 使用 `POST /api/tasks/{taskId}/items/start` 原子领取；普通待录制作业不设持有数量上限，每个新的 `Idempotency-Key` 领取一条新数据，相同幂等键重放仍返回首次条目。
 - 提交与返修：`POST /api/task-items/{itemId}/submit` 接收 multipart 的 `operationId`、`assignmentId`、`expectedRevision` 以及与任务成果类型匹配的文字或录音；重复 operationId 返回首次结果，过期修订返回 `409 STALE_STATE`。驳回进入独立 `REWORK_PENDING` 队列并保留原因、原采集员和 assignment；普通待录制和返修均可同时持有多条。释放清除当前结果但保留提交和操作历史。

@@ -45,4 +45,5 @@ public interface TaskItemStore {
 		Collection<com.recording.platform.task.model.TaskItemStatus> statuses, Pageable pageable
 	) { return Page.empty(pageable); }
 	default List<TaskItem> findForReport(String collectorId, String taskId) { return List.of(); }
+	default void deleteAllByTaskId(String taskId) { }
 }

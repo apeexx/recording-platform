@@ -13,4 +13,7 @@ public interface ImportJobStore {
 	Optional<ImportJob> checkpoint(ImportJob job, String workerId, Instant now, Instant leaseExpiresAt);
 	Optional<ImportJob> finish(ImportJob job, String workerId);
 	List<ImportJob> findRecoverable(Instant now);
+	default long cancelActiveByTaskId(String taskId, Instant now) { return 0; }
+	default List<ImportJob> findAllByTaskId(String taskId) { return List.of(); }
+	default void deleteAllByTaskId(String taskId) { }
 }

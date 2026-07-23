@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
+import fs from 'node:fs'
+import path from 'node:path'
 import BaseSelect from '../components/form/BaseSelect.vue'
 import ToggleSwitch from '../components/form/ToggleSwitch.vue'
 import DurationRangeSlider from '../components/form/DurationRangeSlider.vue'
@@ -37,5 +39,15 @@ describe('统一表单控件', () => {
     expect(wrapper.emitted('update:maxValue')).toEqual([[11]])
     expect(wrapper.text()).toContain('10 秒')
     expect(wrapper.text()).toContain('100 秒')
+  })
+
+  it('双端时长滑块只保留内缩且同轴的自定义轨道', () => {
+    const styles = fs.readFileSync(path.resolve('src/styles/form-controls.css'), 'utf8')
+    expect(styles).toContain('--duration-thumb-size:22px')
+    expect(styles).toContain('left:calc(var(--duration-thumb-size)/2)')
+    expect(styles).toContain('width:calc(100% - var(--duration-thumb-size))')
+    expect(styles).toContain('::-webkit-slider-runnable-track')
+    expect(styles).toContain('::-moz-range-track')
+    expect(styles).toContain('background:transparent')
   })
 })

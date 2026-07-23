@@ -109,6 +109,27 @@ public class MongoImportJobStore implements ImportJobStore {
 		return mongoTemplate.find(Query.query(criteria), ImportJob.class);
 	}
 
+	@Override
+	public long cancelActiveByTaskId(String taskId, Instant now) {
+		Query query = Query.query(Criteria.where("taskId").is(taskId)
+			.and("status").in(ImportJobStatus.PENDING, ImportJobStatus.PROCESSING));
+		Update update = new Update()
+			.set("status", ImportJobStatus.CANCELLED)
+			.set("updatedAt", now)
+			.unset("leaseOwner")
+			.unset("leaseExpiresAt")
+			.unset("heartbeatAt");
+		return mongoTemplate.updateMulti(query, update, ImportJob.class).getModifiedCount();
+	}
+
+	@Override public List<ImportJob> findAllByTaskId(String taskId) {
+		return repository.findAllByTaskId(taskId);
+	}
+
+	@Override public void deleteAllByTaskId(String taskId) {
+		repository.deleteAllByTaskId(taskId);
+	}
+
 	private Criteria leaseExpired(Instant now) {
 		return new Criteria().orOperator(
 			Criteria.where("leaseExpiresAt").lte(now),

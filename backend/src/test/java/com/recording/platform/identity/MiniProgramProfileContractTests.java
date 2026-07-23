@@ -24,6 +24,14 @@ class MiniProgramProfileContractTests {
 	}
 
 	@Test
+	void profileIsCompleteWhenAValidNameExistsWithoutDigitalAccount() {
+		MiniProgramUser user = new MiniProgramUser();
+		user.setName("张三");
+
+		assertThat(com.recording.platform.identity.service.CollectorProfilePolicy.isComplete(user)).isTrue();
+	}
+
+	@Test
 	void miniProgramSessionIncludesProfileAndAvatarStateWithoutStoragePaths() {
 		MiniProgramUser user = new MiniProgramUser();
 		user.setId("collector-1");

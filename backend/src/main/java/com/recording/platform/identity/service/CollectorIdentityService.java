@@ -57,6 +57,18 @@ public class CollectorIdentityService {
 	public MiniProgramUser completeProfile(String userId, String name, String account, String password) {
 		MiniProgramUser current = requireCollector(userId);
 		validateName(name);
+		boolean accountProvided = StringUtils.hasText(account);
+		boolean passwordProvided = StringUtils.hasText(password);
+		if (accountProvided != passwordProvided) {
+			throw new ApiException(
+				HttpStatus.UNPROCESSABLE_ENTITY,
+				"ACCOUNT_PASSWORD_REQUIRED",
+				"数字登录账号和密码必须同时填写或同时留空"
+			);
+		}
+		if (!accountProvided) {
+			return setName(userId, name);
+		}
 		String normalized = validateAccount(account);
 		validatePassword(password);
 		if (StringUtils.hasText(current.getAccount()) || StringUtils.hasText(current.getPasswordHash())) {

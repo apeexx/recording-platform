@@ -32,6 +32,7 @@ class TaskItemCreationServiceTests {
 	private TaskItemStore items;
 	private ReferenceMediaUrlValidator referenceUrls;
 	private TaskConfiguration configuration;
+	private TaskRecord task;
 	private PlatformPrincipal admin;
 
 	@BeforeEach
@@ -39,7 +40,7 @@ class TaskItemCreationServiceTests {
 		tasks = org.mockito.Mockito.mock(TaskStore.class);
 		items = org.mockito.Mockito.mock(TaskItemStore.class);
 		referenceUrls = new ReferenceMediaUrlValidator();
-		TaskRecord task = new TaskRecord();
+		task = new TaskRecord();
 		task.setId("task-1");
 		task.setTaskCode("T000001");
 		task.setLifecycle(TaskLifecycle.RUNNING);
@@ -55,6 +56,33 @@ class TaskItemCreationServiceTests {
 			Clock.fixed(Instant.parse("2026-07-11T12:00:00Z"), ZoneOffset.UTC)
 		);
 		admin = new PlatformPrincipal("session-1", "admin-1", "admin", "管理员", UserRole.ADMIN, SessionType.WEB, false);
+	}
+
+	@Test
+	void draftAndPausedTasksCanPrepareItems() {
+		task.setLifecycle(TaskLifecycle.DRAFT);
+		TaskItem draftItem = service.add(
+			"task-1", new AddTaskItemCommand("草稿数据", null, null), "draft-add", admin
+		);
+		task.setLifecycle(TaskLifecycle.PAUSED);
+		TaskItem pausedItem = service.add(
+			"task-1", new AddTaskItemCommand("暂停数据", null, null), "paused-add", admin
+		);
+
+		assertThat(draftItem.getReferenceText()).isEqualTo("草稿数据");
+		assertThat(pausedItem.getReferenceText()).isEqualTo("暂停数据");
+	}
+
+	@Test
+	void endedTaskRejectsNewItems() {
+		task.setLifecycle(TaskLifecycle.ENDED);
+
+		assertThatThrownBy(() -> service.add(
+			"task-1", new AddTaskItemCommand("不可添加", null, null), "ended-add", admin
+		)).isInstanceOfSatisfying(ApiException.class, (exception) -> {
+			assertThat(exception.getStatus().value()).isEqualTo(409);
+			assertThat(exception.getCode()).isEqualTo("INVALID_TASK_STATE");
+		});
 	}
 
 	@Test

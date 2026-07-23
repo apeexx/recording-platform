@@ -1,7 +1,7 @@
 const feedback=require('./feedback.js')
 
 function promptForProfile(){
-  return new Promise(resolve=>wx.showModal({title:'请先完善个人资料',content:'设置姓名、数字账号和密码后，才可以申请权限或处理录音任务。',confirmText:'去设置',success:result=>{if(result.confirm)wx.navigateTo({url:'/pages/profile-settings/index'});resolve(false)}}))
+  return new Promise(resolve=>wx.showModal({title:'请先完善个人资料',content:'设置姓名后，即可申请权限或处理录音任务。数字登录账号可稍后设置。',confirmText:'去设置',success:result=>{if(result.confirm)wx.navigateTo({url:'/pages/profile-settings/index'});resolve(false)}}))
 }
 
 async function requireCompleteProfile(app) {

@@ -41,6 +41,10 @@ describe('任务页面 API', () => {
 	  expect(source).toContain('录音格式')
 	  expect(source).toContain('采样率')
 	  expect(source).toContain('时长范围')
+	  expect(source).toContain("row.lifecycle === 'DRAFT'")
+	  expect(source).toContain('@click="deleteTask(row)">删除')
+	  expect(source).toContain("['RUNNING', 'PAUSED'].includes(row.lifecycle)")
+	  expect(source).not.toContain("row.lifecycle !== 'ENDED'")
 	})
   it('任务数据池完全不显示或提交外部编号', () => {
 	  const detail = fs.readFileSync(path.resolve('src/pages/admin/tasks/TaskDetailPage.vue'), 'utf8')
@@ -63,6 +67,12 @@ describe('任务页面 API', () => {
     expect(detail).toContain('数据池（共 {{ total }} 条）')
     expect(detail).toContain('<PaginationControls numbered :page="page" :size="itemPageSize" :page-sizes="[5, 10, 20]" :total="total" @change="changePage" @size-change="changePageSize" />')
     expect(detail).not.toContain('taskApi.items(route.params.id, 0, 100)')
+    const pagination = fs.readFileSync(path.resolve('src/components/admin/PaginationControls.vue'), 'utf8')
+    const paginationStyles = fs.readFileSync(path.resolve('src/styles/pagination.css'), 'utf8')
+    expect(pagination).toContain('class="pagination-pages"')
+    expect(paginationStyles).toMatch(/\.pagination-numbered\s*\{[^}]*justify-content:\s*space-between/)
+    expect(paginationStyles).toContain('.pagination-size .base-select-menu')
+    expect(paginationStyles).toMatch(/bottom:\s*calc\(100% \+ 8px\)/)
   })
   it('任务状态和数据池请求使用后端真实路径', async () => {
     httpRequest.mockResolvedValue({})
@@ -79,7 +89,18 @@ describe('任务页面 API', () => {
 	  expect(source).toContain('g.userId')
 	  expect(source).not.toContain('internalUserNo')
 	  expect(source).not.toContain('userNo')
+	  expect(source).toContain('permission-overview-grid')
+	  const styles=fs.readFileSync(path.resolve('src/styles/business.css'),'utf8')
+	  expect(styles).toContain('.permission-overview-grid')
+	  expect(styles).toContain('align-items:stretch')
 	})
+
+  it('侧栏品牌区与顶部栏共享同一高度变量',()=>{
+    const styles=fs.readFileSync(path.resolve('src/styles/admin-layout.css'),'utf8')
+    expect(styles).toMatch(/--admin-header-height:\s*68px/)
+    expect(styles).toMatch(/height:\s*var\(--admin-header-height\)/)
+    expect(styles).toMatch(/min-height:\s*var\(--admin-header-height\)/)
+  })
   it('导入使用 multipart 且不手写内容类型', async () => {
     httpRequest.mockResolvedValue({ importJobId: 'j1' })
     const file = new File(['a'], 'items.csv')

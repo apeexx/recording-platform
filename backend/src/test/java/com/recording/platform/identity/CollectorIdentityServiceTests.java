@@ -45,6 +45,42 @@ class CollectorIdentityServiceTests {
 	}
 
 	@Test
+	void nameAloneCompletesProfileAndAccountCanBeAddedLater() {
+		MiniProgramUserStore users = mock(MiniProgramUserStore.class);
+		MiniProgramUser user = mini();
+		when(users.findById(user.getId())).thenReturn(Optional.of(user));
+		when(users.updateNameIfActive(eq(user.getId()), eq("张三"), eq(Instant.now(CLOCK))))
+			.thenAnswer(invocation -> {
+				user.setName("张三");
+				return Optional.of(user);
+			});
+		CollectorIdentityService service = new CollectorIdentityService(users, mock(SessionService.class), passwords, CLOCK);
+
+		MiniProgramUser completed = service.completeProfile(user.getId(), " 张三 ", null, null);
+
+		assertThat(completed.getName()).isEqualTo("张三");
+		assertThat(completed.getAccount()).isNull();
+		assertThat(com.recording.platform.identity.service.CollectorProfilePolicy.isComplete(completed)).isTrue();
+	}
+
+	@Test
+	void accountAndPasswordMustBeProvidedTogether() {
+		MiniProgramUserStore users = mock(MiniProgramUserStore.class);
+		MiniProgramUser user = mini();
+		when(users.findById(user.getId())).thenReturn(Optional.of(user));
+		CollectorIdentityService service = new CollectorIdentityService(users, mock(SessionService.class), passwords, CLOCK);
+
+		assertThatThrownBy(() -> service.completeProfile(user.getId(), "张三", "682913", null))
+			.isInstanceOfSatisfying(ApiException.class, error ->
+				assertThat(error.getCode()).isEqualTo("ACCOUNT_PASSWORD_REQUIRED")
+			);
+		assertThatThrownBy(() -> service.completeProfile(user.getId(), "张三", null, "Password-1"))
+			.isInstanceOfSatisfying(ApiException.class, error ->
+				assertThat(error.getCode()).isEqualTo("ACCOUNT_PASSWORD_REQUIRED")
+			);
+	}
+
+	@Test
 	void rejectsDuplicateOrMalformedMiniProgramAccounts() {
 		MiniProgramUserStore users = mock(MiniProgramUserStore.class); MiniProgramUser user = mini(); MiniProgramUser other = mini(); other.setId("MINI-1123456789abcdef01234567");
 		when(users.findById(user.getId())).thenReturn(Optional.of(user)); when(users.findByAccount("682913")).thenReturn(Optional.of(other));

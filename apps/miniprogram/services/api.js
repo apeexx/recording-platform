@@ -86,7 +86,6 @@ module.exports = {
     fail:reject
   })),
   avatar: ()=>downloadProtected('/api/auth/miniprogram/avatar'),
-  deleteAvatar: ()=>request('/api/auth/miniprogram/avatar',{method:'DELETE'}),
   tasks: ()=>request('/api/tasks?page=0&size=100'),
   task: id=>request(`/api/tasks/${encodeURIComponent(id)}`),
   requestAccess: id=>request(`/api/tasks/${encodeURIComponent(id)}/access-requests`,{method:'POST',idempotencyKey:operationId('access')}),

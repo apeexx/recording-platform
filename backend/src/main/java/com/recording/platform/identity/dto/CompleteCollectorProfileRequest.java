@@ -4,7 +4,7 @@ import jakarta.validation.constraints.NotBlank;
 
 public record CompleteCollectorProfileRequest(
 	@NotBlank String name,
-	@NotBlank String account,
-	@NotBlank String password
+	String account,
+	String password
 ) {
 }
