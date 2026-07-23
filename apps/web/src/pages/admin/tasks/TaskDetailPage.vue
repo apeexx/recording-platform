@@ -30,6 +30,7 @@ const fileInput = ref(null)
 const importBusy = ref(false)
 const dragging = ref(false)
 const job = ref(null)
+const activeImportJobId = ref(null)
 const pollTimer = ref(null)
 const editingItem = ref(null)
 const editBusy = ref(false)
@@ -93,6 +94,7 @@ function chooseImportFile(file) {
     notifications.error('请选择单个 CSV 文件')
     return
   }
+  stopImportTracking()
   importFile.value = file
   job.value = null
   notice.value = ''
@@ -113,6 +115,11 @@ function clearPoll() {
   pollTimer.value = null
 }
 
+function stopImportTracking() {
+  clearPoll()
+  activeImportJobId.value = null
+}
+
 function schedulePoll() {
   clearPoll()
   pollTimer.value = window.setTimeout(refreshJob, 1000)
@@ -120,11 +127,12 @@ function schedulePoll() {
 
 async function upload() {
   if (!importFile.value || importBusy.value) return
-  clearPoll()
+  stopImportTracking()
   importBusy.value = true
   error.value = ''
   try {
     job.value = await taskApi.importItems(route.params.id, importFile.value, operationId('import'))
+    activeImportJobId.value = job.value.importJobId
     notice.value = '导入任务已进入队列，进度会自动刷新'
     notifications.success('CSV 已进入导入队列')
     schedulePoll()
@@ -138,13 +146,15 @@ async function upload() {
 
 async function refreshJob() {
   clearPoll()
-  if (!job.value?.importJobId) return
+  const importJobId = activeImportJobId.value
+  if (!importJobId) return
   try {
-    job.value = await taskApi.importJob(job.value.importJobId)
+    job.value = await taskApi.importJob(importJobId)
     if (['PENDING', 'PROCESSING'].includes(job.value.status)) {
       schedulePoll()
       return
     }
+    activeImportJobId.value = null
     if (job.value.status === 'COMPLETED') {
       importFile.value = null
       if (fileInput.value) fileInput.value.value = ''
@@ -165,10 +175,12 @@ async function refreshJob() {
 }
 
 async function retryImport() {
-  if (!job.value?.importJobId) return
+  const importJobId = activeImportJobId.value || job.value?.id
+  if (!importJobId) return
   try {
     clearPoll()
-    job.value = await taskApi.retryImport(job.value.importJobId, operationId('import-retry'))
+    job.value = await taskApi.retryImport(importJobId, operationId('import-retry'))
+    activeImportJobId.value = job.value.importJobId
     notifications.success('失败行已重新进入导入队列')
     schedulePoll()
   } catch (exception) {
@@ -287,7 +299,7 @@ async function changeStatus() {
 }
 
 onMounted(load)
-onBeforeUnmount(clearPoll)
+onBeforeUnmount(stopImportTracking)
 </script>
 
 <template>

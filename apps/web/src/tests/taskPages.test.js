@@ -94,7 +94,7 @@ describe('任务页面 API', () => {
     const detail = fs.readFileSync(path.resolve('src/pages/admin/tasks/TaskDetailPage.vue'), 'utf8')
     expect(detail).toContain('@drop.prevent="onDrop"')
     expect(detail).toContain('window.setTimeout(refreshJob, 1000)')
-    expect(detail).toContain('onBeforeUnmount(clearPoll)')
+    expect(detail).toContain('onBeforeUnmount(stopImportTracking)')
     expect(detail).toContain('processedRows.value / totalRows')
     expect(detail).toContain("'\\uFEFFreferenceText,referenceAudioUrl,referenceVideoUrl")
     expect(detail).toContain('<progress :value="importProgress"')
