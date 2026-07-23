@@ -8,7 +8,9 @@ import {
   previewVoice,
   synthesizeVoice
 } from '../../../lib/voiceGenerationApi.js'
+import { useNotifications } from '../../../composables/useNotifications.js'
 
+const notifications = useNotifications()
 const modes = [
   { key: 'preview', label: '0元试听' },
   { key: 'clone', label: '付费克隆' },
@@ -61,7 +63,7 @@ async function loadVoices() {
     const data = await fetchVoices({ excludeSystem: true })
     voiceAssets.value = normalizeVoices(data)
   } catch (error) {
-    voiceAssets.value = []
+    notifications.error(error.message)
   }
 }
 
@@ -70,12 +72,13 @@ async function loadRecords() {
     const data = await fetchRecords({ page: 0, size: 5 })
     recentRecords.value = data.items || []
   } catch (error) {
-    recentRecords.value = []
+    notifications.error(error.message)
   }
 }
 
 async function submitGeneration() {
   loading.value = true
+  const previousStatus = statusMessage.value
   statusMessage.value = '正在调用后端真实接口...'
   try {
     let result
@@ -103,7 +106,8 @@ async function submitGeneration() {
     statusMessage.value = result.message || '操作完成'
     await refreshDashboard()
   } catch (error) {
-    statusMessage.value = error.message
+    statusMessage.value = previousStatus
+    notifications.error(error.message)
   } finally {
     loading.value = false
   }

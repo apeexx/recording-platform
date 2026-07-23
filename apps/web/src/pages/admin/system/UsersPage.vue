@@ -17,11 +17,14 @@ const createOpen = ref(false)
 const creating = ref(false)
 const createTrigger = ref(null)
 const createPanel = ref(null)
+const usernameInput = ref(null)
+const nameInput = ref(null)
+const passwordInput = ref(null)
 const form = reactive({ username: '', name: '', role: 'REVIEWER', initialPassword: '' })
 const roleOptions = [{ value: 'REVIEWER', label: '审核员' }, { value: 'ADMIN', label: '管理员' }]
 let loadSequence = 0
 
-async function load() {
+async function load(showToast = false) {
   const sequence = ++loadSequence
   loading.value = true
   error.value = ''
@@ -29,7 +32,10 @@ async function load() {
     const response = await userApi.search({query:query.value,userType:view.value,page:0,size:100})
     if (sequence === loadSequence) rows.value = response.content || []
   } catch (exception) {
-    if (sequence === loadSequence) error.value = exception.message
+    if (sequence === loadSequence) {
+      if (showToast || rows.value.length) notifications.error(exception.message)
+      else error.value = exception.message
+    }
   } finally {
     if (sequence === loadSequence) loading.value = false
   }
@@ -80,15 +86,29 @@ function handleCreateKeydown(event) {
 
 async function create() {
   if (creating.value) return
+  if (!form.username) {
+    notifications.error('请输入用户名')
+    usernameInput.value?.focus()
+    return
+  }
+  if (!form.name) {
+    notifications.error('请输入姓名')
+    nameInput.value?.focus()
+    return
+  }
+  if (form.initialPassword.length < 8) {
+    notifications.error('初始密码至少需要 8 个字符')
+    passwordInput.value?.focus()
+    return
+  }
   creating.value = true
   try {
     await userApi.create({ ...form })
     createOpen.value = false
     resetCreateForm()
     notifications.success('后台账号已创建')
-    await load()
+    await load(true)
   } catch (exception) {
-    error.value = exception.message
     notifications.error(exception.message)
   } finally {
     creating.value = false
@@ -100,7 +120,7 @@ async function disable(row) {
   try {
     await userApi.disable(row.id)
     notifications.success('账号已停用')
-    await load()
+    await load(true)
   } catch (exception) {
     notifications.error(exception.message)
   }
@@ -112,7 +132,7 @@ async function reset(row) {
   try {
     await userApi.resetPassword(row.id, password)
     notifications.success(row.role === 'COLLECTOR' ? '采集员密码已重置，活动会话已失效' : '密码已重置，用户下次登录必须修改密码')
-    await load()
+    await load(true)
   } catch (exception) {
     notifications.error(exception.message)
   }
@@ -124,7 +144,7 @@ async function editAccount(row) {
   try {
     await userApi.updateCollectorAccount(row.id, account)
     notifications.success('采集员账号已修改，活动会话已失效')
-    await load()
+    await load(true)
   } catch (exception) {
     notifications.error(exception.message)
   }
@@ -155,8 +175,8 @@ onBeforeUnmount(() => {
       <button data-user-type="MINIPROGRAM" :class="['tab', view === 'MINIPROGRAM' && 'active']" @click="switchView('MINIPROGRAM')">小程序端账号</button>
     </PageActions>
     <div class="toolbar">
-      <input v-model="query" placeholder="按姓名、完整用户 ID 或登录名搜索" @keyup.enter="load">
-      <button class="primary" @click="load">搜索</button>
+      <input v-model="query" placeholder="按姓名、完整用户 ID 或登录名搜索" @keyup.enter="load(true)">
+      <button class="primary" @click="load(true)">搜索</button>
       <button v-if="view === 'WEB'" ref="createTrigger" data-testid="open-create-user" class="primary create-trigger" @click="openCreate">创建后台账号</button>
     </div>
     <AsyncState :loading="loading" :error="error" :empty="!rows.length">
@@ -183,11 +203,11 @@ onBeforeUnmount(() => {
       <div v-if="createOpen" data-testid="create-user-modal" class="create-modal-backdrop" @click.self="closeCreate">
         <section ref="createPanel" class="create-modal" role="dialog" aria-modal="true" aria-label="创建后台账号">
           <h2>创建后台账号</h2>
-          <form class="create-modal-form" @submit.prevent="create">
-            <label>用户名<input v-model.trim="form.username" required autocomplete="off" placeholder="请输入用户名"></label>
-            <label>姓名<input v-model.trim="form.name" required autocomplete="off" placeholder="请输入姓名"></label>
+          <form class="create-modal-form" novalidate @submit.prevent="create">
+            <label>用户名<input ref="usernameInput" v-model.trim="form.username" required autocomplete="off" placeholder="请输入用户名"></label>
+            <label>姓名<input ref="nameInput" v-model.trim="form.name" required autocomplete="off" placeholder="请输入姓名"></label>
             <label>角色<BaseSelect v-model="form.role" :options="roleOptions" aria-label="角色" /></label>
-            <label>初始密码<input v-model="form.initialPassword" type="password" required minlength="8" autocomplete="new-password" placeholder="至少 8 个字符"></label>
+            <label>初始密码<input ref="passwordInput" v-model="form.initialPassword" type="password" required minlength="8" autocomplete="new-password" placeholder="至少 8 个字符"></label>
             <div class="create-modal-actions">
               <button type="button" data-testid="create-user-cancel" class="modal-secondary" :disabled="creating" @click="closeCreate">取消</button>
               <button type="submit" class="primary" :disabled="creating">{{ creating ? '创建中…' : '确定创建' }}</button>

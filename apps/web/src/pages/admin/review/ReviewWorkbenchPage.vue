@@ -17,7 +17,6 @@ const item = ref(null)
 const version = ref(null)
 const loading = ref(false)
 const loadError = ref('')
-const validationError = ref('')
 const text = ref('')
 const reasons = ref([])
 const note = ref('')
@@ -59,20 +58,18 @@ function backToQueue() {
 }
 
 async function approve() {
-  validationError.value = ''
   try {
     await reviewApi.approve(item.value.id, item.value.revision, text.value, operationId('review-approve'))
     notifications.success('审核已通过')
     backToQueue()
   } catch (error) {
-    validationError.value = error.message
+    notifications.error(error.message)
   }
 }
 
 async function reject() {
-  validationError.value = ''
   if (!reasons.value.length && !note.value.trim()) {
-    validationError.value = '至少选择一个驳回原因或填写补充说明'
+    notifications.error('至少选择一个驳回原因或填写补充说明')
     return
   }
   try {
@@ -86,7 +83,7 @@ async function reject() {
     notifications.success('已驳回并进入返修队列')
     backToQueue()
   } catch (error) {
-    validationError.value = error.message
+    notifications.error(error.message)
   }
 }
 
@@ -97,7 +94,7 @@ async function release() {
     notifications.success('审核领取已释放')
     backToQueue()
   } catch (error) {
-    validationError.value = error.message
+    notifications.error(error.message)
   }
 }
 
@@ -136,7 +133,6 @@ onMounted(load)
             </label>
           </div>
           <label>补充说明<textarea v-model="note" rows="4" /></label>
-          <p v-if="validationError" class="business-error">{{ validationError }}</p>
           <div v-if="canDecide" class="business-actions">
             <button class="button-secondary is-danger" @click="reject">驳回到返修队列</button>
             <button class="button-primary" @click="approve">审核通过</button>

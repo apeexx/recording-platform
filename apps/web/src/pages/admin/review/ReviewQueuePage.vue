@@ -10,13 +10,13 @@ import { useAdminSession } from '../../../composables/useAdminSession.js'
 import { useNotifications } from '../../../composables/useNotifications.js'
 const notifications=useNotifications(),route=useRoute(),router=useRouter(),session=useAdminSession(),rows=ref([]),loading=ref(false),error=ref(''),count=ref(5),selected=ref(new Set()),notice=ref(''),page=ref(0),total=ref(0)
 const isAdmin=computed(()=>session.user.value?.role==='ADMIN'),isReviewer=computed(()=>session.user.value?.role==='REVIEWER')
-async function load(){loading.value=true;error.value='';try{const result=await reviewApi.pool(route.params.taskId,page.value,20);rows.value=result.items||[];total.value=result.total||0}catch(e){error.value=e.message}finally{loading.value=false}}
-async function claim(){try{const item=await reviewApi.claim(route.params.taskId,operationId('review-claim'));notifications.success('已领取一条审核数据');router.push(`/admin/review/${item.id}`)}catch(e){error.value=e.message;notifications.error(e.message)}}
-async function claimBatch(){try{const items=await reviewApi.claimBatch(route.params.taskId,Number(count.value),operationId('review-claim-batch'));notifications.success(`已领取 ${items.length} 条审核数据`);items[0]?router.push(`/admin/review/${items[0].id}`):router.push('/admin/review')}catch(e){error.value=e.message;notifications.error(e.message)}}
-async function claimItem(row){try{const item=await reviewApi.claimItem(row.id,row.revision,operationId('review-claim-item'));notifications.success('已领取该审核数据');router.push(`/admin/review/${item.id}`)}catch(e){error.value=e.message;notifications.error(e.message)}}
+async function load(showToast=false){loading.value=true;error.value='';try{const result=await reviewApi.pool(route.params.taskId,page.value,20);rows.value=result.items||[];total.value=result.total||0}catch(e){if(showToast||rows.value.length)notifications.error(e.message);else error.value=e.message}finally{loading.value=false}}
+async function claim(){try{const item=await reviewApi.claim(route.params.taskId,operationId('review-claim'));notifications.success('已领取一条审核数据');router.push(`/admin/review/${item.id}`)}catch(e){notifications.error(e.message)}}
+async function claimBatch(){try{const items=await reviewApi.claimBatch(route.params.taskId,Number(count.value),operationId('review-claim-batch'));notifications.success(`已领取 ${items.length} 条审核数据`);items[0]?router.push(`/admin/review/${items[0].id}`):router.push('/admin/review')}catch(e){notifications.error(e.message)}}
+async function claimItem(row){try{const item=await reviewApi.claimItem(row.id,row.revision,operationId('review-claim-item'));notifications.success('已领取该审核数据');router.push(`/admin/review/${item.id}`)}catch(e){notifications.error(e.message)}}
 function toggle(row){if(row.status!=='REVIEW_PENDING')return;const next=new Set(selected.value);next.has(row.id)?next.delete(row.id):next.add(row.id);selected.value=next}
-async function batchApprove(){if(!selected.value.size||!confirm(`确认批量通过 ${selected.value.size} 条审核数据？`))return;try{const commands=rows.value.filter(r=>selected.value.has(r.id)).map(r=>({itemId:r.id,expectedRevision:r.revision,text:null}));const result=await reviewApi.batchApprove(commands,operationId('review-batch-approve'));notice.value=`批量通过完成：成功 ${result.filter(r=>r.success).length}，冲突 ${result.filter(r=>!r.success).length}`;notifications.success(notice.value);selected.value=new Set();await load()}catch(e){error.value=e.message;notifications.error(e.message)}}
-async function assign(row){const reviewerId=prompt('请输入审核员用户 ID');if(!reviewerId)return;try{await reviewApi.assign(row.id,reviewerId,row.revision,operationId('review-assign'));notifications.success('审核数据已分配');await load()}catch(e){error.value=e.message;notifications.error(e.message)}}
+async function batchApprove(){if(!selected.value.size||!confirm(`确认批量通过 ${selected.value.size} 条审核数据？`))return;try{const commands=rows.value.filter(r=>selected.value.has(r.id)).map(r=>({itemId:r.id,expectedRevision:r.revision,text:null}));const result=await reviewApi.batchApprove(commands,operationId('review-batch-approve'));notice.value=`批量通过完成：成功 ${result.filter(r=>r.success).length}，冲突 ${result.filter(r=>!r.success).length}`;notifications.success(notice.value);selected.value=new Set();await load(true)}catch(e){notifications.error(e.message)}}
+async function assign(row){const reviewerId=prompt('请输入审核员用户 ID');if(!reviewerId)return;try{await reviewApi.assign(row.id,reviewerId,row.revision,operationId('review-assign'));notifications.success('审核数据已分配');await load(true)}catch(e){notifications.error(e.message)}}
 function changePage(value){page.value=value;selected.value=new Set();load()}
 onMounted(load)
 </script>
@@ -24,7 +24,7 @@ onMounted(load)
   <section class="admin-page">
     <PageActions title="任务审核池" description="已提交数据需先领取或分配，进入待审核后才能作出决定。">
       <router-link class="button-secondary" to="/admin/review">返回选择任务</router-link>
-      <button class="button-secondary" @click="load">刷新</button>
+      <button class="button-secondary" @click="load(true)">刷新</button>
       <button v-if="isReviewer" class="button-primary" @click="claim">领取一条</button>
     </PageActions>
     <div class="business-card">

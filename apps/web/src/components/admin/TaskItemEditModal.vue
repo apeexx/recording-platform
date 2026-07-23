@@ -6,7 +6,6 @@ const props = defineProps({
   item: { type: Object, default: null },
   referenceTypes: { type: Array, default: () => [] },
   busy: Boolean,
-  error: { type: String, default: '' },
 })
 const emit = defineEmits(['close', 'save'])
 const form = reactive({ referenceText: '', referenceAudioUrl: '', referenceVideoUrl: '' })
@@ -29,7 +28,7 @@ watch(() => props.item, (item) => {
           </div>
           <button type="button" class="button-link" aria-label="关闭" @click="emit('close')">关闭</button>
         </div>
-        <form class="business-form" @submit.prevent="emit('save', { ...form })">
+        <form class="business-form" novalidate @submit.prevent="emit('save', { ...form })">
           <label v-if="referenceTypes.includes('TEXT')">参考文字
             <textarea v-model.trim="form.referenceText" class="task-reference-textarea" rows="5" />
           </label>
@@ -39,7 +38,6 @@ watch(() => props.item, (item) => {
           <label v-if="referenceTypes.includes('VIDEO')">参考视频 URL
             <input v-model.trim="form.referenceVideoUrl" type="url">
           </label>
-          <p v-if="error" class="business-error">{{ error }}</p>
           <div class="business-actions">
             <button type="button" class="button-secondary" :disabled="busy" @click="emit('close')">取消</button>
             <button class="button-primary" :disabled="busy">{{ busy ? '保存中…' : '保存修改' }}</button>

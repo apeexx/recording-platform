@@ -1,7 +1,9 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import { fetchRecords } from '../../../lib/voiceGenerationApi.js'
+import { useNotifications } from '../../../composables/useNotifications.js'
 
+const notifications = useNotifications()
 const loading = ref(false)
 const message = ref('生成记录来自后端 MongoDB。')
 const records = ref([])
@@ -13,8 +15,7 @@ async function loadRecords() {
     records.value = data.items || []
     message.value = `已加载 ${records.value.length} 条生成记录`
   } catch (error) {
-    message.value = error.message
-    records.value = []
+    notifications.error(error.message)
   } finally {
     loading.value = false
   }

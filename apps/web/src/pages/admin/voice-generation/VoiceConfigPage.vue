@@ -6,7 +6,9 @@ import {
   fetchVoices,
   saveDefaultVoiceConfig
 } from '../../../lib/voiceGenerationApi.js'
+import { useNotifications } from '../../../composables/useNotifications.js'
 
+const notifications = useNotifications()
 const loading = ref(false)
 const message = ref('声音配置页直接读取后端 MiniMax 音色资产。')
 const voices = ref([])
@@ -27,7 +29,7 @@ async function loadDefaultConfig() {
       pitch: data.pitch ?? 0
     }
   } catch (error) {
-    message.value = error.message
+    notifications.error(error.message)
   }
 }
 
@@ -37,7 +39,7 @@ async function saveConfig() {
     await saveDefaultVoiceConfig(config.value)
     message.value = '默认声音配置已保存'
   } catch (error) {
-    message.value = error.message
+    notifications.error(error.message)
   } finally {
     loading.value = false
   }
@@ -50,8 +52,7 @@ async function loadVoices() {
     voices.value = normalizeVoices(data)
     message.value = `已刷新 ${voices.value.length} 个专属音色`
   } catch (error) {
-    message.value = error.message
-    voices.value = []
+    notifications.error(error.message)
   } finally {
     loading.value = false
   }
@@ -64,7 +65,7 @@ async function removeVoice(voiceId) {
     message.value = `已删除音色 ${voiceId}`
     await loadVoices()
   } catch (error) {
-    message.value = error.message
+    notifications.error(error.message)
   } finally {
     loading.value = false
   }

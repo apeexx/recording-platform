@@ -5,12 +5,13 @@ import PageActions from '../../../components/admin/PageActions.vue'
 import BaseSelect from '../../../components/form/BaseSelect.vue'
 import DurationRangeSlider from '../../../components/form/DurationRangeSlider.vue'
 import ToggleSwitch from '../../../components/form/ToggleSwitch.vue'
+import AsyncState from '../../../components/admin/AsyncState.vue'
 import { taskApi } from '../../../lib/taskApi.js'
 import { operationId } from '../../../lib/apiUtils.js'
 import { useNotifications } from '../../../composables/useNotifications.js'
 
 const route = useRoute(), router = useRouter(), notifications = useNotifications()
-const error = ref(''), saving = ref(false)
+const loadError = ref(''), loading = ref(false), saving = ref(false), nameInput = ref(null)
 const form = reactive({ name: '', description: '', referenceTypes: ['TEXT'], resultType: 'TEXT', humanReviewEnabled: true, recordingFormat: 'WAV', sampleRate: 16000, minDurationSeconds: 1, maxDurationSeconds: 600, rejectionReasons: '空音频,内容不符' })
 const resultOptions = [{ value: 'TEXT', label: '文本或录音（可同时提交）' }, { value: 'AUDIO', label: '仅录音' }]
 const formatOptions = [{ value: 'WAV', label: 'WAV' }, { value: 'MP3', label: 'MP3' }]
@@ -18,6 +19,8 @@ const sampleRateOptions = [8000, 16000, 44100, 48000].map(value => ({ value, lab
 
 async function init() {
   if (!route.params.id) return
+  loading.value = true
+  loadError.value = ''
   try {
     const task = await taskApi.get(route.params.id)
     if (task.lifecycle !== 'DRAFT') {
@@ -27,7 +30,8 @@ async function init() {
     }
     const configuration = task.configuration || {}
     Object.assign(form, { name: task.name, description: task.description || '', referenceTypes: [...(configuration.referenceTypes || ['TEXT'])], resultType: configuration.resultType || 'TEXT', humanReviewEnabled: configuration.humanReviewEnabled !== false, recordingFormat: configuration.recordingFormat || 'WAV', sampleRate: [...(configuration.sampleRates || [16000])][0], minDurationSeconds: (configuration.minDurationMillis || 1000) / 1000, maxDurationSeconds: (configuration.maxDurationMillis || 600000) / 1000, rejectionReasons: (configuration.rejectionReasons || []).join(',') })
-  } catch (exception) { error.value = exception.message }
+  } catch (exception) { loadError.value = exception.message }
+  finally { loading.value = false }
 }
 
 function payload() {
@@ -35,15 +39,20 @@ function payload() {
 }
 
 async function save() {
-  if (!form.referenceTypes.length) { error.value = '至少选择一种参考源'; return }
-  saving.value = true; error.value = ''
+  if (!form.name.trim()) {
+    notifications.error('请输入任务名称')
+    nameInput.value?.focus()
+    return
+  }
+  if (!form.referenceTypes.length) { notifications.error('至少选择一种参考源'); return }
+  saving.value = true
   const key = operationId(route.params.id ? 'task-update' : 'task-create')
   try {
     if (route.params.id) await taskApi.update(route.params.id, payload(), key)
     else await taskApi.create(payload(), key)
     notifications.success(route.params.id ? '草稿任务已保存' : '任务已创建', { dedupeKey: key })
     await router.push('/admin/tasks')
-  } catch (exception) { error.value = exception.message; notifications.error(exception.message || '保存失败', { dedupeKey: `${key}:error` }) }
+  } catch (exception) { notifications.error(exception.message || '保存失败', { dedupeKey: `${key}:error` }) }
   finally { saving.value = false }
 }
 onMounted(init)
@@ -52,9 +61,10 @@ onMounted(init)
 <template>
   <section class="admin-page">
     <PageActions :title="route.params.id ? '编辑草稿任务' : '创建任务'" description="任务编号由系统自动生成；任务发布后名称、说明和全部配置永久冻结。" />
-    <form class="business-card business-form business-form-wide" @submit.prevent="save">
+    <AsyncState :loading="loading" :error="loadError" :empty="false" @retry="init">
+    <form class="business-card business-form business-form-wide" novalidate @submit.prevent="save">
       <div class="business-form-grid">
-        <label>任务名称<input v-model.trim="form.name" required></label>
+        <label>任务名称<input ref="nameInput" v-model.trim="form.name" required></label>
         <label>最终成果<BaseSelect v-model="form.resultType" :options="resultOptions" aria-label="最终成果" /></label>
         <label>录音格式<BaseSelect v-model="form.recordingFormat" :options="formatOptions" aria-label="录音格式" /></label>
         <label>采样率<BaseSelect v-model="form.sampleRate" :options="sampleRateOptions" aria-label="采样率" /></label>
@@ -65,8 +75,8 @@ onMounted(init)
       <fieldset><legend>审核</legend><ToggleSwitch v-model="form.humanReviewEnabled" label="人工审核" /></fieldset>
       <label v-if="form.humanReviewEnabled">驳回预设原因（逗号分隔）<input v-model="form.rejectionReasons"></label>
       <p class="business-note">文本任务可提交文本或录音，也可同时提交；音频任务仅提交录音。首期 AI 功能固定关闭。</p>
-      <p v-if="error" class="business-error">{{ error }}</p>
       <div class="business-actions"><router-link class="button-secondary" to="/admin/tasks">取消</router-link><button class="button-primary" :disabled="saving">{{ saving ? '保存中…' : '保存' }}</button></div>
     </form>
+    </AsyncState>
   </section>
 </template>

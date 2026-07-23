@@ -4,11 +4,13 @@ const state = reactive({ items: [] })
 let nextId = 1
 
 function notify(message, type = 'success', options = {}) {
-  const dedupeKey = options.dedupeKey
+  const normalizedMessage = String(message || '操作失败，请稍后重试')
+  const dedupeKey = options.dedupeKey ?? (type === 'error' ? `${type}:${normalizedMessage}` : undefined)
   if (dedupeKey && state.items.some(item => item.dedupeKey === dedupeKey)) return
-  const item = { id: nextId++, message, type, dedupeKey }
+  const item = { id: nextId++, message: normalizedMessage, type, dedupeKey }
   state.items.push(item)
-  setTimeout(() => dismiss(item.id), options.duration ?? 2600)
+  const defaultDuration = type === 'error' ? 4500 : 2600
+  setTimeout(() => dismiss(item.id), options.duration ?? defaultDuration)
   return item.id
 }
 

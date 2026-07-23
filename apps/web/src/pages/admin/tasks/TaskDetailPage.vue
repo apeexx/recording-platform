@@ -20,7 +20,7 @@ const items = ref([])
 const page = ref(0)
 const total = ref(0)
 const loading = ref(false)
-const error = ref('')
+const loadError = ref('')
 const notice = ref('')
 const selected = ref(new Set())
 const targetStatus = ref('COMPLETED')
@@ -34,14 +34,13 @@ const activeImportJobId = ref(null)
 const pollTimer = ref(null)
 const editingItem = ref(null)
 const editBusy = ref(false)
-const editError = ref('')
 const itemForm = reactive({ referenceText: '', referenceAudioUrl: '', referenceVideoUrl: '' })
 const processedRows = computed(() => (Number(job.value?.successRows) || 0) + (Number(job.value?.failureRows) || 0))
 const importProgress = computed(() => {
   const totalRows = Number(job.value?.totalRows) || 0
   return totalRows ? Math.min(100, Math.round(processedRows.value / totalRows * 100)) : 0
 })
-const importErrorSummary = computed(() => job.value?.rowErrors?.[0]?.message || '')
+const jobErrorMessage = computed(() => job.value?.rowErrors?.[0]?.message || '')
 
 async function loadItems() {
   const result = await taskApi.items(route.params.id, page.value, itemPageSize.value)
@@ -57,7 +56,7 @@ async function loadItems() {
 
 async function load() {
   loading.value = true
-  error.value = ''
+  loadError.value = ''
   try {
     const taskData = await taskApi.get(route.params.id)
     task.value = taskData
@@ -69,7 +68,7 @@ async function load() {
     ]
     await loadItems()
   } catch (exception) {
-    error.value = exception.message
+    loadError.value = exception.message
   } finally {
     loading.value = false
   }
@@ -83,7 +82,6 @@ async function add() {
     page.value = 0
     await loadItems()
   } catch (exception) {
-    error.value = exception.message
     notifications.error(exception.message)
   }
 }
@@ -129,7 +127,6 @@ async function upload() {
   if (!importFile.value || importBusy.value) return
   stopImportTracking()
   importBusy.value = true
-  error.value = ''
   try {
     job.value = await taskApi.importItems(route.params.id, importFile.value, operationId('import'))
     activeImportJobId.value = job.value.importJobId
@@ -137,7 +134,6 @@ async function upload() {
     notifications.success('CSV 已进入导入队列')
     schedulePoll()
   } catch (exception) {
-    error.value = exception.message
     notifications.error(exception.message)
   } finally {
     importBusy.value = false
@@ -162,14 +158,13 @@ async function refreshJob() {
       page.value = 0
       await loadItems()
     } else if (job.value.status === 'PARTIAL_SUCCESS') {
-      notifications.info('部分数据导入成功，可重试失败行')
+      notifications.error(jobErrorMessage.value || '部分数据导入成功，可重试失败行')
       page.value = 0
       await loadItems()
     } else if (job.value.status === 'FAILED') {
-      notifications.error(importErrorSummary.value || '批量导入失败')
+      notifications.error(jobErrorMessage.value || '批量导入失败')
     }
   } catch (exception) {
-    error.value = exception.message
     notifications.error(exception.message)
   }
 }
@@ -184,7 +179,6 @@ async function retryImport() {
     notifications.success('失败行已重新进入导入队列')
     schedulePoll()
   } catch (exception) {
-    error.value = exception.message
     notifications.error(exception.message)
   }
 }
@@ -206,19 +200,16 @@ async function deleteTask() {
     notifications.success('草稿任务已删除')
     await router.push('/admin/tasks')
   } catch (exception) {
-    error.value = exception.message
     notifications.error(exception.message)
   }
 }
 
 function openEdit(row) {
   editingItem.value = row
-  editError.value = ''
 }
 
 async function saveEdit(values) {
   editBusy.value = true
-  editError.value = ''
   try {
     await taskApi.updateItem(editingItem.value.id, {
       expectedRevision: editingItem.value.revision,
@@ -228,7 +219,7 @@ async function saveEdit(values) {
     editingItem.value = null
     await loadItems()
   } catch (exception) {
-    editError.value = exception.message
+    notifications.error(exception.message)
   } finally {
     editBusy.value = false
   }
@@ -242,7 +233,6 @@ async function deleteItem(row) {
     selected.value.delete(row.id)
     await loadItems()
   } catch (exception) {
-    error.value = exception.message
     notifications.error(exception.message)
   }
 }
@@ -254,7 +244,6 @@ async function itemAction(row, action) {
     notifications.success(action === 'discard' ? '条目已废弃' : '条目已恢复')
     await loadItems()
   } catch (exception) {
-    error.value = exception.message
     notifications.error(exception.message)
   }
 }
@@ -278,7 +267,6 @@ async function batch(action) {
     selected.value = new Set()
     await loadItems()
   } catch (exception) {
-    error.value = exception.message
     notifications.error(exception.message)
   }
 }
@@ -293,7 +281,6 @@ async function changeStatus() {
     selected.value = new Set()
     await loadItems()
   } catch (exception) {
-    error.value = exception.message
     notifications.error(exception.message)
   }
 }
@@ -309,10 +296,10 @@ onBeforeUnmount(stopImportTracking)
       <button v-if="task?.lifecycle === 'DRAFT'" class="button-secondary is-danger" @click="deleteTask">删除任务</button>
       <router-link class="button-primary" :to="`/admin/tasks/${route.params.id}/permissions`">采集权限</router-link>
     </PageActions>
-    <AsyncState :loading="loading" :error="error" :empty="!task" @retry="load">
+    <AsyncState :loading="loading" :error="loadError" :empty="!task" @retry="load">
       <div class="business-grid task-detail-grid">
         <div class="task-tools-column">
-          <form class="business-card business-form" @submit.prevent="add">
+          <form class="business-card business-form" novalidate @submit.prevent="add">
             <h3>添加数据</h3>
             <label v-if="task?.configuration?.referenceTypes?.includes('TEXT')">参考文字<textarea v-model.trim="itemForm.referenceText" class="task-reference-textarea" rows="5" /></label>
             <label v-if="task?.configuration?.referenceTypes?.includes('AUDIO')">参考音频 URL<input v-model.trim="itemForm.referenceAudioUrl" type="url" /></label>
@@ -339,7 +326,6 @@ onBeforeUnmount(stopImportTracking)
               <div><strong>{{ statusLabel('import', job.status) }}</strong><span>{{ importProgress }}%</span></div>
               <progress :value="importProgress" max="100">{{ importProgress }}%</progress>
               <p>总数 {{ job.totalRows || 0 }} · 已处理 {{ processedRows }} · 成功 {{ job.successRows || 0 }} · 失败 {{ job.failureRows || 0 }}</p>
-              <p v-if="importErrorSummary" class="business-error">{{ importErrorSummary }}</p>
               <button v-if="['PARTIAL_SUCCESS', 'FAILED'].includes(job.status) && job.failureRows" type="button" class="button-secondary" @click="retryImport">重试失败行</button>
             </div>
             <p v-if="notice" class="business-success">{{ notice }}</p>
@@ -383,6 +369,6 @@ onBeforeUnmount(stopImportTracking)
       </div>
     </AsyncState>
     <TaskItemEditModal :open="Boolean(editingItem)" :item="editingItem" :reference-types="task?.configuration?.referenceTypes || []"
-      :busy="editBusy" :error="editError" @close="editingItem = null" @save="saveEdit" />
+      :busy="editBusy" @close="editingItem = null" @save="saveEdit" />
   </section>
 </template>
