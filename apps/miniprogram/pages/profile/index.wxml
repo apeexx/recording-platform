@@ -1,5 +1,5 @@
 <view class="page">
-  <view class="card profile-card" bindtap="openSettings"><image class="profile-avatar" src="{{avatarSrc}}"/><view class="profile-copy"><view class="title">{{user.name||'录音人员'}}</view><view class="user-id-copy" catchtap="copyUserId"><text>用户 ID：{{user.userId||'-'}}</text></view><view class="profile-state {{user.profileComplete?'complete':''}}">资料状态：{{user.profileComplete?'已完善':'待完善'}}</view></view><view class="chevron">›</view></view>
+  <view class="card profile-card" bindtap="openSettings"><image class="profile-avatar" src="{{avatarSrc}}"/><view class="profile-copy"><view class="title">{{user.name||'录音人员'}}</view><view class="profile-state {{user.profileComplete?'complete':''}}">资料状态：{{user.profileComplete?'已完善':'待完善'}}</view></view><view class="chevron">›</view></view>
   <view class="grid">
     <view class="card center"><view class="metric">{{summary.cumulativeSubmissions||0}}</view><view class="subtle">累计提交</view></view>
     <view class="card center"><view class="metric">{{summary.currentCompletedCount||0}}</view><view class="subtle">有效完成</view></view>
