@@ -20,7 +20,7 @@ import org.springframework.data.mongodb.core.query.Update;
 
 class MongoImportJobStoreTests {
 	@Test
-	void heartbeatProgressAndFinishAreFencedByLeaseOwnerAndReturnTheLatestDocument() {
+	void checkpointUpdatesProgressAndLeaseAtomicallyAndIsFencedByLeaseOwner() {
 		SpringDataImportJobRepository repository = org.mockito.Mockito.mock(SpringDataImportJobRepository.class);
 		MongoTemplate template = org.mockito.Mockito.mock(MongoTemplate.class);
 		ImportJob latest = new ImportJob();
@@ -41,13 +41,12 @@ class MongoImportJobStoreTests {
 		state.setCompletedAt(now);
 		state.setUpdatedAt(now);
 
-		assertThat(store.heartbeat("job-1", "worker-1", now, now.plusSeconds(600))).containsSame(latest);
-		assertThat(store.saveProgress(state, "worker-1")).containsSame(latest);
+		assertThat(store.checkpoint(state, "worker-1", now, now.plusSeconds(600))).containsSame(latest);
 		assertThat(store.finish(state, "worker-1")).containsSame(latest);
 
 		ArgumentCaptor<Query> queries = ArgumentCaptor.forClass(Query.class);
 		ArgumentCaptor<Update> updates = ArgumentCaptor.forClass(Update.class);
-		org.mockito.Mockito.verify(template, times(3)).findAndModify(
+		org.mockito.Mockito.verify(template, times(2)).findAndModify(
 			queries.capture(), updates.capture(), any(FindAndModifyOptions.class), eq(ImportJob.class)
 		);
 		assertThat(queries.getAllValues()).allSatisfy((query) -> assertThat(query.getQueryObject())
@@ -55,13 +54,16 @@ class MongoImportJobStoreTests {
 			.containsEntry("status", ImportJobStatus.PROCESSING)
 			.containsEntry("leaseOwner", "worker-1"));
 
-		Document progressSet = (Document) updates.getAllValues().get(1).getUpdateObject().get("$set");
+		Document progressSet = (Document) updates.getAllValues().get(0).getUpdateObject().get("$set");
 		assertThat(progressSet)
 			.containsEntry("totalRows", 3L)
 			.containsEntry("successRows", 3L)
-			.containsEntry("failureRows", 0L);
-		Document finishSet = (Document) updates.getAllValues().get(2).getUpdateObject().get("$set");
-		Document finishUnset = (Document) updates.getAllValues().get(2).getUpdateObject().get("$unset");
+			.containsEntry("failureRows", 0L)
+			.containsEntry("heartbeatAt", now)
+			.containsEntry("leaseExpiresAt", now.plusSeconds(600))
+			.containsEntry("updatedAt", now);
+		Document finishSet = (Document) updates.getAllValues().get(1).getUpdateObject().get("$set");
+		Document finishUnset = (Document) updates.getAllValues().get(1).getUpdateObject().get("$unset");
 		assertThat(finishSet).containsEntry("status", ImportJobStatus.COMPLETED);
 		assertThat(finishUnset).containsKeys("leaseOwner", "leaseExpiresAt", "heartbeatAt");
 	}

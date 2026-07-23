@@ -84,9 +84,6 @@ MONGODB_URI=mongodb://localhost:27017/recording_platform
 RECORDING_STORAGE_DIR=backend/storage/recordings
 AVATAR_STORAGE_DIR=backend/storage/avatars
 RECORDING_PATH_MIGRATION_ENABLED=false
-REMOTE_MEDIA_ALLOW_HTTP=false
-REMOTE_MEDIA_TIMEOUT_SECONDS=15
-REMOTE_MEDIA_MAX_REDIRECTS=3
 WECHAT_APP_ID=
 WECHAT_APP_SECRET=
 INITIAL_ADMIN_USERNAME=
@@ -175,12 +172,12 @@ POST /api/admin/users/{userId}/reset-password
 - 小程序作业页的“提交后自动领取下一条”首次默认开启并使用本地 `autoClaimNextEnabled` 记忆。待录制或待返修提交成功后直接领取并打开下一条；领取失败会提示原因并进入当前任务数据页；关闭开关时返回上一页，`SUBMITTED` 的“保存修改”不触发自动领取。
 - 作业页的录音、参考音频、参考视频和录制结果彼此独立，可同时运行；离开页面时仍由各自生命周期释放资源。录音卡外层/状态层最小高度为 `460rpx / 392rpx`，作业页文本输入框固定为 `200rpx`。普通操作错误使用悬浮 Toast；任务大厅、任务数据、个人统计和作业整体加载失败保留可重试阻塞状态，其中作业页网络加载失败统一显示“网络链接失败，请检查网络。”，不暴露微信底层错误文本。
 - 录音文件：`RECORDING_STORAGE_DIR` 的相对值按仓库根目录解析，目录下只使用相对媒体路径；当前录音固定为 `{taskCode}/{itemCode}.wav|mp3`。上传先进入 `temp/`，完成扩展名、魔数、100MB、单声道、采样率和时长校验后原子替换，失败恢复旧文件。待删除的旧稳定文件会先移动到 `temp/backups/` 唯一路径，避免后续重录复用同一路径时误删新文件；`GET /api/media/{mediaId}` 鉴权读取录音及受保护媒体并支持单 Range。`GET /api/media/public/reference/{mediaId}` 只公开参考音频和参考视频，历史条目由小程序使用该 URL 直接播放；录音结果通过此路径固定返回 404。
-- 导入固定列为 `referenceText`、`referenceAudioUrl`、`referenceVideoUrl`，仅支持 `.csv`，支持部分成功、失败行重试及幂等。三列始终存在，但按任务 `referenceTypes` 读取，未启用列直接忽略，过滤后全空的行失败。解析完成立即持久化 `totalRows`，随后每 100 行更新一次进度；页面按 `(successRows + failureRows) / totalRows` 展示。条目不再接收或保存外部编号，只使用系统生成的条目编号。单文件最多 50000 个数据行；行错误摘要最多保存 1000 条，完整失败行号单独保留用于重试。
+- 导入固定列为 `referenceText`、`referenceAudioUrl`、`referenceVideoUrl`，仅支持 `.csv`，支持部分成功、失败行重试及幂等。三列始终存在，但按任务 `referenceTypes` 读取，未启用列直接忽略，过滤后全空的行失败。解析完成立即持久化 `totalRows`，随后每处理完一行原子更新成功/失败计数、错误摘要、心跳和租约；页面每秒查询并按 `(successRows + failureRows) / totalRows` 展示真实进度，快速任务允许直接从 0 跳到 100%。条目不再接收或保存外部编号，只使用系统生成的条目编号。单文件最多 50000 个数据行；行错误摘要最多保存 1000 条，完整失败行号单独保留用于重试。
 - 本地批量导入正向测试可直接使用 `docs/test-data/task-items-import-valid.csv`。该文件包含 8 条中文参考文字，不包含远程音频或视频 URL，可用于验证 CSV 解析、异步导入和数据池新增闭环。
-- 四类 10 条验收数据分别为 `docs/test-data/task-items-import-text-10.csv`、`task-items-import-audio-10.csv`、`task-items-import-video-10.csv` 和 `task-items-import-mixed-10.csv`。四份文件均使用固定三列表头；媒体文件复用公开 HTTPS 测试 URL，混合文件覆盖文字与音频、文字与视频、音频与视频及三种参考同时存在。远程素材能否导入仍以测试时的域名解析、访问状态和媒体校验结果为准。
+- 四类 10 条验收数据分别为 `docs/test-data/task-items-import-text-10.csv`、`task-items-import-audio-10.csv`、`task-items-import-video-10.csv` 和 `task-items-import-mixed-10.csv`。四份文件均使用固定三列表头；音频和混合文件轮换使用 Samplelib 的 3/6/9/12/15 秒短 MP3，混合文件覆盖文字与音频、文字与视频、音频与视频及三种参考同时存在。公开素材只用于测试；生产应使用已配置微信合法域名的自有 OSS 地址。
 - 分页导入测试可使用 `docs/test-data/task-items-import-pagination-101.csv`。该文件包含 101 条唯一中文参考文字，音频和视频 URL 均为空，适用于启用文字参考的任务；任务详情与小程序按每页 10 条可形成十一页边界，独立任务数据池按每页 20 条可形成六页边界。
 - 部分失败测试可使用 `docs/test-data/task-items-import-partial-failure.csv`。该文件共 5 行：2 行具有参考文字并应成功，3 行参考源均为空并应返回 `ITEM_REFERENCE_REQUIRED`；首次导入预期为 `PARTIAL_SUCCESS`、成功 2 行、失败 3 行。失败行重试不会修正源数据，因此预期仍保持部分失败，可用于验证失败行保留和重试幂等。
-- 远程参考媒体生产默认只允许 HTTPS；每次重定向重新执行协议、主机和地址策略，禁止本机、环回、私网、链路本地与多播地址，并将校验后的地址绑定到实际连接。开发环境只有显式设置 `REMOTE_MEDIA_ALLOW_HTTP=true` 才允许 HTTP，仍不允许私网目标。音频上限 100MB、视频上限 500MB。校验和后端副本保存成功后，`task_items` 同时保存规范化的 `referenceAudioUrl`、`referenceVideoUrl`，小程序优先直接播放原始公网 URL；正式环境必须在微信后台配置这些 URL 对应的合法音视频域名。历史条目没有 URL 字段时回退到上述公开参考媒体地址，不需要迁移或重新导入。
+- 单条添加、CSV 导入和待领取条目编辑的参考音视频统一为 URL-only：只接受包含有效主机且不含用户名/密码信息的绝对 HTTPS URL，允许查询参数、签名 URL、无扩展名地址和片段。服务端不再执行 DNS、HEAD、GET、重定向、Content-Type、文件大小、时长或魔数检查，也不创建本地参考媒体副本或 `media_assets`。编辑历史条目时，URL 未变化保留原媒体 ID；修改或移除后清空媒体 ID并通过持久化清理任务删除旧副本。现有参考媒体不迁移、不删除，历史条目无 URL 时仍回退到公开参考媒体端点。生产必须使用已在微信后台配置合法域名的自有 HTTPS 地址。
 
 ## 本地数据全量重置
 
@@ -258,9 +255,9 @@ MongoDB 当前集合：
 - `sequences`、`tasks`：原子编号序列、任务生命周期和嵌入式冻结配置；不再创建 `task_versions`。
 - `task_grants`、`task_access_requests`：任务授权与待决申请。
 - `task_items`：池条目、领取归属、当前结果、提交历史和操作历史。
-- `media_assets`：参考媒体与当前录音元数据，只保存相对路径。
+- `media_assets`：历史参考媒体与当前录音元数据，只保存相对路径；URL-only 新条目不创建参考媒体资产。
 - `media_cleanup_jobs`：提交/释放后的旧文件备份与旧媒体元数据清理任务，记录 operationId、状态和重试次数。
-- `import_jobs`：异步导入文件摘要、FULL/FAILED_ROWS 运行模式、分批进度、失败行号、有限脱敏行错误和带 owner fencing 的 worker 租约。
+- `import_jobs`：异步导入文件摘要、FULL/FAILED_ROWS 运行模式、逐行进度 checkpoint、失败行号、有限脱敏行错误和带 owner fencing 的 worker 租约。
 - `idempotency_records`：Task 2 通用写操作的 IN_PROGRESS/COMPLETED 状态与首次响应快照。
 
 测试默认使用 mock/fake store，不依赖开发机 MongoDB；需要真实 Mongo 集成测试时单独提供 `MONGODB_TEST_URI`，不得复用生产库。

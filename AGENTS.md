@@ -184,9 +184,6 @@ MONGODB_URI
 RECORDING_STORAGE_DIR
 AVATAR_STORAGE_DIR
 RECORDING_PATH_MIGRATION_ENABLED（默认 false，仅一次性迁移窗口显式设 true）
-REMOTE_MEDIA_ALLOW_HTTP（默认 false，生产必须保持 false）
-REMOTE_MEDIA_TIMEOUT_SECONDS（默认 15）
-REMOTE_MEDIA_MAX_REDIRECTS（默认 3）
 WECHAT_APP_ID
 WECHAT_APP_SECRET
 INITIAL_ADMIN_USERNAME
@@ -218,9 +215,9 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 
 当前录音固定保存到 `RECORDING_STORAGE_DIR/{taskCode}/{itemCode}.wav|mp3`。上传必须先写 `temp/`，校验扩展名、魔数、100MB、格式、单声道、任务采样率和时长，再原子替换；同一条目的替换流程按本地条目锁串行化，失败恢复旧文件。提交或释放成功后的旧稳定文件必须先隔离到 `temp/backups/` 唯一路径，并以 `media_cleanup_jobs` 持久化旧路径和 media ID；即时清理失败由同 operationId 重放和应用启动恢复重试，不得回滚已成功的 Mongo 状态，也不得把备份暴露为媒体路径。Mongo 只保存相对路径和元数据。采集员只能读取本人条目和录音；ACTIVE grant 只额外开放任务信息与参考媒体；ADMIN/REVIEWER 按审核权限读取。
 
-远程参考媒体生产默认只允许 HTTPS。策略必须阻止 localhost、环回、私网、链路本地、多播和危险重定向，并把校验后的公共 IP 绑定到实际 Socket；HTTPS 仍使用原 hostname 做 SNI、证书主机校验和 Host 请求头。`REMOTE_MEDIA_ALLOW_HTTP=true` 仅供显式开发联调，仍不允许私网目标。音频上限 100MB，视频上限 500MB。校验和媒体副本保存成功后，`task_items.referenceAudioUrl/referenceVideoUrl` 保存规范化完整公网 URL，供小程序直接播放；`media_assets` 仍只保存 hostname、状态和脱敏错误摘要，日志不得输出 URL 查询参数。历史条目没有 URL 时使用仅开放 `REFERENCE_AUDIO/REFERENCE_VIDEO` 的 `GET /api/media/public/reference/{mediaId}`，任何 `RECORDING` 都不得从公开路径读取。
+新建、CSV 导入和待领取条目编辑的参考音视频统一使用 URL-only：只接受包含有效主机、不含用户名/密码信息的绝对 HTTPS URL，允许查询参数、签名 URL、无扩展名地址和片段；服务端不执行 DNS、HEAD、GET、重定向、Content-Type、大小、时长或魔数检查，也不创建参考媒体本地副本和 `media_assets`。编辑历史条目时，URL 未变化保留原媒体 ID，修改或移除后清空媒体 ID并通过 `media_cleanup_jobs` 清理旧副本。现有参考媒体不迁移、不删除；历史条目没有 URL 时继续使用仅开放 `REFERENCE_AUDIO/REFERENCE_VIDEO` 的 `GET /api/media/public/reference/{mediaId}`，任何 `RECORDING` 都不得从公开路径读取。
 
-导入只支持 `.csv`，固定列为 `referenceText`、`referenceAudioUrl`、`referenceVideoUrl`；按任务 `referenceTypes` 读取，未启用列忽略，过滤后全空的行失败。条目不接收或保存外部编号，只使用系统生成的 itemCode。返回 HTTP 202 和 importJobId，解析后立即持久化 totalRows，随后每 100 行持久化进度/失败行号/有限脱敏行错误，支持幂等、部分成功与失败行重试。单文件最多 50000 个数据行，脱敏行错误摘要最多保存 1000 条。初始导入和过期 PROCESSING 恢复固定使用 `FULL` 模式幂等重放完整源文件，只有用户显式失败行重试使用 `FAILED_ROWS`。
+导入只支持 `.csv`，固定列为 `referenceText`、`referenceAudioUrl`、`referenceVideoUrl`；按任务 `referenceTypes` 读取，未启用列忽略，过滤后全空的行失败。条目不接收或保存外部编号，只使用系统生成的 itemCode。返回 HTTP 202 和 importJobId，解析后立即持久化 totalRows；每处理完一行，以 `status=PROCESSING` 与 leaseOwner fencing 原子更新成功/失败计数、失败行、有限脱敏错误、心跳和租约。支持幂等、部分成功与失败行重试。单文件最多 50000 个数据行，脱敏行错误摘要最多保存 1000 条。初始导入和过期 PROCESSING 恢复固定使用 `FULL` 模式幂等重放完整源文件，只有用户显式失败行重试使用 `FAILED_ROWS`。
 
 ## 7. 接口说明
 
@@ -348,9 +345,9 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 请求路径：/api/tasks/{taskId}/items、/api/tasks/{taskId}/items/start、/api/task-items/{itemId}、/api/task-items/mine
 请求参数：单条添加 JSON referenceText/referenceAudioUrl/referenceVideoUrl + Idempotency-Key；start 携带 Idempotency-Key；列表 page、size；mine 支持 taskId、kind=PENDING|SUBMITTED|FINISHED，兼容 ALL|RECORDING|REWORK
 响应结构：TaskItem 或 {items,page,size,total}；TaskItem 可包含 referenceAudioUrl、referenceVideoUrl，历史条目可为空
-错误码：404 NO_AVAILABLE_ITEM/TASK_ITEM_NOT_FOUND；409 ITEM_CONFLICT；422 ITEM_REFERENCE_REQUIRED/远程媒体错误
+错误码：404 NO_AVAILABLE_ITEM/TASK_ITEM_NOT_FOUND；409 ITEM_CONFLICT；422 ITEM_REFERENCE_REQUIRED/REMOTE_URL_INVALID
 权限要求：添加和任务条目列表仅 ADMIN；start 仅 COLLECTOR；详情仅 ADMIN/REVIEWER/当前采集员
-数据一致性要求：新条目只绑定 taskId，校验时读取任务内嵌 configuration；远程媒体完成安全校验和后端副本保存后同时保存规范化公网 URL；itemCode 任务内递增唯一且是条目唯一业务编号；添加和领取均持久化幂等；每个新领取幂等键使用 findAndModify 原子更新一条 AVAILABLE，并以同一更新递增 revision、追加新 revision 的操作历史，不限制同一采集员的普通待录制数量；mine 在各 kind 状态集合内统一按 updatedAt 倒序、sequence 升序后由 MongoDB 分页，不再按状态流程 rank 分组
+数据一致性要求：新条目只绑定 taskId，校验时读取任务内嵌 configuration；参考音视频只保存通过轻量语法校验的 HTTPS URL，媒体 ID 为空且不创建本地文件或媒体资产；itemCode 任务内递增唯一且是条目唯一业务编号；添加和领取均持久化幂等；每个新领取幂等键使用 findAndModify 原子更新一条 AVAILABLE，并以同一更新递增 revision、追加新 revision 的操作历史，不限制同一采集员的普通待录制数量；mine 在各 kind 状态集合内统一按 updatedAt 倒序、sequence 升序后由 MongoDB 分页，不再按状态流程 rank 分组
 前端调用位置：apps/web/src/pages/admin/tasks/TaskDetailPage.vue 与 TaskPoolPage.vue、apps/miniprogram/pages/tasks/*、apps/miniprogram/pages/work/*；任务详情使用数字分页并支持每页 5/10/20 条（默认 10），小程序任务数据固定每页 10 条，独立 Web 任务数据池固定每页 20 条
 ```
 
@@ -359,9 +356,9 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 请求路径：/api/task-items/{itemId}
 请求参数：编辑 JSON expectedRevision、referenceText、referenceAudioUrl、referenceVideoUrl；删除 query expectedRevision；均携带 Idempotency-Key
 响应结构：编辑返回 TaskItem；删除返回 {itemId,deleted}
-错误码：404 TASK_ITEM_NOT_FOUND；409 STALE_STATE；422 ITEM_REFERENCE_REQUIRED/REFERENCE_TYPE_NOT_ENABLED/远程媒体错误
+错误码：404 TASK_ITEM_NOT_FOUND；409 STALE_STATE；422 ITEM_REFERENCE_REQUIRED/REFERENCE_TYPE_NOT_ENABLED/REMOTE_URL_INVALID
 权限要求：仅 ADMIN
-数据一致性要求：仅 AVAILABLE 可按状态与 revision 原子编辑或删除；编辑媒体先安全下载，CAS 失败清理新媒体，成功后旧媒体进入 media_cleanup_jobs；删除后的参考媒体同样持久化清理；itemCode 与 sequence 不复用
+数据一致性要求：仅 AVAILABLE 可按状态与 revision 原子编辑或删除；编辑使用 URL-only 校验，URL 未变化保留历史媒体 ID，修改或移除后清空媒体 ID并让旧媒体进入 media_cleanup_jobs；删除后的历史参考媒体同样持久化清理；itemCode 与 sequence 不复用
 前端调用位置：apps/web/src/pages/admin/tasks/TaskDetailPage.vue
 ```
 
@@ -394,7 +391,7 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 响应结构：创建/重试 HTTP 202 {importJobId,status}；查询返回 ImportJob
 错误码：409 IMPORT_JOB_NOT_RETRYABLE；413/415 文件限制；422 IMPORT_HEADER_INVALID/IMPORT_FILE_INVALID/行错误
 权限要求：仅 ADMIN
-数据一致性要求：taskId+operationId 唯一；通用写幂等；最多 50000 行、每 100 行持久化进度、错误摘要上限 1000 条；保留完整失败行号；10 分钟租约、心跳和启动恢复；允许部分成功和失败行重试；成功行完整签名 URL 不留存
+数据一致性要求：taskId+operationId 唯一；通用写幂等；最多 50000 行、每行原子 checkpoint 进度与租约、错误摘要上限 1000 条；保留完整失败行号；10 分钟租约、心跳和启动恢复；允许部分成功和失败行重试；成功行完整签名 URL 不留存在导入重试文件
 前端调用位置：后续管理员数据导入页
 ```
 

@@ -10,8 +10,7 @@ public interface ImportJobStore {
 	Optional<ImportJob> findById(String id);
 	Optional<ImportJob> findByTaskIdAndOperationId(String taskId, String operationId);
 	Optional<ImportJob> acquireLease(String jobId, String workerId, Instant now, Instant leaseExpiresAt);
-	Optional<ImportJob> heartbeat(String jobId, String workerId, Instant now, Instant leaseExpiresAt);
-	Optional<ImportJob> saveProgress(ImportJob job, String workerId);
+	Optional<ImportJob> checkpoint(ImportJob job, String workerId, Instant now, Instant leaseExpiresAt);
 	Optional<ImportJob> finish(ImportJob job, String workerId);
 	List<ImportJob> findRecoverable(Instant now);
 }

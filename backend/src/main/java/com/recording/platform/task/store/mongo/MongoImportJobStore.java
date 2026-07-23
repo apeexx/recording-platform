@@ -60,24 +60,21 @@ public class MongoImportJobStore implements ImportJobStore {
 	}
 
 	@Override
-	public Optional<ImportJob> heartbeat(String jobId, String workerId, Instant now, Instant leaseExpiresAt) {
-		Query query = fencedQuery(jobId, workerId);
-		Update update = new Update()
-			.set("heartbeatAt", now)
-			.set("leaseExpiresAt", leaseExpiresAt)
-			.set("updatedAt", now);
-		return Optional.ofNullable(findAndModify(query, update));
-	}
-
-	@Override
-	public Optional<ImportJob> saveProgress(ImportJob job, String workerId) {
+	public Optional<ImportJob> checkpoint(
+		ImportJob job,
+		String workerId,
+		Instant now,
+		Instant leaseExpiresAt
+	) {
 		Update update = new Update()
 			.set("totalRows", job.getTotalRows())
 			.set("successRows", job.getSuccessRows())
 			.set("failureRows", job.getFailureRows())
 			.set("rowErrors", job.getRowErrors())
 			.set("retryRowNumbers", job.getRetryRowNumbers())
-			.set("updatedAt", job.getUpdatedAt());
+			.set("heartbeatAt", now)
+			.set("leaseExpiresAt", leaseExpiresAt)
+			.set("updatedAt", now);
 		return Optional.ofNullable(findAndModify(fencedQuery(job.getId(), workerId), update));
 	}
 

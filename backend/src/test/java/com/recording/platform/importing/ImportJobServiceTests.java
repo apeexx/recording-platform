@@ -292,7 +292,7 @@ class ImportJobServiceTests {
 	}
 
 	@Test
-	void largeFailureSetsCapStoredErrorsAndPersistProgressInBatches() {
+    void largeFailureSetsCapStoredErrorsAndCheckpointsEveryRow() {
 		InMemoryImportJobStore jobs = new InMemoryImportJobStore();
 		TaskItemCreationService itemCreation = org.mockito.Mockito.mock(TaskItemCreationService.class);
 		doThrow(new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "ROW_INVALID", "该行不合法"))
@@ -322,8 +322,69 @@ class ImportJobServiceTests {
 		assertThat(job.getTotalRows()).isEqualTo(1005);
 		assertThat(job.getFailureRows()).isEqualTo(1005);
 		assertThat(job.getRowErrors()).hasSize(1000);
-		assertThat(jobs.saveCount).isGreaterThanOrEqualTo(12);
-	}
+		assertThat(jobs.saveCount).isGreaterThanOrEqualTo(1008);
+    }
+
+    @Test
+    void persistsProgressAfterEveryProcessedRow() {
+        InMemoryImportJobStore jobs = new InMemoryImportJobStore();
+        TaskItemCreationService itemCreation = org.mockito.Mockito.mock(TaskItemCreationService.class);
+        AtomicInteger processedCalls = new AtomicInteger();
+        org.mockito.Mockito.when(itemCreation.addImported(eq("task-1"), any(), any(), any())).thenAnswer(invocation -> {
+            int processed = processedCalls.incrementAndGet();
+            if (processed == 2) {
+                ImportJob visible = jobs.findByTaskIdAndOperationId("task-1", "progress-each-row")
+                        .orElseThrow();
+                assertThat(visible.getSuccessRows()).isEqualTo(1);
+                assertThat(visible.getFailureRows()).isZero();
+            }
+            if (processed == 6) {
+                ImportJob visible = jobs.findByTaskIdAndOperationId("task-1", "progress-each-row")
+                        .orElseThrow();
+                assertThat(visible.getSuccessRows()).isEqualTo(5);
+                assertThat(visible.getFailureRows()).isZero();
+            }
+            return new TaskItem();
+        });
+
+        ImportJobService service = new ImportJobService(
+                jobs,
+                new ImportFileParser(),
+                itemCreation,
+                new ImportSourceStorage(tempDir),
+                Runnable::run,
+                Clock.fixed(Instant.parse("2026-07-11T12:00:00Z"), ZoneOffset.UTC)
+        );
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "progress.csv",
+                "text/csv",
+                """
+                        referenceText,referenceAudioUrl,referenceVideoUrl
+                        row-1,,
+                        row-2,,
+                        row-3,,
+                        row-4,,
+                        row-5,,
+                        row-6,,
+                        """.getBytes(java.nio.charset.StandardCharsets.UTF_8)
+        );
+        PlatformPrincipal admin = new PlatformPrincipal(
+                "session-1", "admin-1", "admin", "管理员", UserRole.ADMIN, SessionType.WEB, false
+        );
+
+        ImportJob response = service.create(
+                "task-1",
+                "progress-each-row",
+                file,
+                admin
+        );
+
+        ImportJob completed = jobs.findById(response.getId()).orElseThrow();
+        assertThat(completed.getStatus()).isEqualTo(ImportJobStatus.COMPLETED);
+        assertThat(completed.getSuccessRows()).isEqualTo(6);
+        assertThat(processedCalls).hasValue(6);
+    }
 
 	private ImportJob recoverableJob(String id, Instant leaseExpiresAt) {
 		ImportJob job = new ImportJob();
@@ -379,25 +440,19 @@ class ImportJobServiceTests {
 			job.setAttempt(job.getAttempt() + 1);
 			return Optional.of(copy(job));
 		}
-		@Override public synchronized Optional<ImportJob> heartbeat(
-			String jobId,
+		@Override public synchronized Optional<ImportJob> checkpoint(
+			ImportJob job,
 			String workerId,
 			Instant now,
 			Instant leaseExpiresAt
 		) {
-			ImportJob job = data.get(jobId);
-			if (job == null || job.getStatus() != ImportJobStatus.PROCESSING
-				|| !workerId.equals(job.getLeaseOwner())) return Optional.empty();
-			job.setHeartbeatAt(now);
-			job.setLeaseExpiresAt(leaseExpiresAt);
-			job.setUpdatedAt(now);
-			return Optional.of(copy(job));
-		}
-		@Override public synchronized Optional<ImportJob> saveProgress(ImportJob job, String workerId) {
 			ImportJob current = data.get(job.getId());
 			if (!ownsLease(current, workerId)) return Optional.empty();
 			saveCount++;
 			ImportJob stored = copy(job);
+			stored.setHeartbeatAt(now);
+			stored.setLeaseExpiresAt(leaseExpiresAt);
+			stored.setUpdatedAt(now);
 			data.put(stored.getId(), stored);
 			return Optional.of(copy(stored));
 		}

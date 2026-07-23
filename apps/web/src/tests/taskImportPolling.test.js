@@ -105,6 +105,8 @@ describe('任务详情 CSV 导入轮询', () => {
     await flushPromises()
     await vi.advanceTimersByTimeAsync(1000)
     await flushPromises()
+    expect(wrapper.text()).toContain('已处理 4')
+    expect(wrapper.text()).toContain('成功 4')
     await vi.advanceTimersByTimeAsync(1000)
     await flushPromises()
 

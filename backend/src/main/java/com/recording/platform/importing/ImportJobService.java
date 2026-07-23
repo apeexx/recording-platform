@@ -31,7 +31,6 @@ import org.springframework.web.multipart.MultipartFile;
 public class ImportJobService {
 	private static final Duration LEASE_DURATION = Duration.ofMinutes(10);
 	private static final int MAX_STORED_ROW_ERRORS = 1_000;
-	private static final int PROGRESS_BATCH_SIZE = 100;
 	private final ImportJobStore jobs;
 	private final ImportFileParser parser;
 	private final TaskItemCreationService itemCreation;
@@ -153,17 +152,16 @@ public class ImportJobService {
 			long totalRows = retryRows == null ? rows.size() : job.getTotalRows();
 			long success = retryRows == null ? 0 : job.getSuccessRows();
 			long failure = 0;
-			int attempted = 0;
 			List<ImportRowError> errors = new ArrayList<>();
 			Set<Long> failedRowNumbers = new HashSet<>();
 			PlatformPrincipal actor = new PlatformPrincipal(
 				"import-" + job.getId(), job.getActorUserId(), job.getActorUsername(), job.getActorUsername(),
 				UserRole.ADMIN, SessionType.WEB, false
 			);
-			job = persistProgress(job, workerId, totalRows, success, failure, errors, failedRowNumbers);
+			job = checkpoint(job, workerId, totalRows, success, failure, errors, failedRowNumbers);
+			if (job == null) return;
 			for (ImportRow row : rows) {
 				if (retryRows != null && !retryRows.contains(row.rowNumber())) continue;
-				job = renewLease(job, workerId);
 				try {
 					itemCreation.addImported(
 						job.getTaskId(),
@@ -183,10 +181,8 @@ public class ImportJobService {
 					failedRowNumbers.add(row.rowNumber());
 					addBoundedError(errors, row.rowNumber(), "IMPORT_ROW_FAILED", "该行导入失败");
 				}
-				attempted++;
-				if (attempted % PROGRESS_BATCH_SIZE == 0) {
-					job = persistProgress(job, workerId, totalRows, success, failure, errors, failedRowNumbers);
-				}
+				job = checkpoint(job, workerId, totalRows, success, failure, errors, failedRowNumbers);
+				if (job == null) return;
 			}
 			job.setTotalRows(totalRows);
 			job.setSuccessRows(success);
@@ -222,14 +218,7 @@ public class ImportJobService {
 		}
 	}
 
-	private ImportJob renewLease(ImportJob job, String workerId) {
-		Instant now = Instant.now(clock);
-		Instant expiresAt = now.plus(LEASE_DURATION);
-		return jobs.heartbeat(job.getId(), workerId, now, expiresAt)
-			.orElseThrow(() -> new IllegalStateException("import lease lost"));
-	}
-
-	private ImportJob persistProgress(
+	private ImportJob checkpoint(
 		ImportJob job,
 		String workerId,
 		long totalRows,
@@ -243,9 +232,11 @@ public class ImportJobService {
 		job.setFailureRows(failure);
 		job.setRowErrors(new ArrayList<>(errors));
 		job.setRetryRowNumbers(sorted(failedRowNumbers));
-		job.setUpdatedAt(Instant.now(clock));
-		return jobs.saveProgress(job, workerId)
-			.orElseThrow(() -> new IllegalStateException("import lease lost"));
+		Instant now = Instant.now(clock);
+		job.setHeartbeatAt(now);
+		job.setLeaseExpiresAt(now.plus(LEASE_DURATION));
+		job.setUpdatedAt(now);
+		return jobs.checkpoint(job, workerId, now, now.plus(LEASE_DURATION)).orElse(null);
 	}
 
 	private void addBoundedError(List<ImportRowError> errors, long rowNumber, String code, String message) {

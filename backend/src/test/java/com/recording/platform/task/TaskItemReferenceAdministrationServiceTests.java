@@ -9,9 +9,10 @@ import static org.mockito.Mockito.when;
 import com.recording.platform.api.ApiException;
 import com.recording.platform.identity.model.SessionType;
 import com.recording.platform.identity.model.UserRole;
-import com.recording.platform.importing.SafeRemoteMediaDownloader;
+import com.recording.platform.media.MediaAsset;
 import com.recording.platform.media.MediaAssetStore;
 import com.recording.platform.media.MediaCleanupService;
+import com.recording.platform.media.ReferenceMediaUrlValidator;
 import com.recording.platform.security.PlatformPrincipal;
 import com.recording.platform.task.model.ReferenceType;
 import com.recording.platform.task.model.TaskConfiguration;
@@ -29,11 +30,14 @@ import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 class TaskItemReferenceAdministrationServiceTests {
 	private TaskItemStore items;
 	private TaskStore tasks;
 	private TaskItemReferenceAdministrationService service;
+	private MediaAssetStore assets;
+	private MediaCleanupService cleanup;
 	private PlatformPrincipal admin;
 	private TaskItem available;
 
@@ -48,7 +52,7 @@ class TaskItemReferenceAdministrationServiceTests {
 		available.setStatus(TaskItemStatus.AVAILABLE);
 		available.setRevision(3);
 		TaskConfiguration configuration = new TaskConfiguration();
-		configuration.setReferenceTypes(Set.of(ReferenceType.TEXT));
+		configuration.setReferenceTypes(Set.of(ReferenceType.TEXT, ReferenceType.AUDIO, ReferenceType.VIDEO));
 		TaskRecord task = new TaskRecord();
 		task.setId("task-1");
 		task.setConfiguration(configuration);
@@ -59,14 +63,65 @@ class TaskItemReferenceAdministrationServiceTests {
 			available.setRevision(4);
 			return Optional.of(available);
 		});
+		assets = org.mockito.Mockito.mock(MediaAssetStore.class);
+		cleanup = org.mockito.Mockito.mock(MediaCleanupService.class);
 		service = new TaskItemReferenceAdministrationService(
-			items, tasks,
-			org.mockito.Mockito.mock(SafeRemoteMediaDownloader.class),
-			org.mockito.Mockito.mock(MediaAssetStore.class),
-			org.mockito.Mockito.mock(MediaCleanupService.class),
+			items, tasks, new ReferenceMediaUrlValidator(), assets, cleanup,
 			Clock.fixed(Instant.parse("2026-07-23T00:00:00Z"), ZoneOffset.UTC)
 		);
 		admin = new PlatformPrincipal("s", "admin-1", "admin", "管理员", UserRole.ADMIN, SessionType.WEB, false);
+	}
+
+	@Test
+	void unchangedHistoricalUrlKeepsMediaIdWithoutDownloading() {
+		available.setReferenceText("旧文字");
+		available.setReferenceAudioUrl("https://cdn.example.com/audio/object?signature=old");
+		available.setReferenceAudioMediaId("historical-audio");
+
+		service.update(
+			"item-1",
+			new UpdateTaskItemReferencesCommand(
+				3, "新文字", "https://cdn.example.com/audio/object?signature=old", null
+			),
+			"edit-unchanged",
+			admin
+		);
+
+		ArgumentCaptor<com.recording.platform.task.store.UpdateTaskItemReferencesMutation> mutation =
+			ArgumentCaptor.forClass(com.recording.platform.task.store.UpdateTaskItemReferencesMutation.class);
+		verify(items).updateReferencesIfAvailable(mutation.capture());
+		assertThat(mutation.getValue().referenceAudioMediaId()).isEqualTo("historical-audio");
+		org.mockito.Mockito.verifyNoInteractions(assets, cleanup);
+	}
+
+	@Test
+	void changedHistoricalUrlClearsMediaIdAndSchedulesOldCopyCleanup() {
+		available.setReferenceAudioUrl("https://cdn.example.com/audio/old");
+		available.setReferenceAudioMediaId("historical-audio");
+		MediaAsset oldAsset = new MediaAsset();
+		oldAsset.setId("historical-audio");
+		oldAsset.setRelativePath("references/task-1/old-audio.mp3");
+		when(assets.findById("historical-audio")).thenReturn(Optional.of(oldAsset));
+
+		service.update(
+			"item-1",
+			new UpdateTaskItemReferencesCommand(
+				3, null, "https://oss.example.com/audio/new-object?signature=abc", null
+			),
+			"edit-changed",
+			admin
+		);
+
+		ArgumentCaptor<com.recording.platform.task.store.UpdateTaskItemReferencesMutation> mutation =
+			ArgumentCaptor.forClass(com.recording.platform.task.store.UpdateTaskItemReferencesMutation.class);
+		verify(items).updateReferencesIfAvailable(mutation.capture());
+		assertThat(mutation.getValue().referenceAudioMediaId()).isNull();
+		verify(cleanup).scheduleAndTry(
+			"item-1",
+			"edit-changed:old-references",
+			java.util.List.of("references/task-1/old-audio.mp3"),
+			java.util.List.of("historical-audio")
+		);
 	}
 
 	@Test
