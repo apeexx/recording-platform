@@ -60,9 +60,9 @@ Web 端已建立基础主题变量，变量文件位于 `apps/web/src/styles/the
 
 ## Web 管理端导航壳
 
-Web 管理端已建立 Vue Router 导航壳。未登录访问后台会进入 `/login`；ADMIN 默认进入 `/admin/dashboard`，REVIEWER 默认进入 `/admin/review` 并先选择任务。首次登录待改密账号只能访问 `/first-password`，改密后清除会话并要求重新登录。
+Web 管理端已建立 Vue Router 导航壳。未登录访问后台会进入 `/login`；密码框支持小眼睛显示/隐藏。ADMIN 默认进入 `/admin/dashboard`，REVIEWER 默认进入 `/admin/review` 并先选择任务。首次登录待改密账号会在登录页选择“修改密码”或“不修改”：前者进入 `/first-password`，只填写并确认新密码，成功后清除全部会话并要求重新登录；后者永久清除首次改密标记并保持当前会话。
 
-侧边栏菜单统一配置在 `apps/web/src/config/adminSidebar.js`，路由统一位于 `apps/web/src/router/`。菜单按 ADMIN/REVIEWER 动态过滤，未业务化的旧静态原型不再暴露在生产导航和路由。`apps/web/src/lib/httpClient.js` 统一处理 Cookie、CSRF、JSON/multipart、幂等头、结构化错误和会话接管下线；CSRF 失效时只刷新令牌并自动重试一次，真实角色越权不会重试。任务、数据池、授权、审核、用户、记录和统计页面均通过该请求层接入真实接口。任务详情中的数据池使用数字服务端分页，支持每页 5/10/20 条并默认 10 条；独立“任务数据池”页面保持每页 20 条。
+侧边栏菜单统一配置在 `apps/web/src/config/adminSidebar.js`，路由统一位于 `apps/web/src/router/`。菜单按 ADMIN/REVIEWER 动态过滤，未业务化的旧静态原型不再暴露在生产导航和路由。`apps/web/src/lib/httpClient.js` 统一处理 Cookie、CSRF、JSON/multipart、幂等头、结构化错误和会话接管下线；CSRF 失效时只刷新令牌并自动重试一次，真实角色越权不会重试。任务、数据池、授权、审核、用户、记录和统计页面均通过该请求层接入真实接口。任务详情采用左侧添加/导入、右侧宽表格工作台；CSV 支持拖入或点击选择、显式开始、每秒进度轮询、完成 Toast/自动刷新和 UTF-8 BOM 三列示例下载。数据池使用紧凑数字服务端分页，支持每页 5/10/20 条并默认 10 条；独立“任务数据池”页面保持每页 20 条。
 
 “语音生成”模块位于 `apps/web/src/pages/admin/voice-generation/`，当前已接入后端真实接口，支持 0 元试听、付费克隆、日常合成、声音配置和生成记录。
 
@@ -128,9 +128,9 @@ Windows PowerShell 本地联调可使用一键启动脚本：
 - 每个后台账号只允许一个活动 Web 会话，每个小程序采集员也只允许一个活动小程序会话。任一端重复登录均返回 `409 ACCOUNT_IN_USE` 和短时一次性 `takeoverToken`；必须调用对应端的 takeover 接口确认接管，接管后旧设备下次请求返回 `401 SESSION_REPLACED`。
 - 小程序只向后端提交 `wx.login` 临时 `code`。后端使用 `WECHAT_APP_ID`、`WECHAT_APP_SECRET` 调用微信 `jscode2session`，不接受客户端直接提交 OpenID；兼容微信以 `text/plain` 返回 JSON 内容的实际响应，且不保存或输出 `session_key`；小程序 Bearer token 默认 30 天。
 - 微信登录和 6–12 位数字账号密码登录映射到同一个 `MINI-...` 采集员用户 ID。首次资料设置原子写入姓名、在小程序集合内唯一的数字账号和密码；任务列表允许浏览，但申请、待办、领取、继续及提交前后端均校验资料完整性。发生小程序会话占用时，登录页先提示用户确认，再以返回的短时一次性凭证调用 `POST /api/auth/miniprogram/takeover`；不得自动接管。自定义头像保存到 `AVATAR_STORAGE_DIR`，仅支持魔数有效的 JPEG/PNG/WebP、最大 5MB；MongoDB 只保存相对路径和内容类型。
-- 小程序登录页为“砚数声采”A 版，使用正式品牌图标。个人资料页的头像卡直接调用微信原生 `chooseAvatar` 面板，选择后仍需预览确认；恢复默认头像使用卡片下方独立入口。头像读取失败会静默回退本地默认头像，文件上传仍由既有后端执行 JPEG/PNG/WebP 和 5MB 限制。原生“任务”“我的”Tab 使用 81×81 本地 PNG 图标，不依赖运行时外链。
+- 小程序登录页为“砚数声采”A 版，使用正式品牌图标。个人资料页的头像卡直接调用微信原生 `chooseAvatar` 面板，选择后仍需预览确认；恢复默认头像位于同一头像卡底部右侧。头像读取失败会静默回退本地默认头像，文件上传仍由既有后端执行 JPEG/PNG/WebP 和 5MB 限制。原生“任务”“我的”Tab 使用 81×81 本地 PNG 图标，不依赖运行时外链。
 - 小程序将当前账号资料摘要缓存在 `recSession.user`：已完善资料时任务入口优先使用缓存并静默后台刷新，断网不再误弹“请先完善个人资料”；缓存未知且联网失败时仅显示网络 Toast。退出登录或修改密码重新登录会删除整个会话缓存，新登录或接管成功会整体覆盖旧账号资料；头像二进制文件不额外缓存。
-- “我的”和资料设置页面均展示当前采集员的完整 `MINI-...` userId；页面不显示独立的复制提示，直接点击整行用户 ID 即复制完整值并显示成功或失败 Toast，其中“我的”页点击 ID 不触发资料卡跳转。“我的”页面同时展示最近 5 条提交记录及其状态。
+- “我的”统计页不再显示用户 ID，只保留姓名、资料状态和设置入口；资料设置页的基本信息区继续展示完整 `MINI-...` userId，点击整行即可复制并显示成功或失败 Toast。“我的”页面同时展示最近 5 条提交记录及其状态。
 - `/api/voice-generation/**` 与 `/api/admin/**` 仅 `ADMIN` 可访问；除 Web/微信登录与接管接口外，其余 `/api/**` 默认要求认证。
 - 任务管理、授权管理、任务条目管理和导入仅 `ADMIN` 可写；`COLLECTOR` 通过小程序 Bearer token 申请权限、领取、提交和释放本人条目；`REVIEWER`/`ADMIN` 可驳回待审结果。
 - Web Cookie 写请求必须携带 CSRF token。只有不含 `REC_WEB_SESSION` Cookie 的小程序 Bearer 采集写请求豁免 CSRF，夹带 Bearer 头不能绕过 Web CSRF。缺失或失效返回 `403 CSRF_TOKEN_INVALID`，Web 请求层刷新 token 后仅重试一次；真实角色越权仍返回 `403 ACCESS_DENIED`。
@@ -167,15 +167,15 @@ POST /api/admin/users/{userId}/reset-password
 
 ## 任务池、录音媒体与导入
 
-- 任务：`/api/tasks` 提供创建、草稿编辑、发布、暂停、恢复、结束和分页查询。任务编码由数据库序列自动生成 `T000001` 格式，不允许前端输入或修改；任务条目编码使用 `{taskCode}-{7位序号}`，单任务支持至 100 万条且序号不回收。配置直接嵌入任务的 `configuration`，仅 DRAFT 状态允许修改名称、说明与配置，发布后永久冻结；不再维护任务版本接口或 `task_versions` 集合。`TEXT` 成果允许纯文本、纯录音或两者同时提交，两项皆空返回 `RESULT_REQUIRED`；`AUDIO` 必须提交录音且不得夹带文本。只有实际上传录音时才执行媒体校验，配置时长固定为 1–600 秒。关闭人工审核时不显示也不保存驳回预设原因；首期固定 `aiEnabled=false`。
+- 任务：`/api/tasks` 提供创建、草稿编辑/删除、发布、暂停、恢复、结束和分页查询。`DELETE /api/tasks/{taskId}` 仅允许 DRAFT，使用 `Idempotency-Key`，删除关联授权与申请；任务编码由数据库序列自动生成 `T000001` 格式且删除后不复用。任务条目编码使用 `{taskCode}-{7位序号}`，单任务支持至 100 万条且序号不回收。配置直接嵌入任务的 `configuration`，仅 DRAFT 状态允许修改名称、说明与配置，发布后永久冻结；不再维护任务版本接口或 `task_versions` 集合。`TEXT` 成果允许纯文本、纯录音或两者同时提交，两项皆空返回 `RESULT_REQUIRED`；`AUDIO` 必须提交录音且不得夹带文本。只有实际上传录音时才执行媒体校验，配置时长固定为 1–600 秒。关闭人工审核时不显示也不保存驳回预设原因；首期固定 `aiEnabled=false`。
 - 授权：`/api/tasks/{taskId}/grants` 与 `/access-requests` 管理直接授权、申请、原子批准/驳回和撤销。撤销只阻止新领取，不影响已领取条目的提交或释放；批准申请重放不会复活后来已撤销的授权。
-- 数据池：ADMIN 使用 `POST /api/tasks/{taskId}/items` 单条添加并传 `Idempotency-Key`，或通过 `/api/import-jobs` 异步导入。COLLECTOR 使用 `POST /api/tasks/{taskId}/items/start` 原子领取；普通待录制作业不设持有数量上限，每个新的 `Idempotency-Key` 领取一条新数据，相同幂等键重放仍返回首次条目。
+- 数据池：ADMIN 使用 `POST /api/tasks/{taskId}/items` 单条添加并传 `Idempotency-Key`，或通过 `/api/import-jobs` 异步导入。仅 `AVAILABLE` 条目可通过 `PUT /api/task-items/{itemId}` 按 `expectedRevision` 编辑参考内容，或通过 `DELETE /api/task-items/{itemId}?expectedRevision=...` 真正删除；两者均要求 `Idempotency-Key`，媒体替换/删除进入持久化清理任务，条目编号不复用。其他状态必须先释放回待领取。COLLECTOR 使用 `POST /api/tasks/{taskId}/items/start` 原子领取；普通待录制作业不设持有数量上限，每个新的 `Idempotency-Key` 领取一条新数据，相同幂等键重放仍返回首次条目。
 - 提交与返修：`POST /api/task-items/{itemId}/submit` 接收 multipart 的 `operationId`、`assignmentId`、`expectedRevision` 以及与任务成果类型匹配的文字或录音；重复 operationId 返回首次结果，过期修订返回 `409 STALE_STATE`。驳回进入独立 `REWORK_PENDING` 队列并保留原因、原采集员和 assignment；普通待录制和返修均可同时持有多条。释放清除当前结果但保留提交和操作历史。
 - 待录制索引迁移在应用启动时先确保普通查询索引 `(collectorId,taskId,status)`，再按精确名称幂等删除旧全局和任务级待录制唯一索引；失败则终止启动且不改写 `task_items`。若需回滚任一旧唯一索引，必须先处理与旧口径冲突的多条 `RECORDING_PENDING`，否则索引无法恢复。
 - 小程序作业页的“提交后自动领取下一条”首次默认开启并使用本地 `autoClaimNextEnabled` 记忆。待录制或待返修提交成功后直接领取并打开下一条；领取失败会提示原因并进入当前任务数据页；关闭开关时返回上一页，`SUBMITTED` 的“保存修改”不触发自动领取。
 - 作业页的录音、参考音频、参考视频和录制结果彼此独立，可同时运行；离开页面时仍由各自生命周期释放资源。录音卡外层/状态层最小高度为 `460rpx / 392rpx`，作业页文本输入框固定为 `200rpx`。普通操作错误使用悬浮 Toast；任务大厅、任务数据、个人统计和作业整体加载失败保留可重试阻塞状态，其中作业页网络加载失败统一显示“网络链接失败，请检查网络。”，不暴露微信底层错误文本。
 - 录音文件：`RECORDING_STORAGE_DIR` 的相对值按仓库根目录解析，目录下只使用相对媒体路径；当前录音固定为 `{taskCode}/{itemCode}.wav|mp3`。上传先进入 `temp/`，完成扩展名、魔数、100MB、单声道、采样率和时长校验后原子替换，失败恢复旧文件。待删除的旧稳定文件会先移动到 `temp/backups/` 唯一路径，避免后续重录复用同一路径时误删新文件；`GET /api/media/{mediaId}` 鉴权读取录音及受保护媒体并支持单 Range。`GET /api/media/public/reference/{mediaId}` 只公开参考音频和参考视频，历史条目由小程序使用该 URL 直接播放；录音结果通过此路径固定返回 404。
-- 导入固定列为 `referenceText`、`referenceAudioUrl`、`referenceVideoUrl`，仅支持 `.csv`，支持部分成功、失败行重试及幂等。条目不再接收或保存外部编号，只使用系统生成的条目编号。单文件最多 50000 个数据行；每 100 行持久化一次进度，行错误摘要最多保存 1000 条，完整失败行号单独保留用于重试。
+- 导入固定列为 `referenceText`、`referenceAudioUrl`、`referenceVideoUrl`，仅支持 `.csv`，支持部分成功、失败行重试及幂等。三列始终存在，但按任务 `referenceTypes` 读取，未启用列直接忽略，过滤后全空的行失败。解析完成立即持久化 `totalRows`，随后每 100 行更新一次进度；页面按 `(successRows + failureRows) / totalRows` 展示。条目不再接收或保存外部编号，只使用系统生成的条目编号。单文件最多 50000 个数据行；行错误摘要最多保存 1000 条，完整失败行号单独保留用于重试。
 - 本地批量导入正向测试可直接使用 `docs/test-data/task-items-import-valid.csv`。该文件包含 8 条中文参考文字，不包含远程音频或视频 URL，可用于验证 CSV 解析、异步导入和数据池新增闭环。
 - 四类 10 条验收数据分别为 `docs/test-data/task-items-import-text-10.csv`、`task-items-import-audio-10.csv`、`task-items-import-video-10.csv` 和 `task-items-import-mixed-10.csv`。四份文件均使用固定三列表头；媒体文件复用公开 HTTPS 测试 URL，混合文件覆盖文字与音频、文字与视频、音频与视频及三种参考同时存在。远程素材能否导入仍以测试时的域名解析、访问状态和媒体校验结果为准。
 - 分页导入测试可使用 `docs/test-data/task-items-import-pagination-101.csv`。该文件包含 101 条唯一中文参考文字，音频和视频 URL 均为空，适用于启用文字参考的任务；任务详情与小程序按每页 10 条可形成十一页边界，独立任务数据池按每页 20 条可形成六页边界。
