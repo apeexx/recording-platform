@@ -30,6 +30,12 @@ public interface TaskItemStore {
 	default Optional<TaskItem> adminTransitionIfCurrent(AdminItemTransitionMutation mutation) { return Optional.empty(); }
 	default Optional<TaskItem> adminDiscardIfCurrent(AdminItemTransitionMutation mutation) { return Optional.empty(); }
 	default Optional<TaskItem> adminRestoreIfCurrent(AdminItemTransitionMutation mutation) { return Optional.empty(); }
+	default Optional<TaskItem> updateReferencesIfAvailable(UpdateTaskItemReferencesMutation mutation) {
+		return Optional.empty();
+	}
+	default Optional<TaskItem> deleteAvailableIfCurrent(String itemId, long expectedRevision) {
+		return Optional.empty();
+	}
 	Optional<TaskItem> submitIfCurrent(SubmitMutation mutation);
 	Optional<TaskItem> rejectIfCurrent(RejectMutation mutation);
 	Optional<TaskItem> releaseIfCurrent(ReleaseMutation mutation);

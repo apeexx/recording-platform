@@ -27,6 +27,12 @@ public class MongoTaskStore implements TaskStore {
 
 	@Override public TaskRecord save(TaskRecord task) { return repository.save(task); }
 	@Override public void deleteById(String id) { repository.deleteById(id); }
+	@Override public Optional<TaskRecord> deleteDraftById(String id) {
+		return Optional.ofNullable(mongoTemplate.findAndRemove(
+			Query.query(Criteria.where("_id").is(id).and("lifecycle").is(TaskLifecycle.DRAFT)),
+			TaskRecord.class
+		));
+	}
 	@Override public Optional<TaskRecord> findById(String id) { return repository.findById(id); }
 	@Override public Optional<TaskRecord> findByTaskCode(String taskCode) { return repository.findByTaskCode(taskCode); }
 	@Override public Page<TaskRecord> findAll(Pageable pageable) { return repository.findAll(pageable); }

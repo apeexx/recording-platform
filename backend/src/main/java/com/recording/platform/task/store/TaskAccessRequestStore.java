@@ -19,6 +19,7 @@ public interface TaskAccessRequestStore {
 		Instant now
 	);
 	Page<TaskAccessRequest> findAllByTaskId(String taskId, Pageable pageable);
+	default void deleteAllByTaskId(String taskId) { }
 	default Page<TaskAccessRequest> findAllByTaskIdAndStatus(
 		String taskId, AccessRequestStatus status, Pageable pageable
 	) { return Page.empty(pageable); }

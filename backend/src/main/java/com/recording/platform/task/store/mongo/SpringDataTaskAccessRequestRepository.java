@@ -15,4 +15,5 @@ interface SpringDataTaskAccessRequestRepository extends MongoRepository<TaskAcce
 	);
 	Page<TaskAccessRequest> findAllByTaskId(String taskId, Pageable pageable);
 	Page<TaskAccessRequest> findAllByTaskIdAndStatus(String taskId, AccessRequestStatus status, Pageable pageable);
+	void deleteAllByTaskId(String taskId);
 }

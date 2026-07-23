@@ -57,6 +57,25 @@ public class TaskItemCreationService {
 		String operationId,
 		PlatformPrincipal actor
 	) {
+		return add(taskId, command, operationId, actor, false);
+	}
+
+	public TaskItem addImported(
+		String taskId,
+		AddTaskItemCommand command,
+		String operationId,
+		PlatformPrincipal actor
+	) {
+		return add(taskId, command, operationId, actor, true);
+	}
+
+	private TaskItem add(
+		String taskId,
+		AddTaskItemCommand command,
+		String operationId,
+		PlatformPrincipal actor,
+		boolean ignoreDisabledReferences
+	) {
 		if (actor == null || actor.role() != UserRole.ADMIN) throw forbidden();
 		String normalizedOperationId = requiredOperationId(operationId);
 		Optional<TaskItem> replay = items.findByTaskIdAndCreationOperationId(taskId, normalizedOperationId);
@@ -70,10 +89,15 @@ public class TaskItemCreationService {
 		String text = trimToNull(command.referenceText());
 		String audioUrl = trimToNull(command.referenceAudioUrl());
 		String videoUrl = trimToNull(command.referenceVideoUrl());
+		if (ignoreDisabledReferences) {
+			text = enabled(configuration, ReferenceType.TEXT) ? text : null;
+			audioUrl = enabled(configuration, ReferenceType.AUDIO) ? audioUrl : null;
+			videoUrl = enabled(configuration, ReferenceType.VIDEO) ? videoUrl : null;
+		}
 		if (text == null && audioUrl == null && videoUrl == null) {
 			throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "ITEM_REFERENCE_REQUIRED", "每条数据至少需要一种参考内容");
 		}
-		validateEnabledReferences(configuration, text, audioUrl, videoUrl);
+		if (!ignoreDisabledReferences) validateEnabledReferences(configuration, text, audioUrl, videoUrl);
 		long sequence = tasks.nextItemSequence(taskId);
 		if (sequence < 1) throw new ApiException(HttpStatus.CONFLICT, "TASK_STATE_CHANGED", "任务状态已变化");
 		if (sequence > 1_000_000) {
@@ -125,6 +149,13 @@ public class TaskItemCreationService {
 			cleanup(downloaded, exception);
 			throw exception;
 		}
+	}
+
+	private boolean enabled(TaskConfiguration configuration, ReferenceType type) {
+		if (configuration == null) {
+			throw new ApiException(HttpStatus.CONFLICT, "TASK_CONFIGURATION_MISSING", "任务配置不存在");
+		}
+		return configuration.getReferenceTypes().contains(type);
 	}
 
 	private void validateEnabledReferences(TaskConfiguration configuration, String text, String audio, String video) {

@@ -88,6 +88,19 @@ public class OperationHistory {
 		);
 	}
 
+	public static OperationHistory referenceEdit(
+		String operationId,
+		String actorUserId,
+		String actorUsername,
+		Instant occurredAt,
+		TaskItem item
+	) {
+		return create(
+			operationId, "EDIT_REFERENCE", actorUserId, actorUsername,
+			actorUsername + "修改了任务条目参考内容", occurredAt, item
+		);
+	}
+
 	private static OperationHistory create(
 		String operationId,
 		String type,

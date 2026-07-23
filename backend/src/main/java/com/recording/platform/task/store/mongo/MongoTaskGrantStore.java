@@ -37,6 +37,7 @@ public class MongoTaskGrantStore implements TaskGrantStore {
 	@Override public Page<TaskGrant> findAllActiveByUserId(String userId, Pageable pageable) {
 		return repository.findAllByUserIdAndStatus(userId, GrantStatus.ACTIVE, pageable);
 	}
+	@Override public void deleteAllByTaskId(String taskId) { repository.deleteAllByTaskId(taskId); }
 
 	@Override
 	public TaskGrant activate(String taskId, String userId, String actorUserId, Instant now) {

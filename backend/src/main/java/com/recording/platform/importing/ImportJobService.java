@@ -160,11 +160,12 @@ public class ImportJobService {
 				"import-" + job.getId(), job.getActorUserId(), job.getActorUsername(), job.getActorUsername(),
 				UserRole.ADMIN, SessionType.WEB, false
 			);
+			job = persistProgress(job, workerId, totalRows, success, failure, errors, failedRowNumbers);
 			for (ImportRow row : rows) {
 				if (retryRows != null && !retryRows.contains(row.rowNumber())) continue;
 				job = renewLease(job, workerId);
 				try {
-					itemCreation.add(
+					itemCreation.addImported(
 						job.getTaskId(),
 						new AddTaskItemCommand(
 							row.referenceText(), row.referenceAudioUrl(), row.referenceVideoUrl()

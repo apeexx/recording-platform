@@ -57,6 +57,7 @@ public class MongoTaskAccessRequestStore implements TaskAccessRequestStore {
 	@Override public Page<TaskAccessRequest> findAllByTaskId(String taskId, Pageable pageable) {
 		return repository.findAllByTaskId(taskId, pageable);
 	}
+	@Override public void deleteAllByTaskId(String taskId) { repository.deleteAllByTaskId(taskId); }
 	@Override public Page<TaskAccessRequest> findAllByTaskIdAndStatus(
 		String taskId, AccessRequestStatus status, Pageable pageable
 	) { return repository.findAllByTaskIdAndStatus(taskId, status, pageable); }

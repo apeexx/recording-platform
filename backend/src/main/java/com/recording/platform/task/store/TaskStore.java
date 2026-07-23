@@ -10,6 +10,7 @@ import org.springframework.data.domain.Pageable;
 public interface TaskStore {
 	TaskRecord save(TaskRecord task);
 	void deleteById(String id);
+	default Optional<TaskRecord> deleteDraftById(String id) { return Optional.empty(); }
 	Optional<TaskRecord> findById(String id);
 	Optional<TaskRecord> findByTaskCode(String taskCode);
 	Page<TaskRecord> findAll(Pageable pageable);

@@ -12,4 +12,5 @@ interface SpringDataTaskGrantRepository extends MongoRepository<TaskGrant, Strin
 	Optional<TaskGrant> findByTaskIdAndUserIdAndStatus(String taskId, String userId, GrantStatus status);
 	Page<TaskGrant> findAllByTaskId(String taskId, Pageable pageable);
 	Page<TaskGrant> findAllByUserIdAndStatus(String userId, GrantStatus status, Pageable pageable);
+	void deleteAllByTaskId(String taskId);
 }

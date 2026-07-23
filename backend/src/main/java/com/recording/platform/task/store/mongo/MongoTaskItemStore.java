@@ -17,6 +17,7 @@ import com.recording.platform.task.store.AdminReviewDecisionMutation;
 import com.recording.platform.task.store.AdminItemTransitionMutation;
 import com.recording.platform.task.store.SubmitMutation;
 import com.recording.platform.task.store.TaskItemStore;
+import com.recording.platform.task.store.UpdateTaskItemReferencesMutation;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -48,6 +49,41 @@ public class MongoTaskItemStore implements TaskItemStore {
 	@Override public Optional<TaskItem> findById(String id) { return repository.findById(id); }
 	@Override public Optional<TaskItem> findByTaskIdAndCreationOperationId(String taskId, String operationId) {
 		return repository.findByTaskIdAndCreationOperationId(taskId, operationId);
+	}
+	@Override
+	public Optional<TaskItem> updateReferencesIfAvailable(UpdateTaskItemReferencesMutation mutation) {
+		TaskItem snapshot = new TaskItem();
+		snapshot.setId(mutation.itemId());
+		snapshot.setStatus(TaskItemStatus.AVAILABLE);
+		snapshot.setRevision(mutation.expectedRevision() + 1);
+		Update update = new Update()
+			.set("referenceText", mutation.referenceText())
+			.set("referenceAudioUrl", mutation.referenceAudioUrl())
+			.set("referenceVideoUrl", mutation.referenceVideoUrl())
+			.set("referenceAudioMediaId", mutation.referenceAudioMediaId())
+			.set("referenceVideoMediaId", mutation.referenceVideoMediaId())
+			.set("updatedAt", mutation.occurredAt())
+			.inc("revision", 1L)
+			.push("operations", OperationHistory.referenceEdit(
+				mutation.operationId(), mutation.actorUserId(), mutation.actorUsername(),
+				mutation.occurredAt(), snapshot
+			));
+		return modify(
+			Criteria.where("_id").is(mutation.itemId())
+				.and("status").is(TaskItemStatus.AVAILABLE)
+				.and("revision").is(mutation.expectedRevision()),
+			update
+		);
+	}
+
+	@Override
+	public Optional<TaskItem> deleteAvailableIfCurrent(String itemId, long expectedRevision) {
+		return Optional.ofNullable(mongoTemplate.findAndRemove(
+			Query.query(Criteria.where("_id").is(itemId)
+				.and("status").is(TaskItemStatus.AVAILABLE)
+				.and("revision").is(expectedRevision)),
+			TaskItem.class
+		));
 	}
 	@Override
 	public Optional<TaskItem> claimAvailable(ClaimMutation mutation) {

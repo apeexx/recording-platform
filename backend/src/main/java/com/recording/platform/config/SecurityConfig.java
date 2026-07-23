@@ -95,6 +95,8 @@ public class SecurityConfig {
 			.requestMatchers(HttpMethod.POST, "/api/task-items/*/status", "/api/task-items/*/discard", "/api/task-items/*/restore")
 				.hasRole("ADMIN")
 			.requestMatchers(HttpMethod.POST, "/api/task-items/batch/**").hasRole("ADMIN")
+			.requestMatchers(HttpMethod.PUT, "/api/task-items/*").hasRole("ADMIN")
+			.requestMatchers(HttpMethod.DELETE, "/api/task-items/*").hasRole("ADMIN")
 			.requestMatchers(HttpMethod.POST, "/api/tasks/*/items/start", "/api/tasks/*/access-requests")
 				.hasRole("COLLECTOR")
 			.requestMatchers(HttpMethod.POST, "/api/task-items/*/submit").hasRole("COLLECTOR")

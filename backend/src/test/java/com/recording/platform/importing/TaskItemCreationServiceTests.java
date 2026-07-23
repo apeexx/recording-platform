@@ -82,6 +82,31 @@ class TaskItemCreationServiceTests {
 	}
 
 	@Test
+	void importIgnoresColumnsNotEnabledByTaskAndRejectsRowsEmptyAfterFiltering() {
+		configuration.setReferenceTypes(Set.of(ReferenceType.AUDIO));
+		MediaAsset audio = asset("audio-1", MediaKind.REFERENCE_AUDIO);
+		when(downloader.download(
+			URI.create("https://cdn.example.com/a.wav"), RemoteMediaType.AUDIO, "task-1", "T000001-0000001"
+		)).thenReturn(audio);
+
+		TaskItem created = service.addImported(
+			"task-1",
+			new AddTaskItemCommand("应忽略", "https://cdn.example.com/a.wav", "https://cdn.example.com/ignored.mp4"),
+			"import-1",
+			admin
+		);
+
+		assertThat(created.getReferenceText()).isNull();
+		assertThat(created.getReferenceVideoUrl()).isNull();
+		assertThat(created.getReferenceAudioUrl()).isEqualTo("https://cdn.example.com/a.wav");
+		assertThatThrownBy(() -> service.addImported(
+			"task-1", new AddTaskItemCommand("仅有禁用文字", null, null), "import-2", admin
+		)).isInstanceOfSatisfying(ApiException.class, (exception) ->
+			assertThat(exception.getCode()).isEqualTo("ITEM_REFERENCE_REQUIRED")
+		);
+	}
+
+	@Test
 	void itemUsesTaskConfigurationAtomicSequenceAndLocallyDownloadedReferences() {
 		MediaAsset audio = asset("audio-1", MediaKind.REFERENCE_AUDIO);
 		MediaAsset video = asset("video-1", MediaKind.REFERENCE_VIDEO);

@@ -45,12 +45,12 @@ class ImportJobServiceTests {
 		InMemoryImportJobStore jobs = new InMemoryImportJobStore();
 		TaskItemCreationService itemCreation = org.mockito.Mockito.mock(TaskItemCreationService.class);
 		TaskItem created = new TaskItem();
-		doReturn(created).when(itemCreation).add(eq("task-1"), any(), any(), any());
+		doReturn(created).when(itemCreation).addImported(eq("task-1"), any(), any(), any());
 		doThrow(new ApiException(
 			HttpStatus.UNPROCESSABLE_ENTITY,
 			"ITEM_REFERENCE_INVALID",
 			"https://signed.example.com/private?token=must-not-leak"
-		)).doReturn(created).when(itemCreation).add(
+		)).doReturn(created).when(itemCreation).addImported(
 			eq("task-1"),
 			argThat((AddTaskItemCommand command) -> "第二条".equals(command.referenceText())),
 			any(),
@@ -92,14 +92,14 @@ class ImportJobServiceTests {
 		assertThat(retainedRetrySource)
 			.doesNotContain("signed-success.example")
 			.doesNotContain("success-token");
-		verify(itemCreation, times(2)).add(eq("task-1"), any(), any(), any());
+		verify(itemCreation, times(2)).addImported(eq("task-1"), any(), any(), any());
 
 		ImportJob retried = service.retry(first.getId(), admin);
 		assertThat(retried.getStatus()).isEqualTo(ImportJobStatus.COMPLETED);
 		assertThat(retried.getSuccessRows()).isEqualTo(2);
 		assertThat(retried.getFailureRows()).isZero();
 		assertThat(retried.getRowErrors()).isEmpty();
-		verify(itemCreation, times(3)).add(eq("task-1"), any(), any(), any());
+		verify(itemCreation, times(3)).addImported(eq("task-1"), any(), any(), any());
 	}
 
 	@Test
@@ -107,7 +107,7 @@ class ImportJobServiceTests {
 		InMemoryImportJobStore jobs = new InMemoryImportJobStore();
 		ImportFileParser parser = org.mockito.Mockito.mock(ImportFileParser.class);
 		TaskItemCreationService itemCreation = org.mockito.Mockito.mock(TaskItemCreationService.class);
-		doReturn(new TaskItem()).when(itemCreation).add(eq("task-1"), any(), any(), any());
+		doReturn(new TaskItem()).when(itemCreation).addImported(eq("task-1"), any(), any(), any());
 		org.mockito.Mockito.when(parser.parse(any(), any()))
 			.thenThrow(new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "IMPORT_FILE_INVALID", "解析失败"))
 			.thenReturn(List.of(new ImportRow(2, "第一条", null, null)));
@@ -129,14 +129,14 @@ class ImportJobServiceTests {
 
 		assertThat(retried.getStatus()).isEqualTo(ImportJobStatus.COMPLETED);
 		assertThat(retried.getSuccessRows()).isEqualTo(1);
-		verify(itemCreation, times(1)).add(eq("task-1"), any(), any(), any());
+		verify(itemCreation, times(1)).addImported(eq("task-1"), any(), any(), any());
 	}
 
 	@Test
 	void startupRecoveryRequeuesOnlyExpiredProcessingLeases() throws Exception {
 		InMemoryImportJobStore jobs = new InMemoryImportJobStore();
 		TaskItemCreationService itemCreation = org.mockito.Mockito.mock(TaskItemCreationService.class);
-		doReturn(new TaskItem()).when(itemCreation).add(eq("task-1"), any(), any(), any());
+		doReturn(new TaskItem()).when(itemCreation).addImported(eq("task-1"), any(), any(), any());
 		ImportSourceStorage sources = new ImportSourceStorage(tempDir);
 		ImportJob stale = recoverableJob("job-stale", Instant.parse("2026-07-11T11:59:00Z"));
 		jobs.save(stale);
@@ -170,7 +170,7 @@ class ImportJobServiceTests {
 		assertThat(recovered.getAttempt()).isEqualTo(1);
 		assertThat(recovered.getLeaseOwner()).isNull();
 		assertThat(jobs.findById("job-active").orElseThrow().getStatus()).isEqualTo(ImportJobStatus.PROCESSING);
-		verify(itemCreation, times(1)).add(eq("task-1"), any(), any(), any());
+		verify(itemCreation, times(1)).addImported(eq("task-1"), any(), any(), any());
 	}
 
 	@Test
@@ -179,7 +179,7 @@ class ImportJobServiceTests {
 		TaskItemCreationService itemCreation = org.mockito.Mockito.mock(TaskItemCreationService.class);
 		Set<String> creationOperations = new HashSet<>(Set.of("operation-job-mid-batch:row:2"));
 		AtomicInteger newlyCreatedItems = new AtomicInteger();
-		org.mockito.Mockito.when(itemCreation.add(eq("task-1"), any(), any(), any()))
+		org.mockito.Mockito.when(itemCreation.addImported(eq("task-1"), any(), any(), any()))
 			.thenAnswer((invocation) -> {
 				String operationId = invocation.getArgument(2);
 				if (creationOperations.add(operationId)) newlyCreatedItems.incrementAndGet();
@@ -229,7 +229,7 @@ class ImportJobServiceTests {
 	void workerThatLosesItsLeaseCannotPublishTheFinalImportState() {
 		InMemoryImportJobStore jobs = new InMemoryImportJobStore();
 		TaskItemCreationService itemCreation = org.mockito.Mockito.mock(TaskItemCreationService.class);
-		org.mockito.Mockito.when(itemCreation.add(eq("task-1"), any(), any(), any()))
+		org.mockito.Mockito.when(itemCreation.addImported(eq("task-1"), any(), any(), any()))
 			.thenAnswer((invocation) -> {
 				jobs.stealCurrentLease("replacement-worker");
 				return new TaskItem();
@@ -263,7 +263,7 @@ class ImportJobServiceTests {
 	void partialImportThatLosesLeaseKeepsThePersistedOriginalSource() throws Exception {
 		InMemoryImportJobStore jobs = new InMemoryImportJobStore();
 		TaskItemCreationService itemCreation = org.mockito.Mockito.mock(TaskItemCreationService.class);
-		org.mockito.Mockito.when(itemCreation.add(eq("task-1"), any(), any(), any()))
+		org.mockito.Mockito.when(itemCreation.addImported(eq("task-1"), any(), any(), any()))
 			.thenReturn(new TaskItem())
 			.thenAnswer((invocation) -> {
 				jobs.stealCurrentLease("replacement-worker");
@@ -296,7 +296,7 @@ class ImportJobServiceTests {
 		InMemoryImportJobStore jobs = new InMemoryImportJobStore();
 		TaskItemCreationService itemCreation = org.mockito.Mockito.mock(TaskItemCreationService.class);
 		doThrow(new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "ROW_INVALID", "该行不合法"))
-			.when(itemCreation).add(eq("task-1"), any(), any(), any());
+			.when(itemCreation).addImported(eq("task-1"), any(), any(), any());
 		ImportJobService service = new ImportJobService(
 			jobs,
 			new ImportFileParser(),

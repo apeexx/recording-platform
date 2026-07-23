@@ -90,6 +90,43 @@ describe('任务页面 API', () => {
     expect(options.idempotencyKey).toBe('op-3')
   })
 
+  it('数据池支持拖放导入、自动轮询、进度与 UTF-8 BOM 示例', () => {
+    const detail = fs.readFileSync(path.resolve('src/pages/admin/tasks/TaskDetailPage.vue'), 'utf8')
+    expect(detail).toContain('@drop.prevent="onDrop"')
+    expect(detail).toContain('window.setTimeout(refreshJob, 1000)')
+    expect(detail).toContain('onBeforeUnmount(clearPoll)')
+    expect(detail).toContain('processedRows.value / totalRows')
+    expect(detail).toContain("'\\uFEFFreferenceText,referenceAudioUrl,referenceVideoUrl")
+    expect(detail).toContain('<progress :value="importProgress"')
+    expect(detail).toContain("job.value.status === 'COMPLETED'")
+    expect(detail).toContain('await loadItems()')
+  })
+
+  it('仅待领取数据展示编辑和删除，草稿任务展示删除入口', () => {
+    const detail = fs.readFileSync(path.resolve('src/pages/admin/tasks/TaskDetailPage.vue'), 'utf8')
+    expect(detail).toContain("row.status === 'AVAILABLE'")
+    expect(detail).toContain('@click="openEdit(row)">编辑')
+    expect(detail).toContain('@click="deleteItem(row)">删除')
+    expect(detail).toContain("task?.lifecycle === 'DRAFT'")
+    expect(detail).toContain('@click="deleteTask">删除任务')
+    expect(detail).toContain('colored-checkbox')
+    expect(detail).toContain('task-reference-textarea')
+  })
+
+  it('任务和条目删除及条目编辑使用幂等真实接口', async () => {
+    httpRequest.mockResolvedValue({})
+    await taskApi.deleteTask('t1', 'delete-task')
+    await taskApi.updateItem('i1', { expectedRevision: 2, referenceText: '新文字' }, 'edit-item')
+    await taskApi.deleteItem('i1', 3, 'delete-item')
+    expect(httpRequest).toHaveBeenNthCalledWith(1, '/api/tasks/t1', { method: 'DELETE', idempotencyKey: 'delete-task' })
+    expect(httpRequest).toHaveBeenNthCalledWith(2, '/api/task-items/i1', {
+      method: 'PUT', json: { expectedRevision: 2, referenceText: '新文字' }, idempotencyKey: 'edit-item'
+    })
+    expect(httpRequest).toHaveBeenNthCalledWith(3, '/api/task-items/i1?expectedRevision=3', {
+      method: 'DELETE', idempotencyKey: 'delete-item'
+    })
+  })
+
   it('批量废弃按条目携带 revision 并返回逐条结果', async () => {
     httpRequest.mockResolvedValue([{ itemId: 'i1', success: true }])
     const result = await taskApi.batchAction('discard', [{ itemId: 'i1', expectedRevision: 3 }], 'batch-1')
