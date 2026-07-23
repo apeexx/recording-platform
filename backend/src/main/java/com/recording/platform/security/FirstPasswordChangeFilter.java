@@ -20,7 +20,9 @@ public class FirstPasswordChangeFilter extends OncePerRequestFilter {
 		"/api/auth/web/me",
 		"/api/auth/web/csrf",
 		"/api/auth/web/logout",
-		"/api/auth/web/password"
+		"/api/auth/web/password",
+		"/api/auth/web/initial-password",
+		"/api/auth/web/initial-password/skip"
 	);
 	private final ApiErrorWriter errorWriter;
 

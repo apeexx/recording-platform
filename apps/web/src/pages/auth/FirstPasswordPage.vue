@@ -5,7 +5,6 @@ import { useAdminSession } from '../../composables/useAdminSession.js'
 
 const router = useRouter()
 const session = useAdminSession()
-const currentPassword = ref('')
 const newPassword = ref('')
 const confirmPassword = ref('')
 const errorMessage = ref('')
@@ -17,7 +16,7 @@ async function submit() {
     return
   }
   try {
-    await session.changePassword(currentPassword.value, newPassword.value)
+    await session.changeInitialPassword(newPassword.value)
     await router.replace({ name: 'login', query: { reason: 'password-changed' } })
   } catch (error) {
     errorMessage.value = error.message || '密码修改失败，请检查后重试。'
@@ -28,10 +27,9 @@ async function submit() {
 <template>
   <main class="auth-page">
     <section class="auth-card" aria-labelledby="password-title">
-      <h1 id="password-title">首次登录，请修改密码</h1>
+      <h1 id="password-title">设置新密码</h1>
       <p>新密码至少 8 个字符。修改成功后需要重新登录。</p>
       <form class="auth-form" @submit.prevent="submit">
-        <label>当前密码<input v-model="currentPassword" type="password" autocomplete="current-password" required /></label>
         <label>新密码<input v-model="newPassword" type="password" minlength="8" autocomplete="new-password" required /></label>
         <label>确认新密码<input v-model="confirmPassword" type="password" minlength="8" autocomplete="new-password" required /></label>
         <p v-if="errorMessage" class="auth-error" role="alert">{{ errorMessage }}</p>

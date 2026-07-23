@@ -198,6 +198,25 @@ class SecurityAuthorizationTests {
 	}
 
 	@Test
+	void firstPasswordChangeSessionCanUseInitialPasswordAndSkipEndpoints() throws Exception {
+		PlatformPrincipal principal = new PlatformPrincipal(
+			"session-1", "admin-1", "admin", "管理员",
+			UserRole.ADMIN, SessionType.WEB, true
+		);
+
+		mockMvc.perform(put("/api/auth/web/initial-password")
+				.with(authentication(new TestingAuthenticationToken(principal, null, "ROLE_ADMIN")))
+				.with(csrf())
+				.contentType("application/json")
+				.content("{\"newPassword\":\"Password-2\"}"))
+			.andExpect(status().isOk());
+		mockMvc.perform(post("/api/auth/web/initial-password/skip")
+				.with(authentication(new TestingAuthenticationToken(principal, null, "ROLE_ADMIN")))
+				.with(csrf()))
+			.andExpect(status().isOk());
+	}
+
+	@Test
 	void weakPasswordValueUsesTheDocumented422Contract() throws Exception {
 		PlatformPrincipal principal = new PlatformPrincipal(
 			"session-1",

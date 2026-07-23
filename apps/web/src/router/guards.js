@@ -13,11 +13,13 @@ export function createAdminRouteGuard(session) {
     const currentUser = session.user.value
 
     if (!currentUser && to.meta.requiresAuth) return { name: 'login' }
-    if (currentUser && to.name === 'login') return homeForRole(currentUser.role)
+    if (currentUser && to.name === 'login') {
+      return currentUser.firstPasswordChangeRequired ? true : homeForRole(currentUser.role)
+    }
     if (!currentUser) return true
 
     if (currentUser.firstPasswordChangeRequired && to.name !== 'first-password') {
-      return { name: 'first-password' }
+      return { name: 'login', query: { reason: 'initial-password-choice' } }
     }
     if (!currentUser.firstPasswordChangeRequired && to.name === 'first-password') {
       return homeForRole(currentUser.role)

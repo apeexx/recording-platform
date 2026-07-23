@@ -81,10 +81,23 @@ async function changePassword(currentPassword, newPassword) {
   return result
 }
 
+async function changeInitialPassword(newPassword) {
+  const result = await authApi.changeInitialPassword(newPassword)
+  user.value = null
+  initialized.value = true
+  return result
+}
+
+async function skipInitialPasswordChange() {
+  const result = await authApi.skipInitialPasswordChange()
+  if (user.value) user.value = { ...user.value, firstPasswordChangeRequired: false }
+  return result
+}
+
 export function useAdminSession() {
   return {
     user: readonly(user), initialized: readonly(initialized), loading: readonly(loading),
-    initialize, login, takeover, logout, changePassword
+    initialize, login, takeover, logout, changePassword, changeInitialPassword, skipInitialPasswordChange
   }
 }
 

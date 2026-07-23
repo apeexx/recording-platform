@@ -50,6 +50,33 @@ class WebAuthenticationServiceTests {
 	}
 
 	@Test
+	void initialPasswordChangeDoesNotRequireCurrentPasswordAndRevokesAllSessions() {
+		WebUserStore users = mock(WebUserStore.class); SessionService sessions = mock(SessionService.class);
+		WebUser user = user(); when(users.findById(user.getId())).thenReturn(Optional.of(user));
+		when(users.updateInitialPasswordIfRequired(eq(user.getId()), any(), eq(Instant.now(CLOCK)))).thenReturn(true);
+		WebAuthenticationService service = new WebAuthenticationService(users, sessions, passwords, CLOCK);
+
+		service.changeInitialPassword(user.getId(), "Password-2");
+
+		verify(sessions).revokeAll(user.getId());
+		verify(users).updateInitialPasswordIfRequired(eq(user.getId()),
+			org.mockito.ArgumentMatchers.argThat(hash -> passwords.matches("Password-2", hash)), eq(Instant.now(CLOCK)));
+	}
+
+	@Test
+	void skippingInitialPasswordChangeClearsFlagWithoutRevokingSession() {
+		WebUserStore users = mock(WebUserStore.class); SessionService sessions = mock(SessionService.class);
+		WebUser user = user(); when(users.findById(user.getId())).thenReturn(Optional.of(user));
+		when(users.clearInitialPasswordChangeIfRequired(user.getId(), Instant.now(CLOCK))).thenReturn(true);
+		WebAuthenticationService service = new WebAuthenticationService(users, sessions, passwords, CLOCK);
+
+		service.skipInitialPasswordChange(user.getId());
+
+		verify(users).clearInitialPasswordChangeIfRequired(user.getId(), Instant.now(CLOCK));
+		verify(sessions, org.mockito.Mockito.never()).revokeAll(any());
+	}
+
+	@Test
 	void invalidOrOversizedPasswordsKeepExistingErrorContracts() {
 		WebUserStore users = mock(WebUserStore.class); WebUser user = user(); when(users.findById(user.getId())).thenReturn(Optional.of(user));
 		WebAuthenticationService service = new WebAuthenticationService(users, mock(SessionService.class), passwords, CLOCK);

@@ -41,13 +41,16 @@ describe('后台角色导航', () => {
     expect(route.meta.title).toBe('采集权限')
   })
 
-  it('未登录去登录页，首次改密被限制，角色越权去各自首页', async () => {
+  it('未登录去登录页，首次改密回登录页选择，角色越权去各自首页', async () => {
     const session = { initialize: async () => {}, user: { value: null } }
     const guard = createAdminRouteGuard(session)
     expect(await guard({ path: '/admin/tasks', meta: { requiresAuth: true } })).toEqual({ name: 'login' })
 
     session.user.value = { role: 'ADMIN', firstPasswordChangeRequired: true }
-    expect(await guard({ path: '/admin/tasks', meta: { requiresAuth: true } })).toEqual({ name: 'first-password' })
+    expect(await guard({ path: '/admin/tasks', meta: { requiresAuth: true } })).toEqual({
+      name: 'login', query: { reason: 'initial-password-choice' }
+    })
+    expect(await guard({ path: '/login', name: 'login', meta: { public: true } })).toBe(true)
     expect(await guard({ path: '/first-password', name: 'first-password', meta: { requiresAuth: true } })).toBe(true)
 
     session.user.value = { role: 'REVIEWER', firstPasswordChangeRequired: false }

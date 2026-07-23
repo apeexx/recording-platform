@@ -1,6 +1,6 @@
 <script setup>
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-const props = defineProps({ open: Boolean, title: String, message: String, busy: Boolean, confirmText: { type: String, default: '确认' } })
+const props = defineProps({ open: Boolean, title: String, message: String, busy: Boolean, confirmText: { type: String, default: '确认' }, cancelText: { type: String, default: '取消' } })
 const emit = defineEmits(['confirm', 'cancel'])
 const panel = ref(null)
 let previousFocus
@@ -21,4 +21,4 @@ watch(() => props.open, open => { document.body.style.overflow = open ? 'hidden'
 onMounted(() => window.addEventListener('keydown', keydown))
 onBeforeUnmount(() => { window.removeEventListener('keydown', keydown); document.body.style.overflow = '' })
 </script>
-<template><Teleport to="body"><div v-if="open" class="confirm-modal-backdrop" @click.self="cancel"><section ref="panel" class="confirm-modal" role="dialog" aria-modal="true" :aria-label="title"><h2>{{ title }}</h2><p>{{ message }}</p><div><button class="auth-secondary" :disabled="busy" @click="cancel">取消</button><button class="auth-primary" :disabled="busy" @click="$emit('confirm')">{{ busy ? '处理中…' : confirmText }}</button></div></section></div></Teleport></template>
+<template><Teleport to="body"><div v-if="open" class="confirm-modal-backdrop" @click.self="cancel"><section ref="panel" class="confirm-modal" role="dialog" aria-modal="true" :aria-label="title"><h2>{{ title }}</h2><p>{{ message }}</p><div><button class="auth-secondary" :disabled="busy" @click="cancel">{{ cancelText }}</button><button class="auth-primary" :disabled="busy" @click="$emit('confirm')">{{ busy ? '处理中…' : confirmText }}</button></div></section></div></Teleport></template>

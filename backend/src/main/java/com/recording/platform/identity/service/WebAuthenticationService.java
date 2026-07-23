@@ -97,6 +97,48 @@ public class WebAuthenticationService {
 		sessions.revokeAll(userId);
 	}
 
+	public void changeInitialPassword(String userId, String newPassword) {
+		WebUser user = requireActiveInitialPasswordUser(userId);
+		validateNewPassword(newPassword);
+		if (!users.updateInitialPasswordIfRequired(
+			user.getId(), passwordEncoder.encode(newPassword), Instant.now(clock)
+		)) {
+			throw accountStateChanged();
+		}
+		sessions.revokeAll(userId);
+	}
+
+	public void skipInitialPasswordChange(String userId) {
+		WebUser user = requireActiveInitialPasswordUser(userId);
+		if (!users.clearInitialPasswordChangeIfRequired(user.getId(), Instant.now(clock))) {
+			throw accountStateChanged();
+		}
+	}
+
+	private WebUser requireActiveInitialPasswordUser(String userId) {
+		WebUser user = users.findById(userId)
+			.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "USER_NOT_FOUND", "用户不存在"));
+		if (user.getStatus() != UserStatus.ACTIVE) {
+			throw new ApiException(HttpStatus.UNAUTHORIZED, "ACCOUNT_DISABLED", "账号已停用");
+		}
+		if (!user.isFirstPasswordChangeRequired()) throw accountStateChanged();
+		return user;
+	}
+
+	private void validateNewPassword(String newPassword) {
+		if (!BcryptPasswordPolicy.isValidForEncoding(newPassword)) {
+			throw new ApiException(
+				HttpStatus.UNPROCESSABLE_ENTITY,
+				"PASSWORD_TOO_WEAK",
+				"新密码至少需要 8 个字符，且 UTF-8 编码不能超过 72 字节"
+			);
+		}
+	}
+
+	private ApiException accountStateChanged() {
+		return new ApiException(HttpStatus.CONFLICT, "ACCOUNT_STATE_CHANGED", "账号状态已变化，请重试");
+	}
+
 	private WebLoginResult toResult(WebUser user, IssuedSession issued) {
 		return new WebLoginResult(
 			issued.token(),

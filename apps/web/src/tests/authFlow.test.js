@@ -10,6 +10,8 @@ import { httpRequest } from '../lib/httpClient.js'
 import { authApi } from '../lib/authApi.js'
 import { resetAdminSessionForTests, useAdminSession } from '../composables/useAdminSession.js'
 import { synthesizeVoice } from '../lib/voiceGenerationApi.js'
+import fs from 'node:fs'
+import path from 'node:path'
 
 const admin = {
   userId: 'admin-1', username: 'admin', name: '管理员', role: 'ADMIN',
@@ -47,6 +49,37 @@ describe('后台身份流程', () => {
     const result = await session.changePassword('password', 'new-password')
     expect(result.reloginRequired).toBe(true)
     expect(session.user.value).toBeNull()
+  })
+
+  it('首次改密使用专用无原密码接口，跳过后保留会话并清除标记', async () => {
+    const session = useAdminSession()
+    httpRequest.mockResolvedValueOnce({ ...admin, firstPasswordChangeRequired: true })
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({ success: true, reloginRequired: true })
+
+    await session.login('admin', 'password')
+    await session.skipInitialPasswordChange()
+    expect(session.user.value.firstPasswordChangeRequired).toBe(false)
+    expect(httpRequest).toHaveBeenNthCalledWith(2, '/api/auth/web/initial-password/skip', {
+      method: 'POST'
+    })
+
+    await session.changeInitialPassword('new-password')
+    expect(httpRequest).toHaveBeenNthCalledWith(3, '/api/auth/web/initial-password', {
+      method: 'PUT', json: { newPassword: 'new-password' }
+    })
+    expect(session.user.value).toBeNull()
+  })
+
+  it('登录页提供密码可见按钮且首次改密页不再要求原密码', () => {
+    const login = fs.readFileSync(path.resolve('src/pages/auth/AdminLoginPage.vue'), 'utf8')
+    const initialPassword = fs.readFileSync(path.resolve('src/pages/auth/FirstPasswordPage.vue'), 'utf8')
+
+    expect(login).toContain("'显示密码'")
+    expect(login).toContain("'隐藏密码'")
+    expect(login).toContain('initialPasswordPrompt')
+    expect(initialPassword).not.toContain('currentPassword')
+    expect(initialPassword).toContain('session.changeInitialPassword(newPassword.value)')
   })
 
   it('初始化遇到未登录只记录完成状态，其他错误继续抛出', async () => {

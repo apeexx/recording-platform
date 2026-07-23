@@ -21,5 +21,13 @@ export const authApi = {
     return httpRequest('/api/auth/web/password', {
       method: 'PUT', json: { currentPassword, newPassword }
     })
+  },
+  changeInitialPassword(newPassword) {
+    return httpRequest('/api/auth/web/initial-password', {
+      method: 'PUT', json: { newPassword }
+    })
+  },
+  skipInitialPasswordChange() {
+    return httpRequest('/api/auth/web/initial-password/skip', { method: 'POST' })
   }
 }

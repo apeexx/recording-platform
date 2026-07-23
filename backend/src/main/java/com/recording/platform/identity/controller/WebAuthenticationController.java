@@ -1,6 +1,7 @@
 package com.recording.platform.identity.controller;
 
 import com.recording.platform.identity.dto.ChangePasswordRequest;
+import com.recording.platform.identity.dto.InitialPasswordRequest;
 import com.recording.platform.identity.dto.TakeoverRequest;
 import com.recording.platform.identity.dto.WebLoginRequest;
 import com.recording.platform.identity.dto.WebSessionResponse;
@@ -82,6 +83,25 @@ public class WebAuthenticationController {
 		return ResponseEntity.ok()
 			.header(HttpHeaders.SET_COOKIE, clearCookie().toString())
 			.body(Map.of("success", true, "reloginRequired", true));
+	}
+
+	@PutMapping("/initial-password")
+	public ResponseEntity<Map<String, Object>> changeInitialPassword(
+		@AuthenticationPrincipal PlatformPrincipal principal,
+		@Valid @RequestBody InitialPasswordRequest request
+	) {
+		authentication.changeInitialPassword(principal.userId(), request.newPassword());
+		return ResponseEntity.ok()
+			.header(HttpHeaders.SET_COOKIE, clearCookie().toString())
+			.body(Map.of("success", true, "reloginRequired", true));
+	}
+
+	@PostMapping("/initial-password/skip")
+	public Map<String, Object> skipInitialPassword(
+		@AuthenticationPrincipal PlatformPrincipal principal
+	) {
+		authentication.skipInitialPasswordChange(principal.userId());
+		return Map.of("success", true);
 	}
 
 	private ResponseEntity<WebSessionResponse> sessionResponse(WebLoginResult result) {

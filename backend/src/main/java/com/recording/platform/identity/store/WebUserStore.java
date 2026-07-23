@@ -19,5 +19,7 @@ public interface WebUserStore {
 	Page<WebUser> search(String query, UserRole role, Pageable pageable);
 	Optional<WebUser> disableIfActive(String userId, Instant updatedAt);
 	boolean updatePasswordIfActive(String userId, String expectedPasswordHash, String passwordHash, Instant updatedAt);
+	boolean updateInitialPasswordIfRequired(String userId, String passwordHash, Instant updatedAt);
+	boolean clearInitialPasswordChangeIfRequired(String userId, Instant updatedAt);
 	Optional<WebUser> resetPasswordIfActive(String userId, String passwordHash, Instant updatedAt);
 }

@@ -58,6 +58,22 @@ public class MongoWebUserStore implements WebUserStore {
 		Update update = new Update().set("passwordHash", passwordHash).set("firstPasswordChangeRequired", false).set("updatedAt", updatedAt);
 		return mongo.updateFirst(query, update, WebUser.class).getMatchedCount() == 1;
 	}
+	@Override public boolean updateInitialPasswordIfRequired(String userId, String passwordHash, Instant updatedAt) {
+		Query query = Query.query(Criteria.where("_id").is(userId)
+			.and("status").is(UserStatus.ACTIVE)
+			.and("firstPasswordChangeRequired").is(true));
+		Update update = new Update().set("passwordHash", passwordHash)
+			.set("firstPasswordChangeRequired", false)
+			.set("updatedAt", updatedAt);
+		return mongo.updateFirst(query, update, WebUser.class).getMatchedCount() == 1;
+	}
+	@Override public boolean clearInitialPasswordChangeIfRequired(String userId, Instant updatedAt) {
+		Query query = Query.query(Criteria.where("_id").is(userId)
+			.and("status").is(UserStatus.ACTIVE)
+			.and("firstPasswordChangeRequired").is(true));
+		Update update = new Update().set("firstPasswordChangeRequired", false).set("updatedAt", updatedAt);
+		return mongo.updateFirst(query, update, WebUser.class).getMatchedCount() == 1;
+	}
 	@Override public Optional<WebUser> resetPasswordIfActive(String userId, String passwordHash, Instant updatedAt) {
 		Query query = Query.query(Criteria.where("_id").is(userId).and("status").is(UserStatus.ACTIVE));
 		Update update = new Update().set("passwordHash", passwordHash).set("firstPasswordChangeRequired", true).set("updatedAt", updatedAt);
