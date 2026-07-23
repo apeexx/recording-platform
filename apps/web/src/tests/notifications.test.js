@@ -59,4 +59,16 @@ describe('全局 Toast', () => {
     expect(document.body.querySelector('.app-toast.is-info').getAttribute('aria-live')).toBe('polite')
     wrapper.unmount()
   })
+
+  it('错误提示使用不依赖字体的 SVG 图标', async () => {
+    const notifications = useNotifications()
+    const wrapper = mount(AppToastHost, { attachTo: document.body })
+
+    notifications.error('请求失败')
+    await wrapper.vm.$nextTick()
+
+    expect(document.body.querySelector('[data-toast-icon="error"]')).not.toBeNull()
+    expect(document.body.querySelector('.app-toast.is-error')?.textContent).not.toContain('!')
+    wrapper.unmount()
+  })
 })
