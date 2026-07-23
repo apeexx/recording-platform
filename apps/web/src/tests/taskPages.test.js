@@ -22,6 +22,18 @@ describe('任务页面 API', () => {
 	  expect(source).toContain('v-if="form.humanReviewEnabled"')
 	  expect(source).toContain("rejectionReasons: form.humanReviewEnabled")
 	})
+	it('录音时长占半行且参考类型使用彩色方形复选框', () => {
+	  const source = fs.readFileSync(path.resolve('src/pages/admin/tasks/TaskEditorPage.vue'), 'utf8')
+	  const controls = fs.readFileSync(path.resolve('src/styles/form-controls.css'), 'utf8')
+	  const business = fs.readFileSync(path.resolve('src/styles/business.css'), 'utf8')
+
+	  expect(source).toContain('<label class="duration-range-field">录音时长范围')
+	  expect(source).not.toContain('<label class="business-span">录音时长范围')
+	  expect(source).toContain('colored-checkbox')
+	  expect(controls).toContain('.duration-range-card')
+	  expect(business).toContain('.colored-checkbox input')
+	  expect(business).toContain('appearance:none')
+	})
 	it('任务列表移除版本并展示成果与录音配置摘要', () => {
 	  const source = fs.readFileSync(path.resolve('src/pages/admin/tasks/TaskListPage.vue'), 'utf8')
 	  expect(source).not.toContain('currentVersionNumber')

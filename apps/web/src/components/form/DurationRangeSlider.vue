@@ -21,10 +21,12 @@ function updateMax(event) {
 </script>
 
 <template>
-  <div class="duration-range">
-    <div class="duration-range-values"><span>{{ minValue }} 秒</span><span>{{ maxValue }} 秒</span></div>
-    <div class="duration-range-track"><span class="duration-range-fill" :style="fillStyle"></span></div>
-    <input data-handle="min" type="range" :min="min" :max="max" :step="step" :value="minValue" aria-label="最短时长" @input="updateMin">
-    <input data-handle="max" type="range" :min="min" :max="max" :step="step" :value="maxValue" aria-label="最长时长" @input="updateMax">
+  <div class="duration-range-card">
+    <div class="duration-range">
+      <div class="duration-range-values"><span><small>最短</small><strong>{{ minValue }} 秒</strong></span><span><small>最长</small><strong>{{ maxValue }} 秒</strong></span></div>
+      <div class="duration-range-track"><span class="duration-range-fill" :style="fillStyle"></span></div>
+      <input data-handle="min" type="range" :min="min" :max="max" :step="step" :value="minValue" aria-label="最短时长" @input="updateMin">
+      <input data-handle="max" type="range" :min="min" :max="max" :step="step" :value="maxValue" aria-label="最长时长" @input="updateMax">
+    </div>
   </div>
 </template>

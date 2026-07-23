@@ -58,10 +58,10 @@ onMounted(init)
         <label>最终成果<BaseSelect v-model="form.resultType" :options="resultOptions" aria-label="最终成果" /></label>
         <label>录音格式<BaseSelect v-model="form.recordingFormat" :options="formatOptions" aria-label="录音格式" /></label>
         <label>采样率<BaseSelect v-model="form.sampleRate" :options="sampleRateOptions" aria-label="采样率" /></label>
-        <label class="business-span">录音时长范围<DurationRangeSlider v-model:min-value="form.minDurationSeconds" v-model:max-value="form.maxDurationSeconds" :min="1" :max="600" /></label>
+        <label class="duration-range-field">录音时长范围<DurationRangeSlider v-model:min-value="form.minDurationSeconds" v-model:max-value="form.maxDurationSeconds" :min="1" :max="600" /></label>
         <label class="business-span">说明<textarea v-model="form.description" rows="3" /></label>
       </div>
-      <fieldset><legend>参考内容（至少一项）</legend><label v-for="type in ['TEXT','AUDIO','VIDEO']" :key="type" class="business-check"><input v-model="form.referenceTypes" type="checkbox" :value="type">{{ type === 'TEXT' ? '参考文字' : type === 'AUDIO' ? '参考音频' : '参考视频' }}</label></fieldset>
+      <fieldset><legend>参考内容（至少一项）</legend><label v-for="type in ['TEXT','AUDIO','VIDEO']" :key="type" class="business-check colored-checkbox"><input v-model="form.referenceTypes" type="checkbox" :value="type"><span>{{ type === 'TEXT' ? '参考文字' : type === 'AUDIO' ? '参考音频' : '参考视频' }}</span></label></fieldset>
       <fieldset><legend>审核</legend><ToggleSwitch v-model="form.humanReviewEnabled" label="人工审核" /></fieldset>
       <label v-if="form.humanReviewEnabled">驳回预设原因（逗号分隔）<input v-model="form.rejectionReasons"></label>
       <p class="business-note">文本任务可提交文本或录音，也可同时提交；音频任务仅提交录音。首期 AI 功能固定关闭。</p>
