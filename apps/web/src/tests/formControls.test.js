@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -7,6 +7,10 @@ import ToggleSwitch from '../components/form/ToggleSwitch.vue'
 import DurationRangeSlider from '../components/form/DurationRangeSlider.vue'
 
 describe('统一表单控件', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
   it('下拉框支持键盘选择并在选择后关闭', async () => {
     const wrapper = mount(BaseSelect, {
       props: {
@@ -41,29 +45,54 @@ describe('统一表单控件', () => {
     expect(wrapper.get('[data-handle="max"]').attributes('aria-valuetext')).toBe('100 秒')
   })
 
-  it('双端时长滑块数值跟随圆点并处理边缘与相邻状态', async () => {
-    const wrapper = mount(DurationRangeSlider, { props: { minValue: 1, maxValue: 600 } })
-    expect(wrapper.get('.duration-range-value.is-min').attributes('style')).toContain('left: 0%')
-    expect(wrapper.get('.duration-range-value.is-max').attributes('style')).toContain('left: 100%')
-    expect(wrapper.get('.duration-range-value.is-min').classes()).toContain('is-start')
-    expect(wrapper.get('.duration-range-value.is-max').classes()).toContain('is-end')
+  it('双端时长滑块使用统一像素坐标绘制极值圆点和选区', async () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
+      return this.classList?.contains('duration-range-track')
+        ? { x: 0, y: 0, left: 0, top: 0, right: 520, bottom: 22, width: 520, height: 22, toJSON() {} }
+        : { x: 0, y: 0, left: 0, top: 0, right: 20, bottom: 20, width: 20, height: 20, toJSON() {} }
+    })
 
-    await wrapper.setProps({ minValue: 300, maxValue: 301 })
-    expect(wrapper.get('.duration-range-value.is-min').classes()).toContain('is-close')
-    expect(wrapper.get('.duration-range-value.is-max').classes()).toContain('is-close')
+    const wrapper = mount(DurationRangeSlider, { props: { minValue: 1, maxValue: 600 } })
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.findAll('.duration-range-thumb')).toHaveLength(2)
+    expect(wrapper.get('.duration-range-thumb.is-min').attributes('style')).toContain('left: 10px')
+    expect(wrapper.get('.duration-range-thumb.is-max').attributes('style')).toContain('left: 510px')
+    expect(wrapper.get('.duration-range-selection').attributes('style')).toContain('left: 10px')
+    expect(wrapper.get('.duration-range-selection').attributes('style')).toContain('width: 500px')
   })
 
-  it('双端时长滑块使用细轨道和白色小圆点且不保留嵌套卡片', () => {
+  it('双端时长滑块支持点击轨道移动最近圆点和显式键盘微调', async () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
+      return this.classList?.contains('duration-range-track')
+        ? { x: 0, y: 0, left: 0, top: 0, right: 520, bottom: 22, width: 520, height: 22, toJSON() {} }
+        : { x: 0, y: 0, left: 0, top: 0, right: 20, bottom: 20, width: 20, height: 20, toJSON() {} }
+    })
+
+    const wrapper = mount(DurationRangeSlider, { props: { minValue: 120, maxValue: 420 } })
+    await wrapper.vm.$nextTick()
+    wrapper.get('.duration-range-track').element.dispatchEvent(new MouseEvent('pointerdown', {
+      bubbles: true,
+      button: 0,
+      clientX: 410,
+    }))
+    await wrapper.vm.$nextTick()
+    expect(wrapper.emitted('update:maxValue')?.at(-1)).toEqual([480])
+
+    await wrapper.get('[data-handle="min"]').trigger('keydown', { key: 'ArrowRight' })
+    expect(wrapper.emitted('update:minValue')?.at(-1)).toEqual([121])
+  })
+
+  it('双端时长滑块复刻已验收原型的胶囊轨道与白色圆点', () => {
     const styles = fs.readFileSync(path.resolve('src/styles/form-controls.css'), 'utf8')
     const source = fs.readFileSync(path.resolve('src/components/form/DurationRangeSlider.vue'), 'utf8')
-    expect(styles).toMatch(/--duration-thumb-size:\s*18px/)
-    expect(styles).toMatch(/left:\s*calc\(var\(--duration-thumb-size\)\/2\)/)
-    expect(styles).toMatch(/width:\s*calc\(100% - var\(--duration-thumb-size\)\)/)
-    expect(styles).toMatch(/\.duration-range-track\s*\{[^}]*height:\s*6px/)
-    expect(styles).toMatch(/::-webkit-slider-thumb\s*\{[^}]*background:\s*var\(--card\)/)
-    expect(styles).toContain('::-webkit-slider-runnable-track')
-    expect(styles).toContain('::-moz-range-track')
-    expect(styles).toMatch(/background:\s*transparent/)
-    expect(source).not.toContain('duration-range-card')
+    expect(styles).toMatch(/--duration-thumb-size:\s*20px/)
+    expect(styles).toMatch(/--duration-track-height:\s*22px/)
+    expect(styles).toMatch(/--duration-selection-height:\s*16px/)
+    expect(styles).toMatch(/\.duration-range-thumb\s*\{[^}]*background:\s*var\(--card\)/)
+    expect(styles).toMatch(/\.duration-range-native\s*\{[^}]*opacity:\s*0/)
+    expect(source).toContain('valueToX')
+    expect(source).toContain('clientXToValue')
+    expect(source).toContain('duration-range-selection')
   })
 })

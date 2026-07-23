@@ -166,7 +166,7 @@ POST /api/admin/users/{userId}/reset-password
 
 ## 任务池、录音媒体与导入
 
-- 任务：`/api/tasks` 提供创建、草稿编辑/删除、发布、暂停、恢复、结束和分页查询。`DELETE /api/tasks/{taskId}` 仅允许 DRAFT 并使用 `Idempotency-Key`；若存在活动导入，先取消并隔离租约后返回 `IMPORT_JOB_ACTIVE`，安全重试时再级联删除条目、导入记录与源文件、授权和申请。任务编码及条目序号均不复用。仅 DRAFT 可修改配置；RUNNING 必须先暂停，只有 PAUSED 可结束；DRAFT、RUNNING 和 PAUSED 均可由管理员准备数据，ENDED 拒绝新增。配置时长固定为 1–600 秒。
+- 任务：`/api/tasks` 提供创建、草稿编辑/删除、发布、暂停、恢复、结束和分页查询。`DELETE /api/tasks/{taskId}` 仅允许 DRAFT 并使用 `Idempotency-Key`；若存在活动导入，先取消并隔离租约后返回 `IMPORT_JOB_ACTIVE`，安全重试时再级联删除条目、导入记录与源文件、授权和申请。任务编码及条目序号均不复用。仅 DRAFT 可修改配置；RUNNING 必须先暂停，只有 PAUSED 可结束；DRAFT、RUNNING 和 PAUSED 均可由管理员准备数据，ENDED 拒绝新增。配置时长固定为 1–600 秒，Web 端使用自绘双端胶囊滑块并保留键盘和无障碍操作。
 - 授权：`/api/tasks/{taskId}/grants` 与 `/access-requests` 管理直接授权、申请、原子批准/驳回和撤销。撤销只阻止新领取，不影响已领取条目的提交或释放；批准申请重放不会复活后来已撤销的授权。
 - 数据池：ADMIN 使用 `POST /api/tasks/{taskId}/items` 单条添加并传 `Idempotency-Key`，或通过 `/api/import-jobs` 异步导入。仅 `AVAILABLE` 条目可通过 `PUT /api/task-items/{itemId}` 按 `expectedRevision` 编辑参考内容，或通过 `DELETE /api/task-items/{itemId}?expectedRevision=...` 真正删除；两者均要求 `Idempotency-Key`，媒体替换/删除进入持久化清理任务，条目编号不复用。其他状态必须先释放回待领取。COLLECTOR 使用 `POST /api/tasks/{taskId}/items/start` 原子领取；普通待录制作业不设持有数量上限，每个新的 `Idempotency-Key` 领取一条新数据，相同幂等键重放仍返回首次条目。
 - 提交与返修：`POST /api/task-items/{itemId}/submit` 接收 multipart 的 `operationId`、`assignmentId`、`expectedRevision` 以及与任务成果类型匹配的文字或录音；重复 operationId 返回首次结果，过期修订返回 `409 STALE_STATE`。驳回进入独立 `REWORK_PENDING` 队列并保留原因、原采集员和 assignment；普通待录制和返修均可同时持有多条。释放清除当前结果但保留提交和操作历史。
