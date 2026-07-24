@@ -3,6 +3,7 @@ package com.recording.platform.idempotency;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.recording.platform.importing.ImportJobController;
+import com.recording.platform.integration.IntegrationTaskItemController;
 import com.recording.platform.task.controller.TaskAccessController;
 import com.recording.platform.task.controller.TaskController;
 import com.recording.platform.task.controller.TaskItemsController;
@@ -18,6 +19,7 @@ class MutationIdempotencyContractTests {
 		assertHeader(TaskAccessController.class, "request", "approve", "reject", "grant", "revoke");
 		assertHeader(TaskItemsController.class, "add", "start");
 		assertHeader(ImportJobController.class, "create", "retry");
+		assertHeader(IntegrationTaskItemController.class, "add");
 	}
 
 	private void assertHeader(Class<?> controller, String... methodNames) {

@@ -25,6 +25,9 @@ import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 class TaskItemCreationServiceTests {
 	private TaskItemCreationService service;
@@ -141,6 +144,95 @@ class TaskItemCreationServiceTests {
 			assertThat(operation.getActorUsername()).isEqualTo("admin");
 			assertThat(operation.getContent()).contains("新增了任务条目");
 		});
+	}
+
+	@Test
+	void integrationEntryReusesCreationRulesAndRecordsTheDedicatedActor() {
+		TaskItem created = service.addIntegration(
+			"task-1",
+			new AddTaskItemCommand(
+				"外部参考文字",
+				"https://cdn.example.com/reference.wav",
+				"https://cdn.example.com/reference.mp4"
+			),
+			"external-add-1"
+		);
+
+		assertThat(created.getReferenceText()).isEqualTo("外部参考文字");
+		assertThat(created.getReferenceAudioUrl()).isEqualTo("https://cdn.example.com/reference.wav");
+		assertThat(created.getReferenceVideoUrl()).isEqualTo("https://cdn.example.com/reference.mp4");
+		assertThat(created.getOperations()).singleElement().satisfies((operation) -> {
+			assertThat(operation.getActorUserId()).isEqualTo("INTEGRATION-ANNOTATION-SCRIPT-CENTER");
+			assertThat(operation.getActorUsername()).isEqualTo("annotation-script-center");
+		});
+	}
+
+	@ParameterizedTest
+	@MethodSource("integrationReferenceCombinations")
+	void integrationAcceptsEveryNonEmptyReferenceCombination(
+		String text,
+		String audioUrl,
+		String videoUrl
+	) {
+		TaskItem created = service.addIntegration(
+			"task-1",
+			new AddTaskItemCommand(text, audioUrl, videoUrl),
+			"combination-" + Integer.toHexString(java.util.Objects.hash(text, audioUrl, videoUrl))
+		);
+
+		assertThat(created.getReferenceText()).isEqualTo(text);
+		assertThat(created.getReferenceAudioUrl()).isEqualTo(audioUrl);
+		assertThat(created.getReferenceVideoUrl()).isEqualTo(videoUrl);
+	}
+
+	@Test
+	void integrationUsesTheSameEmptyTypeStateAndUrlValidationRules() {
+		assertThatThrownBy(() -> service.addIntegration(
+			"task-1", new AddTaskItemCommand(" ", null, null), "external-empty"
+		)).isInstanceOfSatisfying(ApiException.class, (exception) ->
+			assertThat(exception.getCode()).isEqualTo("ITEM_REFERENCE_REQUIRED")
+		);
+
+		configuration.setReferenceTypes(Set.of(ReferenceType.TEXT));
+		assertThatThrownBy(() -> service.addIntegration(
+			"task-1",
+			new AddTaskItemCommand(null, "https://cdn.example.com/reference.wav", null),
+			"external-disabled-type"
+		)).isInstanceOfSatisfying(ApiException.class, (exception) ->
+			assertThat(exception.getCode()).isEqualTo("REFERENCE_TYPE_NOT_ENABLED")
+		);
+
+		configuration.setReferenceTypes(Set.of(ReferenceType.AUDIO));
+		assertThatThrownBy(() -> service.addIntegration(
+			"task-1",
+			new AddTaskItemCommand(null, "http://private.example.com/reference.wav", null),
+			"external-invalid-url"
+		)).isInstanceOfSatisfying(ApiException.class, (exception) ->
+			assertThat(exception.getCode()).isEqualTo("REMOTE_URL_INVALID")
+		);
+
+		task.setLifecycle(TaskLifecycle.ENDED);
+		assertThatThrownBy(() -> service.addIntegration(
+			"task-1",
+			new AddTaskItemCommand(null, "https://cdn.example.com/reference.wav", null),
+			"external-ended"
+		)).isInstanceOfSatisfying(ApiException.class, (exception) ->
+			assertThat(exception.getCode()).isEqualTo("INVALID_TASK_STATE")
+		);
+	}
+
+	private static java.util.stream.Stream<Arguments> integrationReferenceCombinations() {
+		String audio = "https://cdn.example.com/reference.wav";
+		String video = "https://cdn.example.com/reference.mp4";
+		return java.util.stream.Stream.of(
+			Arguments.of("参考文字", null, null),
+			Arguments.of(null, audio, null),
+			Arguments.of(null, null, video),
+			Arguments.of("参考文字", audio, null),
+			Arguments.of("参考文字", null, video),
+			Arguments.of(null, audio, video),
+			Arguments.of("参考文字", audio, video)
+		);
 	}
 
 	@Test

@@ -24,6 +24,8 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class TaskItemCreationService {
+	public static final String INTEGRATION_ACTOR_ID = "INTEGRATION-ANNOTATION-SCRIPT-CENTER";
+	public static final String INTEGRATION_ACTOR_NAME = "annotation-script-center";
 	private final TaskStore tasks;
 	private final TaskItemStore items;
 	private final ReferenceMediaUrlValidator referenceUrls;
@@ -47,7 +49,15 @@ public class TaskItemCreationService {
 		String operationId,
 		PlatformPrincipal actor
 	) {
-		return add(taskId, command, operationId, actor, false);
+		if (actor == null || actor.role() != UserRole.ADMIN) throw forbidden();
+		return addAuthorized(
+			taskId,
+			command,
+			operationId,
+			actor.userId(),
+			actor.username() == null ? actor.name() : actor.username(),
+			false
+		);
 	}
 
 	public TaskItem addImported(
@@ -56,17 +66,40 @@ public class TaskItemCreationService {
 		String operationId,
 		PlatformPrincipal actor
 	) {
-		return add(taskId, command, operationId, actor, true);
+		if (actor == null || actor.role() != UserRole.ADMIN) throw forbidden();
+		return addAuthorized(
+			taskId,
+			command,
+			operationId,
+			actor.userId(),
+			actor.username() == null ? actor.name() : actor.username(),
+			true
+		);
 	}
 
-	private TaskItem add(
+	public TaskItem addIntegration(
+		String taskId,
+		AddTaskItemCommand command,
+		String operationId
+	) {
+		return addAuthorized(
+			taskId,
+			command,
+			operationId,
+			INTEGRATION_ACTOR_ID,
+			INTEGRATION_ACTOR_NAME,
+			false
+		);
+	}
+
+	private TaskItem addAuthorized(
 		String taskId,
 		AddTaskItemCommand command,
 		String operationId,
-		PlatformPrincipal actor,
+		String actorUserId,
+		String actorUsername,
 		boolean ignoreDisabledReferences
 	) {
-		if (actor == null || actor.role() != UserRole.ADMIN) throw forbidden();
 		String normalizedOperationId = requiredOperationId(operationId);
 		Optional<TaskItem> replay = items.findByTaskIdAndCreationOperationId(taskId, normalizedOperationId);
 		if (replay.isPresent()) return replay.get();
@@ -112,8 +145,8 @@ public class TaskItemCreationService {
 		try {
 			item.getOperations().add(OperationHistory.creation(
 				normalizedOperationId,
-				actor.userId(),
-				actor.username() == null ? actor.name() : actor.username(),
+				actorUserId,
+				actorUsername,
 				now,
 				item
 			));

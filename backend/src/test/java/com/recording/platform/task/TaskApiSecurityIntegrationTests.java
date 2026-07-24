@@ -11,6 +11,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.recording.platform.RecordingPlatformBackendApplication;
@@ -19,6 +21,7 @@ import com.recording.platform.identity.model.SessionType;
 import com.recording.platform.identity.model.UserRole;
 import com.recording.platform.importing.ImportJobService;
 import com.recording.platform.importing.TaskItemActionService;
+import com.recording.platform.importing.TaskItemCreationService;
 import com.recording.platform.importing.TaskItemSubmissionService;
 import com.recording.platform.security.PlatformPrincipal;
 import com.recording.platform.task.model.ImportJob;
@@ -45,6 +48,7 @@ import com.recording.platform.media.ReadableMedia;
 import org.springframework.http.HttpStatus;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.List;
 import jakarta.servlet.http.Cookie;
 import java.util.UUID;
@@ -65,7 +69,8 @@ import org.springframework.test.web.servlet.MockMvc;
 	properties = {
 		"spring.data.mongodb.auto-index-creation=false",
 		"INITIAL_ADMIN_USERNAME=",
-		"INITIAL_ADMIN_PASSWORD="
+		"INITIAL_ADMIN_PASSWORD=",
+		"recording.integration.api-key-sha256=13f4867e74e84825ab632700b0ce972d58cd3d3df741e75ac8b0b3711b27e3a4"
 	}
 )
 @AutoConfigureMockMvc
@@ -77,6 +82,8 @@ class TaskApiSecurityIntegrationTests {
 	private TaskPoolService taskPoolService;
 	@MockitoBean
 	private TaskItemSubmissionService submissionService;
+	@MockitoBean
+	private TaskItemCreationService creationService;
 	@MockitoBean
 	private TaskItemActionService actionService;
 	@MockitoBean
@@ -140,6 +147,89 @@ class TaskApiSecurityIntegrationTests {
 				.header("Idempotency-Key", "start-2"))
 			.andExpect(status().isForbidden())
 			.andExpect(jsonPath("$.code").value("CSRF_TOKEN_INVALID"));
+	}
+
+	@Test
+	void integrationItemEndpointUsesOnlyItsDedicatedApiKeyWithoutCsrf() throws Exception {
+		TaskItem created = new TaskItem();
+		created.setId("item-integration");
+		created.setTaskId("task-1");
+		created.setItemCode("T000001-0000001");
+		created.setStatus(TaskItemStatus.AVAILABLE);
+		created.setCreatedAt(Instant.parse("2026-07-24T00:00:00Z"));
+		when(creationService.addIntegration(anyString(), any(), anyString())).thenReturn(created);
+
+		mockMvc.perform(post("/api/integrations/tasks/task-1/items")
+				.header("X-API-Key", "test-integration-key")
+				.header("Idempotency-Key", "external-add-1")
+				.header("X-Request-Id", "request-external-add-1")
+				.contentType("application/json")
+				.content("{\"referenceText\":\"参考文字\"}"))
+			.andExpect(status().isCreated())
+			.andExpect(header().string("X-Request-Id", "request-external-add-1"))
+			.andExpect(jsonPath("$.itemId").value("item-integration"))
+			.andExpect(jsonPath("$.taskId").value("task-1"))
+			.andExpect(jsonPath("$.itemCode").value("T000001-0000001"))
+			.andExpect(jsonPath("$.status").value("AVAILABLE"))
+			.andExpect(jsonPath("$.createdAt").value("2026-07-24T00:00:00Z"));
+
+		mockMvc.perform(post("/api/integrations/tasks/task-1/items")
+				.header("Idempotency-Key", "external-add-2")
+				.contentType("application/json")
+				.content("{\"referenceText\":\"参考文字\"}"))
+			.andExpect(status().isUnauthorized())
+			.andExpect(jsonPath("$.code").value("INVALID_INTEGRATION_API_KEY"));
+
+		mockMvc.perform(post("/api/integrations/tasks/task-1/items")
+				.header("X-API-Key", "wrong-key")
+				.header("Idempotency-Key", "external-add-3")
+				.contentType("application/json")
+				.content("{\"referenceText\":\"参考文字\"}"))
+			.andExpect(status().isUnauthorized())
+			.andExpect(jsonPath("$.code").value("INVALID_INTEGRATION_API_KEY"))
+			.andExpect(content().string(org.hamcrest.Matchers.not(
+				org.hamcrest.Matchers.containsString("wrong-key")
+			)));
+
+		mockMvc.perform(post("/api/integrations/tasks/task-1/items")
+				.cookie(new Cookie("REC_WEB_SESSION", "test-web-token"))
+				.header("Idempotency-Key", "external-add-4")
+				.contentType("application/json")
+				.content("{\"referenceText\":\"参考文字\"}"))
+			.andExpect(status().isUnauthorized())
+			.andExpect(jsonPath("$.code").value("INVALID_INTEGRATION_API_KEY"));
+	}
+
+	@Test
+	void integrationItemEndpointRejectsUnknownFieldsAndMalformedJsonAsBadRequests() throws Exception {
+		mockMvc.perform(post("/api/integrations/tasks/task-1/items")
+				.header("X-API-Key", "test-integration-key")
+				.header("Idempotency-Key", "external-unknown-field")
+				.contentType("application/json")
+				.content("{\"referenceText\":\"参考文字\",\"externalItemId\":\"source-1\"}"))
+			.andExpect(status().isBadRequest());
+
+		mockMvc.perform(post("/api/integrations/tasks/task-1/items")
+				.header("X-API-Key", "test-integration-key")
+				.header("Idempotency-Key", "external-malformed-json")
+				.contentType("application/json")
+				.content("{\"referenceText\":"))
+			.andExpect(status().isBadRequest());
+
+		mockMvc.perform(post("/api/integrations/tasks/task-1/items")
+				.header("X-API-Key", "test-integration-key")
+				.header("Idempotency-Key", "external-null-json")
+				.contentType("application/json")
+				.content("null"))
+			.andExpect(status().isBadRequest());
+	}
+
+	@Test
+	void integrationApiKeyCannotAuthenticateOtherApiRoutes() throws Exception {
+		mockMvc.perform(get("/api/admin/users")
+				.header("X-API-Key", "test-integration-key"))
+			.andExpect(status().isUnauthorized())
+			.andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"));
 	}
 
 	@Test

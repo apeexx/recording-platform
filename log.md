@@ -1027,3 +1027,10 @@
 - 保持已验收的 22px 轨道、16px 选区、20px 圆点及统一像素坐标不变，仅将高饱和主色选区调整为由 `--primary` 与 `--card` 混合的柔和浅蓝。
 - 未选轨道改用 `--accent` 与 `--card` 派生的浅蓝灰，圆点边框、阴影、悬停与键盘焦点状态统一使用低比例主题蓝，避免滑块比同页按钮和开关更抢眼。
 - 未修改 Vue 组件、数据流、后端接口或数据库；新增生产 CSS 配色契约回归测试，防止选区再次直接使用高饱和 `--primary`。
+
+## 2026-07-24 增加标注脚本中心机器写入接口
+
+- 新增 `POST /api/integrations/tasks/{taskId}/items`，允许标注脚本中心使用专用 `X-API-Key` 与 `Idempotency-Key` 添加参考文本、参考音频 URL、参考视频 URL 的任意非空组合。
+- 机器身份只具有 `INTEGRATION_IMPORT` 权限，不复用 ADMIN、Web Cookie、CSRF 或小程序 Bearer；服务端仅配置原始 Key 的 SHA-256，未配置、错误凭证和非法配置均按脱敏错误安全失败。
+- 外部写入复用现有任务状态、参考类型、HTTPS URL、序号与持久化幂等规则；操作人固定为 `annotation-script-center`，不新增 MongoDB 字段，不下载、代理或保存外部媒体文件。
+- 新增鉴权、权限隔离、请求结构、字段组合、业务边界和专用操作人测试；同步更新 `.env.example`、README 与长期接口规则。

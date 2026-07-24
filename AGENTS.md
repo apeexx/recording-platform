@@ -193,6 +193,7 @@ INITIAL_ADMIN_PASSWORD
 WEB_SESSION_IDLE_HOURS（默认 12）
 MINIPROGRAM_SESSION_DAYS（默认 30）
 WEB_SESSION_COOKIE_SECURE（默认 false，生产 HTTPS 应设 true）
+RECORDING_INTEGRATION_API_KEY_SHA256（标注脚本中心机器密钥的 SHA-256；默认空）
 ```
 
 `RECORDING_STORAGE_DIR` 为相对路径时必须按仓库根目录解析，默认 `backend/storage/recordings`；不得按 Spring Boot 的 `backend/` 工作目录再次拼接 `backend`。绝对路径保持原值。启动前置检查、录音存储、导入临时文件和就绪检查必须使用同一目录语义。
@@ -308,6 +309,17 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 ```
 
 任务池与导入接口：
+
+```text
+请求方法：POST
+请求路径：/api/integrations/tasks/{taskId}/items
+请求参数：JSON；referenceText、referenceAudioUrl、referenceVideoUrl 任意非空组合；请求头 X-API-Key、Idempotency-Key
+响应结构：HTTP 201 {itemId,taskId,itemCode,status,createdAt}
+错误码：401 INVALID_INTEGRATION_API_KEY；503 INTEGRATION_NOT_CONFIGURED；409 INVALID_TASK_STATE/OPERATION_IN_PROGRESS；422 ITEM_REFERENCE_REQUIRED/REFERENCE_TYPE_NOT_ENABLED/REMOTE_URL_INVALID
+权限要求：仅固定集成身份 INTEGRATION_IMPORT；Web Cookie、CSRF、小程序 Bearer 或其他角色均不能替代 X-API-Key
+数据一致性要求：复用任务条目创建、序号、参考类型、URL-only 和持久化幂等规则；操作人固定为 annotation-script-center；不保存外部平台编号，不下载或代理外部媒体
+调用位置：外部项目 XiangTianzhen/annotation-script-center 的服务器后端；浏览器扩展不得持有机器 Key
+```
 
 ```text
 请求方法：GET

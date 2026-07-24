@@ -1,6 +1,7 @@
 package com.recording.platform.config;
 
 import com.recording.platform.api.ApiErrorWriter;
+import com.recording.platform.integration.IntegrationApiKeyAuthenticationFilter;
 import com.recording.platform.security.FirstPasswordChangeFilter;
 import com.recording.platform.security.SecurityErrorAttributes;
 import com.recording.platform.security.SessionAuthenticationFilter;
@@ -30,6 +31,7 @@ public class SecurityConfig {
 	SecurityFilterChain securityFilterChain(
 		HttpSecurity http,
 		SessionAuthenticationFilter sessionAuthenticationFilter,
+		IntegrationApiKeyAuthenticationFilter integrationApiKeyAuthenticationFilter,
 		FirstPasswordChangeFilter firstPasswordChangeFilter,
 		ApiErrorWriter errorWriter
 	) throws Exception {
@@ -52,6 +54,7 @@ public class SecurityConfig {
 				new AntPathRequestMatcher("/api/auth/web/login", "POST"),
 				new AntPathRequestMatcher("/api/auth/web/takeover", "POST"),
 				new AntPathRequestMatcher("/api/auth/miniprogram/**"),
+				new AntPathRequestMatcher("/api/integrations/tasks/*/items", "POST"),
 				miniProgramTaskWrite
 			)
 		);
@@ -86,6 +89,9 @@ public class SecurityConfig {
 				"/api/auth/miniprogram/account-login",
 				"/api/auth/miniprogram/takeover"
 			).permitAll()
+			.requestMatchers(HttpMethod.POST, "/api/integrations/tasks/*/items")
+				.hasRole("INTEGRATION_IMPORT")
+			.requestMatchers("/api/integrations/**").denyAll()
 			.requestMatchers("/api/import-jobs/**").hasRole("ADMIN")
 			.requestMatchers(HttpMethod.POST, "/api/reviews/claim", "/api/reviews/claim-batch", "/api/reviews/*/release")
 				.hasRole("REVIEWER")
@@ -115,6 +121,7 @@ public class SecurityConfig {
 			.requestMatchers("/api/**").authenticated()
 			.anyRequest().permitAll()
 		);
+		http.addFilterBefore(integrationApiKeyAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 		http.addFilterBefore(sessionAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 		http.addFilterAfter(firstPasswordChangeFilter, SessionAuthenticationFilter.class);
 		return http.build();
@@ -138,6 +145,15 @@ public class SecurityConfig {
 		SessionAuthenticationFilter filter
 	) {
 		FilterRegistrationBean<SessionAuthenticationFilter> registration = new FilterRegistrationBean<>(filter);
+		registration.setEnabled(false);
+		return registration;
+	}
+
+	@Bean
+	FilterRegistrationBean<IntegrationApiKeyAuthenticationFilter> integrationApiKeyAuthenticationFilterRegistration(
+		IntegrationApiKeyAuthenticationFilter filter
+	) {
+		FilterRegistrationBean<IntegrationApiKeyAuthenticationFilter> registration = new FilterRegistrationBean<>(filter);
 		registration.setEnabled(false);
 		return registration;
 	}
