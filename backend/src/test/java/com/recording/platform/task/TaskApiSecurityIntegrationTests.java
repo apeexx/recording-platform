@@ -45,6 +45,8 @@ import com.recording.platform.report.dto.WorkSummary;
 import com.recording.platform.api.ApiException;
 import com.recording.platform.media.MediaAccessService;
 import com.recording.platform.media.ReadableMedia;
+import com.recording.platform.integration.IntegrationResultService;
+import com.recording.platform.integration.IntegrationResultView;
 import org.springframework.http.HttpStatus;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -106,6 +108,8 @@ class TaskApiSecurityIntegrationTests {
 	private ReportService reportService;
 	@MockitoBean
 	private MediaAccessService mediaAccessService;
+	@MockitoBean
+	private IntegrationResultService integrationResultService;
 
 	@BeforeEach
 	void executeControllerIdempotencyMutations() {
@@ -230,6 +234,71 @@ class TaskApiSecurityIntegrationTests {
 				.header("X-API-Key", "test-integration-key"))
 			.andExpect(status().isUnauthorized())
 			.andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"));
+	}
+
+	@Test
+	void integrationResultReadRequiresItsDedicatedKeyAndNeverAcceptsCookieOrBearerInstead() throws Exception {
+		when(integrationResultService.get("item-result")).thenReturn(new IntegrationResultView(
+			"item-result",
+			"task-1",
+			"T000001-0000001",
+			TaskItemStatus.COMPLETED,
+			Instant.parse("2026-07-24T02:03:04Z"),
+			"最终文字",
+			true
+		));
+
+		mockMvc.perform(get("/api/integrations/items/item-result")
+				.header("X-API-Key", "test-integration-key")
+				.header("X-Request-Id", "request-integration-result"))
+			.andExpect(status().isOk())
+			.andExpect(header().string("X-Request-Id", "request-integration-result"))
+			.andExpect(jsonPath("$.itemId").value("item-result"))
+			.andExpect(jsonPath("$.taskId").value("task-1"))
+			.andExpect(jsonPath("$.itemCode").value("T000001-0000001"))
+			.andExpect(jsonPath("$.status").value("COMPLETED"))
+			.andExpect(jsonPath("$.updatedAt").value("2026-07-24T02:03:04Z"))
+			.andExpect(jsonPath("$.text").value("最终文字"))
+			.andExpect(jsonPath("$.audioAvailable").value(true));
+
+		mockMvc.perform(get("/api/integrations/items/item-result"))
+			.andExpect(status().isUnauthorized())
+			.andExpect(jsonPath("$.code").value("INVALID_INTEGRATION_API_KEY"));
+		mockMvc.perform(get("/api/integrations/items/item-result")
+				.header("X-API-Key", "wrong-key"))
+			.andExpect(status().isUnauthorized())
+			.andExpect(jsonPath("$.code").value("INVALID_INTEGRATION_API_KEY"))
+			.andExpect(content().string(org.hamcrest.Matchers.not(
+				org.hamcrest.Matchers.containsString("wrong-key")
+			)));
+		mockMvc.perform(get("/api/integrations/items/item-result")
+				.cookie(new Cookie("REC_WEB_SESSION", "test-web-token")))
+			.andExpect(status().isUnauthorized())
+			.andExpect(jsonPath("$.code").value("INVALID_INTEGRATION_API_KEY"));
+		mockMvc.perform(get("/api/integrations/items/item-result")
+				.header(HttpHeaders.AUTHORIZATION, "Bearer test-miniprogram-token"))
+			.andExpect(status().isUnauthorized())
+			.andExpect(jsonPath("$.code").value("INVALID_INTEGRATION_API_KEY"));
+	}
+
+	@Test
+	void integrationAudioReadKeepsExistingSingleRangeStreamingContract() throws Exception {
+		byte[] audio = new byte[] {0, 1, 2, 3, 4, 5};
+		Path path = Files.createTempFile("integration-audio-", ".mp3");
+		Files.write(path, audio);
+		when(integrationResultService.openAudio("item-audio"))
+			.thenReturn(new ReadableMedia(path, "audio/mpeg", audio.length));
+
+		mockMvc.perform(get("/api/integrations/items/item-audio/audio")
+				.header("X-API-Key", "test-integration-key")
+				.header(HttpHeaders.RANGE, "bytes=2-4")
+				.header("X-Request-Id", "request-integration-audio"))
+			.andExpect(status().isPartialContent())
+			.andExpect(header().string("X-Request-Id", "request-integration-audio"))
+			.andExpect(header().string(HttpHeaders.ACCEPT_RANGES, "bytes"))
+			.andExpect(header().string(HttpHeaders.CONTENT_RANGE, "bytes 2-4/6"))
+			.andExpect(header().string(HttpHeaders.CONTENT_LENGTH, "3"))
+			.andExpect(header().string(HttpHeaders.CONTENT_TYPE, "audio/mpeg"));
 	}
 
 	@Test

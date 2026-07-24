@@ -47,6 +47,14 @@ public class MediaAccessService {
 		return readable(asset);
 	}
 
+	public ReadableMedia openIntegrationRecording(String mediaId, String itemId) {
+		MediaAsset asset = assets.findById(mediaId)
+			.filter(candidate -> candidate.getKind() == MediaKind.RECORDING)
+			.filter(candidate -> itemId.equals(candidate.getItemId()))
+			.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "MEDIA_NOT_FOUND", "录音媒体不存在"));
+		return readable(asset);
+	}
+
 	private ReadableMedia readable(MediaAsset asset) {
 		Path path = storage.resolve(asset.getRelativePath());
 		if (!Files.isRegularFile(path)) {

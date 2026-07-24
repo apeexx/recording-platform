@@ -158,6 +158,33 @@ class MediaAccessAndRangeTests {
 	}
 
 	@Test
+	void integrationRecordingAccessRequiresTheCurrentItemsRecordingMedia() throws Exception {
+		Path recordingPath = tempDir.resolve("T000001/I000001.wav");
+		Files.createDirectories(recordingPath.getParent());
+		Files.writeString(recordingPath, "recording");
+		MediaAssetStore assets = org.mockito.Mockito.mock(MediaAssetStore.class);
+		TaskItemStore items = org.mockito.Mockito.mock(TaskItemStore.class);
+		TaskGrantStore grants = org.mockito.Mockito.mock(TaskGrantStore.class);
+		MediaAsset recording = new MediaAsset();
+		recording.setId("media-recording");
+		recording.setItemId("item-1");
+		recording.setKind(MediaKind.RECORDING);
+		recording.setRelativePath("T000001/I000001.wav");
+		recording.setContentType("audio/wav");
+		when(assets.findById("media-recording")).thenReturn(Optional.of(recording));
+		MediaAccessService service = new MediaAccessService(
+			assets, items, grants, new RecordingMediaStorage(tempDir)
+		);
+
+		assertThat(service.openIntegrationRecording("media-recording", "item-1").length()).isEqualTo(9);
+		assertThatThrownBy(() -> service.openIntegrationRecording("media-recording", "item-other"))
+			.isInstanceOfSatisfying(ApiException.class, exception -> {
+				assertThat(exception.getStatus()).isEqualTo(HttpStatus.NOT_FOUND);
+				assertThat(exception.getCode()).isEqualTo("MEDIA_NOT_FOUND");
+			});
+	}
+
+	@Test
 	void httpRangeRequestWritesMp3BytesWithPartialContentHeaders() throws Exception {
 		byte[] mp3Bytes = new byte[] {
 			(byte) 0xff, (byte) 0xf3, 0x68, (byte) 0xc4, 0x00, 0x01, 0x02, 0x03

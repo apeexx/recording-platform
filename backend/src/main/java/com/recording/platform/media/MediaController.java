@@ -48,7 +48,7 @@ public class MediaController {
 		return response(access.openPublicReference(mediaId), rangeHeader);
 	}
 
-	private ResponseEntity<StreamingResponseBody> response(ReadableMedia readable, String rangeHeader) {
+	public static ResponseEntity<StreamingResponseBody> response(ReadableMedia readable, String rangeHeader) {
 		HttpHeaders headers = baseHeaders(readable.contentType());
 		if (rangeHeader == null || rangeHeader.isBlank()) {
 			headers.setContentLength(readable.length());
@@ -72,7 +72,7 @@ public class MediaController {
 		}
 	}
 
-	private void streamRange(ReadableMedia readable, long start, long count, OutputStream output) throws IOException {
+	private static void streamRange(ReadableMedia readable, long start, long count, OutputStream output) throws IOException {
 		try (InputStream input = Files.newInputStream(readable.path())) {
 			input.skipNBytes(start);
 			byte[] buffer = new byte[8192];
@@ -86,7 +86,7 @@ public class MediaController {
 		}
 	}
 
-	private HttpHeaders baseHeaders(String contentType) {
+	private static HttpHeaders baseHeaders(String contentType) {
 		HttpHeaders headers = new HttpHeaders();
 		headers.set(HttpHeaders.ACCEPT_RANGES, "bytes");
 		headers.setCacheControl(CacheControl.noStore());
@@ -98,7 +98,7 @@ public class MediaController {
 		return headers;
 	}
 
-	private ApiException invalidRange() {
+	private static ApiException invalidRange() {
 		return new ApiException(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE, "INVALID_RANGE", "Range 请求不合法");
 	}
 }

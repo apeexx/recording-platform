@@ -100,7 +100,7 @@ RECORDING_INTEGRATION_API_KEY_SHA256=
 
 其中 `MINIMAX_API_KEY` 需要按你的本地环境自行填写，不能提交到 Git。
 
-`RECORDING_INTEGRATION_API_KEY_SHA256` 只保存标注脚本中心机器密钥的 SHA-256 十六进制摘要，不保存原始 Key。未配置时外部写入端点返回 `503 INTEGRATION_NOT_CONFIGURED`；配置值必须严格为 64 位十六进制。原始 Key 只保存在调用方服务器私密配置中，并通过 HTTPS 的 `X-API-Key` 请求头发送，不得进入 Web、小程序、日志、截图或 Git。
+`RECORDING_INTEGRATION_API_KEY_SHA256` 只保存标注脚本中心机器密钥的 SHA-256 十六进制摘要，不保存原始 Key。未配置时外部集成端点返回 `503 INTEGRATION_NOT_CONFIGURED`；配置值必须严格为 64 位十六进制。原始 Key 只保存在调用方服务器私密配置中，并通过 HTTPS 的 `X-API-Key` 请求头发送，不得进入 Web、小程序、日志、截图或 Git。
 
 如果已经填写 `MINIMAX_API_KEY` 但 MiniMax 返回 `2049 invalid api key`，优先检查 `MINIMAX_API_BASE_URL` 是否和账号所在开放平台一致。国内开放平台账号使用 `https://api.minimaxi.com`，国际开放平台账号可改为 `https://api.minimax.io`。
 
@@ -137,7 +137,7 @@ Windows PowerShell 本地联调可使用一键启动脚本：
 - 任务管理、授权管理、任务条目管理和导入仅 `ADMIN` 可写；`COLLECTOR` 通过小程序 Bearer token 申请权限、领取、提交和释放本人条目；`REVIEWER`/`ADMIN` 可驳回待审结果。
 - Web Cookie 写请求必须携带 CSRF token。只有不含 `REC_WEB_SESSION` Cookie 的小程序 Bearer 采集写请求豁免 CSRF，夹带 Bearer 头不能绕过 Web CSRF。缺失或失效返回 `403 CSRF_TOKEN_INVALID`，Web 请求层刷新 token 后仅重试一次；真实角色越权仍返回 `403 ACCESS_DENIED`。
 - Task 2 所有写接口必须提供幂等标识：任务、授权、领取和导入入口使用 `Idempotency-Key`；提交、释放、驳回使用请求中的 `operationId`。通用幂等记录按操作者、操作类型和幂等键唯一，重复请求返回首次完成结果；相同请求仍在处理时返回 `409 OPERATION_IN_PROGRESS`。
-- 标注脚本中心通过专用机器端点 `POST /api/integrations/tasks/{taskId}/items` 添加单条任务数据。该端点只接受 `X-API-Key` 与 `Idempotency-Key`，不使用 Web Cookie、CSRF 或小程序 Bearer；机器凭证仅授予这一条写接口，不能访问管理员、审核、查询或其他任务接口。
+- 标注脚本中心通过专用机器端点 `POST /api/integrations/tasks/{taskId}/items` 添加单条任务数据，并通过 `GET /api/integrations/items/{itemId}`、`GET /api/integrations/items/{itemId}/audio` 读取完成结果。三个端点都要求 `X-API-Key`，写入另要求 `Idempotency-Key`；Web Cookie、CSRF 或小程序 Bearer 均不能替代机器 Key。机器凭证不能访问管理员、审核或其他 `/api/**`。
 - 所有响应回传 `X-Request-Id`；统一错误结构为 `{ code, message, requestId, details? }`，未预期异常不返回内部堆栈、数据库消息或敏感 payload。
 - 缺字段、未知字段、类型错误和 malformed JSON 等请求结构问题返回 400，不支持的 `Content-Type` 返回 415；字段结构有效但新密码少于 8 个字符或 UTF-8 超过 72 字节、非法姓名或非法后台角色等业务值问题返回 422。
 
@@ -173,7 +173,7 @@ POST /api/admin/users/{userId}/reset-password
 - 任务：`/api/tasks` 提供创建、草稿编辑/删除、发布、暂停、恢复、结束和分页查询。`DELETE /api/tasks/{taskId}` 仅允许 DRAFT 并使用 `Idempotency-Key`；若存在活动导入，先取消并隔离租约后返回 `IMPORT_JOB_ACTIVE`，安全重试时再级联删除条目、导入记录与源文件、授权和申请。任务编码及条目序号均不复用。仅 DRAFT 可修改配置；RUNNING 必须先暂停，只有 PAUSED 可结束；DRAFT、RUNNING 和 PAUSED 均可由管理员准备数据，ENDED 拒绝新增。配置时长固定为 1–600 秒，Web 端使用自绘双端胶囊滑块并保留键盘和无障碍操作。
 - 授权：`/api/tasks/{taskId}/grants` 与 `/access-requests` 管理直接授权、申请、原子批准/驳回和撤销。撤销只阻止新领取，不影响已领取条目的提交或释放；批准申请重放不会复活后来已撤销的授权。
 - 数据池：ADMIN 使用 `POST /api/tasks/{taskId}/items` 单条添加并传 `Idempotency-Key`，或通过 `/api/import-jobs` 异步导入。仅 `AVAILABLE` 条目可通过 `PUT /api/task-items/{itemId}` 按 `expectedRevision` 编辑参考内容，或通过 `DELETE /api/task-items/{itemId}?expectedRevision=...` 真正删除；两者均要求 `Idempotency-Key`，媒体替换/删除进入持久化清理任务，条目编号不复用。其他状态必须先释放回待领取。COLLECTOR 使用 `POST /api/tasks/{taskId}/items/start` 原子领取；普通待录制作业不设持有数量上限，每个新的 `Idempotency-Key` 领取一条新数据，相同幂等键重放仍返回首次条目。
-- 外部脚本单条写入：`POST /api/integrations/tasks/{taskId}/items` 的 JSON 可包含 `referenceText`、`referenceAudioUrl`、`referenceVideoUrl` 任意非空组合，成功返回 `{ itemId, taskId, itemCode, status, createdAt }`。它复用数据池的任务状态、启用参考类型、HTTPS URL、序号和幂等规则；录音平台只保存 URL，不请求、下载或代理外部媒体。
+- 外部脚本集成：`POST /api/integrations/tasks/{taskId}/items` 的 JSON 可包含 `referenceText`、`referenceAudioUrl`、`referenceVideoUrl` 任意非空组合，成功返回 `{ itemId, taskId, itemCode, status, createdAt }`。它复用数据池的任务状态、启用参考类型、HTTPS URL、序号和幂等规则；录音平台只保存 URL，不请求、下载或代理外部媒体。`GET /api/integrations/items/{itemId}` 固定返回条目标识、状态和更新时间；只有 `COMPLETED` 才返回当前 `text`，并用 `audioAvailable` 表示当前结果是否包含录音，其他状态固定 `text=null`、`audioAvailable=false`。`GET /api/integrations/items/{itemId}/audio` 只读取完成结果的当前录音，复用受保护媒体的 200/206 单 Range 流；未完成返回 `409 INTEGRATION_RESULT_NOT_COMPLETED`，无录音返回 `404 INTEGRATION_RESULT_AUDIO_NOT_FOUND`，条目或媒体不存在继续使用统一 404 错误。
 - 提交与返修：`POST /api/task-items/{itemId}/submit` 接收 multipart 的 `operationId`、`assignmentId`、`expectedRevision` 以及与任务成果类型匹配的文字或录音；重复 operationId 返回首次结果，过期修订返回 `409 STALE_STATE`。驳回进入独立 `REWORK_PENDING` 队列并保留原因、原采集员和 assignment；普通待录制和返修均可同时持有多条。释放清除当前结果但保留提交和操作历史。
 - 待录制索引迁移在应用启动时先确保普通查询索引 `(collectorId,taskId,status)`，再按精确名称幂等删除旧全局和任务级待录制唯一索引；失败则终止启动且不改写 `task_items`。若需回滚任一旧唯一索引，必须先处理与旧口径冲突的多条 `RECORDING_PENDING`，否则索引无法恢复。
 - 小程序作业页的“提交后自动领取下一条”首次默认开启并使用本地 `autoClaimNextEnabled` 记忆。待录制或待返修提交成功后直接领取并打开下一条；领取失败会提示原因并进入当前任务数据页；关闭开关时返回上一页，`SUBMITTED` 的“保存修改”不触发自动领取。
@@ -235,6 +235,8 @@ POST/GET            /api/tasks/{taskId}/access-requests
 POST                /api/tasks/{taskId}/access-requests/{requestId}/approve|reject
 POST/GET            /api/tasks/{taskId}/items
 POST                /api/integrations/tasks/{taskId}/items
+GET                 /api/integrations/items/{itemId}
+GET                 /api/integrations/items/{itemId}/audio
 POST                /api/tasks/{taskId}/items/start
 GET                 /api/task-items/{itemId}
 GET                 /api/task-items/mine?kind=PENDING|SUBMITTED|FINISHED

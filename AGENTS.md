@@ -40,7 +40,7 @@ MongoDB 身份、会话与统一 API 错误基础
 
 当前已实现身份、会话、后台用户管理、微信登录边界、语音生成持久化，以及嵌入式任务配置、授权申请、任务池领取、录音提交/返修/释放、人工审核、动态状态、软废弃恢复、媒体读取和 CSV 导入后端闭环；Web 已实现后台身份、任务配置、数据池/导入、权限、审核、用户、操作记录与统计页面。平台领域已整体移除，仍不实现机器审核执行或真实 AI 转写。
 
-Spring Security 已配置为不透明服务端会话，不使用 JWT。除 Web/微信登录与接管接口外，其余 `/api/**` 默认认证；管理员、任务管理、授权管理、导入和语音生成接口按角色保护，采集写接口仅允许 `COLLECTOR` 小程序 Bearer 身份。
+Spring Security 已配置为不透明服务端会话，不使用 JWT。除 Web/微信登录与接管接口外，其余 `/api/**` 默认认证；管理员、任务管理、授权管理、导入和语音生成接口按角色保护，采集写接口仅允许 `COLLECTOR` 小程序 Bearer 身份；外部集成仅允许专用 API Key 访问明确列出的三个端点。
 
 ## 3. 任务暗号
 
@@ -224,7 +224,7 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 
 ## 7. 接口说明
 
-当前后端提供身份、会话、后台用户管理、语音生成、任务配置、授权、任务池、人工审核、动态状态、软废弃恢复、录音媒体和导入 API；尚不提供机器审核执行或真实 AI 转写 API。
+当前后端提供身份、会话、后台用户管理、语音生成、任务配置、授权、任务池、人工审核、动态状态、软废弃恢复、录音媒体、导入及外部完成结果读取 API；尚不提供机器审核执行或真实 AI 转写 API。
 当前同时提供操作记录与统计 API：条目操作记录按权限读取，全局操作记录仅 ADMIN/REVIEWER；任务和指定采集员汇总仅 ADMIN，审核员可查看本人统计，采集员可查看本人汇总及逐次提交明细。
 
 所有 API 响应必须带 `X-Request-Id`；错误响应统一为 `{ code, message, requestId, details? }`。未预期异常只能返回脱敏摘要，不得返回堆栈、数据库内部消息、密钥或完整第三方 payload。统一状态至少覆盖 400、401、403、404、409、413、415、422、429、500 和 503。
@@ -318,6 +318,28 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 错误码：401 INVALID_INTEGRATION_API_KEY；503 INTEGRATION_NOT_CONFIGURED；409 INVALID_TASK_STATE/OPERATION_IN_PROGRESS；422 ITEM_REFERENCE_REQUIRED/REFERENCE_TYPE_NOT_ENABLED/REMOTE_URL_INVALID
 权限要求：仅固定集成身份 INTEGRATION_IMPORT；Web Cookie、CSRF、小程序 Bearer 或其他角色均不能替代 X-API-Key
 数据一致性要求：复用任务条目创建、序号、参考类型、URL-only 和持久化幂等规则；操作人固定为 annotation-script-center；不保存外部平台编号，不下载或代理外部媒体
+调用位置：外部项目 XiangTianzhen/annotation-script-center 的服务器后端；浏览器扩展不得持有机器 Key
+```
+
+```text
+请求方法：GET
+请求路径：/api/integrations/items/{itemId}
+请求参数：路径参数 itemId；请求头 X-API-Key
+响应结构：{itemId,taskId,itemCode,status,updatedAt,text,audioAvailable}；仅 COMPLETED 返回当前结果文字及是否包含当前录音，其他状态固定 text=null、audioAvailable=false
+错误码：401 INVALID_INTEGRATION_API_KEY；503 INTEGRATION_NOT_CONFIGURED；404 TASK_ITEM_NOT_FOUND
+权限要求：仅固定集成身份 INTEGRATION_IMPORT；Web Cookie、小程序 Bearer 或 CSRF 均不能替代 X-API-Key
+数据一致性要求：只读 task_items 当前快照；不返回参考内容、采集员、审核员、revision、草稿、审核中或返修中的结果内容；不写数据库
+调用位置：外部项目 XiangTianzhen/annotation-script-center 的服务器后端；浏览器扩展不得持有机器 Key
+```
+
+```text
+请求方法：GET
+请求路径：/api/integrations/items/{itemId}/audio
+请求参数：路径参数 itemId；请求头 X-API-Key；可选单个 Range
+响应结构：200 完整录音流或 206 单段录音流，保留 Content-Type、Content-Length、Content-Range、Accept-Ranges
+错误码：401 INVALID_INTEGRATION_API_KEY；503 INTEGRATION_NOT_CONFIGURED；409 INTEGRATION_RESULT_NOT_COMPLETED；404 TASK_ITEM_NOT_FOUND/INTEGRATION_RESULT_AUDIO_NOT_FOUND/MEDIA_NOT_FOUND/MEDIA_FILE_MISSING；416 INVALID_RANGE
+权限要求：仅固定集成身份 INTEGRATION_IMPORT；只允许 COMPLETED 条目的当前结果录音
+数据一致性要求：复用受保护录音的相对路径、文件存在性和 Range 读取能力；媒体必须为与当前条目一致的 RECORDING，不新增公开路径、不写数据库
 调用位置：外部项目 XiangTianzhen/annotation-script-center 的服务器后端；浏览器扩展不得持有机器 Key
 ```
 

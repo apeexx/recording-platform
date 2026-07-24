@@ -91,6 +91,10 @@ public class SecurityConfig {
 			).permitAll()
 			.requestMatchers(HttpMethod.POST, "/api/integrations/tasks/*/items")
 				.hasRole("INTEGRATION_IMPORT")
+			.requestMatchers(HttpMethod.GET,
+				"/api/integrations/items/*",
+				"/api/integrations/items/*/audio"
+			).hasRole("INTEGRATION_IMPORT")
 			.requestMatchers("/api/integrations/**").denyAll()
 			.requestMatchers("/api/import-jobs/**").hasRole("ADMIN")
 			.requestMatchers(HttpMethod.POST, "/api/reviews/claim", "/api/reviews/claim-batch", "/api/reviews/*/release")

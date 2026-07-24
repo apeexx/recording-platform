@@ -19,7 +19,8 @@ public class IntegrationApiKeyAuthenticationFilter extends OncePerRequestFilter 
 	public static final String HEADER_NAME = "X-API-Key";
 	public static final String PRINCIPAL_NAME = "INTEGRATION-ANNOTATION-SCRIPT-CENTER";
 	public static final String AUTHORITY = "ROLE_INTEGRATION_IMPORT";
-	private static final String PATH_PATTERN = "/api/integrations/tasks/[^/]+/items";
+	private static final String WRITE_PATH_PATTERN = "/api/integrations/tasks/[^/]+/items";
+	private static final String READ_PATH_PATTERN = "/api/integrations/items/[^/]+(?:/audio)?";
 
 	private final IntegrationApiKeyAuthenticator authenticator;
 	private final ApiErrorWriter errorWriter;
@@ -34,7 +35,11 @@ public class IntegrationApiKeyAuthenticationFilter extends OncePerRequestFilter 
 
 	@Override
 	protected boolean shouldNotFilter(HttpServletRequest request) {
-		return !request.getRequestURI().matches(PATH_PATTERN);
+		String method = request.getMethod();
+		String path = request.getRequestURI();
+		boolean write = "POST".equalsIgnoreCase(method) && path.matches(WRITE_PATH_PATTERN);
+		boolean read = "GET".equalsIgnoreCase(method) && path.matches(READ_PATH_PATTERN);
+		return !write && !read;
 	}
 
 	@Override
@@ -49,7 +54,7 @@ public class IntegrationApiKeyAuthenticationFilter extends OncePerRequestFilter 
 				response,
 				HttpStatus.SERVICE_UNAVAILABLE,
 				"INTEGRATION_NOT_CONFIGURED",
-				"外部数据写入接口尚未配置"
+				"外部集成接口尚未配置"
 			);
 			return;
 		}
@@ -59,7 +64,7 @@ public class IntegrationApiKeyAuthenticationFilter extends OncePerRequestFilter 
 				response,
 				HttpStatus.UNAUTHORIZED,
 				"INVALID_INTEGRATION_API_KEY",
-				"外部数据写入凭证无效"
+				"外部集成凭证无效"
 			);
 			return;
 		}
