@@ -2,8 +2,10 @@ const test = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
+const { execFileSync } = require('node:child_process')
 
 const scriptsRoot = path.resolve(__dirname, '..')
+const repositoryRoot = path.resolve(scriptsRoot, '..')
 const read = (name) => fs.readFileSync(path.join(scriptsRoot, name), 'utf8')
 
 test('生产部署文件均存在', () => {
@@ -14,6 +16,15 @@ test('生产部署文件均存在', () => {
   ]) {
     assert.equal(fs.existsSync(path.join(scriptsRoot, name)), true, name)
   }
+})
+
+test('Linux 后端 Maven Wrapper 在 Git 中保持可执行', () => {
+  const entry = execFileSync(
+    'git',
+    ['ls-files', '-s', 'backend/mvnw'],
+    { cwd: repositoryRoot, encoding: 'utf8' }
+  )
+  assert.match(entry, /^100755 /)
 })
 
 test('部署脚本使用干净 main 门禁和仅快进更新后重载自身', () => {
