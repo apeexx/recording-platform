@@ -55,6 +55,7 @@ public class SecurityConfig {
 				new AntPathRequestMatcher("/api/auth/web/takeover", "POST"),
 				new AntPathRequestMatcher("/api/auth/miniprogram/**"),
 				new AntPathRequestMatcher("/api/integrations/tasks/*/items", "POST"),
+				new AntPathRequestMatcher("/api/integrations/tasks/by-code/*/items", "POST"),
 				miniProgramTaskWrite
 			)
 		);
@@ -90,6 +91,8 @@ public class SecurityConfig {
 				"/api/auth/miniprogram/takeover"
 			).permitAll()
 			.requestMatchers(HttpMethod.POST, "/api/integrations/tasks/*/items")
+				.hasRole("INTEGRATION_IMPORT")
+			.requestMatchers(HttpMethod.POST, "/api/integrations/tasks/by-code/*/items")
 				.hasRole("INTEGRATION_IMPORT")
 			.requestMatchers(HttpMethod.GET,
 				"/api/integrations/items/*",

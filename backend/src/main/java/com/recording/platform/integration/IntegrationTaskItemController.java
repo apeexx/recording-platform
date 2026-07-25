@@ -3,6 +3,7 @@ package com.recording.platform.integration;
 import com.recording.platform.idempotency.IdempotencyService;
 import com.recording.platform.importing.AddTaskItemCommand;
 import com.recording.platform.importing.TaskItemCreationService;
+import com.recording.platform.importing.TaskItemSourceBinding;
 import com.recording.platform.task.model.TaskItem;
 import java.time.Instant;
 import org.springframework.http.HttpStatus;
@@ -16,7 +17,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/integrations/tasks/{taskId}/items")
+@RequestMapping("/api/integrations/tasks")
 public class IntegrationTaskItemController {
 	private final TaskItemCreationService creation;
 	private final IdempotencyService idempotency;
@@ -29,7 +30,7 @@ public class IntegrationTaskItemController {
 		this.idempotency = idempotency;
 	}
 
-	@PostMapping
+	@PostMapping("/{taskId}/items")
 	@ResponseStatus(HttpStatus.CREATED)
 	public IntegrationTaskItemResponse add(
 		@PathVariable String taskId,
@@ -42,17 +43,50 @@ public class IntegrationTaskItemController {
 			"integration:item:add:" + taskId,
 			operationId,
 			IntegrationTaskItemResponse.class,
-			() -> IntegrationTaskItemResponse.from(creation.addIntegration(taskId, request.command(), operationId))
+			() -> IntegrationTaskItemResponse.from(creation.addIntegration(
+				taskId,
+				request.command(),
+				operationId,
+				request.sourceBinding()
+			))
+		);
+	}
+
+	@PostMapping("/by-code/{taskCode}/items")
+	@ResponseStatus(HttpStatus.CREATED)
+	public IntegrationTaskItemResponse addByTaskCode(
+		@PathVariable String taskCode,
+		@RequestBody AddItemRequest request,
+		@RequestHeader("Idempotency-Key") String operationId,
+		Authentication authentication
+	) {
+		return idempotency.execute(
+			authentication,
+			"integration:item:add:task-code:" + taskCode,
+			operationId,
+			IntegrationTaskItemResponse.class,
+			() -> IntegrationTaskItemResponse.from(creation.addIntegrationByTaskCode(
+				taskCode,
+				request.command(),
+				operationId,
+				request.sourceBinding()
+			))
 		);
 	}
 
 	public record AddItemRequest(
 		String referenceText,
 		String referenceAudioUrl,
-		String referenceVideoUrl
+		String referenceVideoUrl,
+		String sourcePlatform,
+		String sourceItemId
 	) {
 		AddTaskItemCommand command() {
 			return new AddTaskItemCommand(referenceText, referenceAudioUrl, referenceVideoUrl);
+		}
+
+		TaskItemSourceBinding sourceBinding() {
+			return TaskItemSourceBinding.normalize(sourcePlatform, sourceItemId);
 		}
 	}
 

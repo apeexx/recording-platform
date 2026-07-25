@@ -82,13 +82,44 @@ public class TaskItemCreationService {
 		AddTaskItemCommand command,
 		String operationId
 	) {
+		return addIntegration(taskId, command, operationId, null);
+	}
+
+	public TaskItem addIntegration(
+		String taskId,
+		AddTaskItemCommand command,
+		String operationId,
+		TaskItemSourceBinding sourceBinding
+	) {
 		return addAuthorized(
 			taskId,
 			command,
 			operationId,
 			INTEGRATION_ACTOR_ID,
 			INTEGRATION_ACTOR_NAME,
-			false
+			false,
+			sourceBinding
+		);
+	}
+
+	public TaskItem addIntegrationByTaskCode(
+		String taskCode,
+		AddTaskItemCommand command,
+		String operationId,
+		TaskItemSourceBinding sourceBinding
+	) {
+		TaskItemSourceBinding normalizedSource = TaskItemSourceBinding.normalize(sourceBinding);
+		String normalizedTaskCode = taskCode == null ? "" : taskCode.trim();
+		TaskRecord task = tasks.findByTaskCode(normalizedTaskCode)
+			.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "TASK_NOT_FOUND", "任务不存在"));
+		return addAuthorized(
+			task,
+			command,
+			operationId,
+			INTEGRATION_ACTOR_ID,
+			INTEGRATION_ACTOR_NAME,
+			false,
+			normalizedSource
 		);
 	}
 
@@ -100,13 +131,58 @@ public class TaskItemCreationService {
 		String actorUsername,
 		boolean ignoreDisabledReferences
 	) {
+		return addAuthorized(
+			taskId,
+			command,
+			operationId,
+			actorUserId,
+			actorUsername,
+			ignoreDisabledReferences,
+			null
+		);
+	}
+
+	private TaskItem addAuthorized(
+		String taskId,
+		AddTaskItemCommand command,
+		String operationId,
+		String actorUserId,
+		String actorUsername,
+		boolean ignoreDisabledReferences,
+		TaskItemSourceBinding sourceBinding
+	) {
+		TaskItemSourceBinding normalizedSource = TaskItemSourceBinding.normalize(sourceBinding);
+		TaskRecord task = tasks.findById(taskId)
+			.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "TASK_NOT_FOUND", "任务不存在"));
+		return addAuthorized(
+			task,
+			command,
+			operationId,
+			actorUserId,
+			actorUsername,
+			ignoreDisabledReferences,
+			normalizedSource
+		);
+	}
+
+	private TaskItem addAuthorized(
+		TaskRecord task,
+		AddTaskItemCommand command,
+		String operationId,
+		String actorUserId,
+		String actorUsername,
+		boolean ignoreDisabledReferences,
+		TaskItemSourceBinding sourceBinding
+	) {
+		String taskId = task.getId();
 		String normalizedOperationId = requiredOperationId(operationId);
 		Optional<TaskItem> replay = items.findByTaskIdAndCreationOperationId(taskId, normalizedOperationId);
 		if (replay.isPresent()) return replay.get();
-		TaskRecord task = tasks.findById(taskId)
-			.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "TASK_NOT_FOUND", "任务不存在"));
 		if (task.getLifecycle() == TaskLifecycle.ENDED) {
 			throw new ApiException(HttpStatus.CONFLICT, "INVALID_TASK_STATE", "已结束任务不能添加数据");
+		}
+		if (sourceBinding != null && sourceExists(taskId, sourceBinding)) {
+			throw sourceAlreadyBound();
 		}
 		TaskConfiguration configuration = task.getConfiguration();
 		String text = trimToNull(command.referenceText());
@@ -135,6 +211,10 @@ public class TaskItemCreationService {
 		item.setSequence(sequence);
 		item.setItemCode(itemCode);
 		item.setCreationOperationId(normalizedOperationId);
+		if (sourceBinding != null) {
+			item.setSourcePlatform(sourceBinding.sourcePlatform());
+			item.setSourceItemId(sourceBinding.sourceItemId());
+		}
 		item.setReferenceText(text);
 		item.setReferenceAudioUrl(audioUrl);
 		item.setReferenceVideoUrl(videoUrl);
@@ -152,9 +232,30 @@ public class TaskItemCreationService {
 			));
 			return items.save(item);
 		} catch (DuplicateKeyException exception) {
-			return items.findByTaskIdAndCreationOperationId(taskId, normalizedOperationId)
-				.orElseThrow(() -> new ApiException(HttpStatus.CONFLICT, "ITEM_CONFLICT", "任务条目已存在"));
+			Optional<TaskItem> operationReplay =
+				items.findByTaskIdAndCreationOperationId(taskId, normalizedOperationId);
+			if (operationReplay.isPresent()) return operationReplay.get();
+			if (sourceBinding != null && sourceExists(taskId, sourceBinding)) {
+				throw sourceAlreadyBound();
+			}
+			throw new ApiException(HttpStatus.CONFLICT, "ITEM_CONFLICT", "任务条目已存在");
 		}
+	}
+
+	private boolean sourceExists(String taskId, TaskItemSourceBinding sourceBinding) {
+		return items.findByTaskIdAndSourcePlatformAndSourceItemId(
+			taskId,
+			sourceBinding.sourcePlatform(),
+			sourceBinding.sourceItemId()
+		).isPresent();
+	}
+
+	private ApiException sourceAlreadyBound() {
+		return new ApiException(
+			HttpStatus.CONFLICT,
+			"SOURCE_ITEM_ALREADY_BOUND",
+			"该来源条目已添加到当前任务"
+		);
 	}
 
 	private boolean enabled(TaskConfiguration configuration, ReferenceType type) {

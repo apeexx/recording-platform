@@ -40,7 +40,7 @@ MongoDB 身份、会话与统一 API 错误基础
 
 当前已实现身份、会话、后台用户管理、微信登录边界、语音生成持久化，以及嵌入式任务配置、授权申请、任务池领取、录音提交/返修/释放、人工审核、动态状态、软废弃恢复、媒体读取和 CSV 导入后端闭环；Web 已实现后台身份、任务配置、数据池/导入、权限、审核、用户、操作记录与统计页面。平台领域已整体移除，仍不实现机器审核执行或真实 AI 转写。
 
-Spring Security 已配置为不透明服务端会话，不使用 JWT。除 Web/微信登录与接管接口外，其余 `/api/**` 默认认证；管理员、任务管理、授权管理、导入和语音生成接口按角色保护，采集写接口仅允许 `COLLECTOR` 小程序 Bearer 身份；外部集成仅允许专用 API Key 访问明确列出的三个端点。
+Spring Security 已配置为不透明服务端会话，不使用 JWT。除 Web/微信登录与接管接口外，其余 `/api/**` 默认认证；管理员、任务管理、授权管理、导入和语音生成接口按角色保护，采集写接口仅允许 `COLLECTOR` 小程序 Bearer 身份；外部集成仅允许专用 API Key 访问明确列出的四个端点。
 
 ## 3. 任务暗号
 
@@ -220,7 +220,7 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 
 新建、CSV 导入和待领取条目编辑的参考音视频统一使用 URL-only：只接受包含有效主机、不含用户名/密码信息的绝对 HTTPS URL，允许查询参数、签名 URL、无扩展名地址和片段；服务端不执行 DNS、HEAD、GET、重定向、Content-Type、大小、时长或魔数检查，也不创建参考媒体本地副本和 `media_assets`。编辑历史条目时，URL 未变化保留原媒体 ID，修改或移除后清空媒体 ID并通过 `media_cleanup_jobs` 清理旧副本。现有参考媒体不迁移、不删除；历史条目没有 URL 时继续使用仅开放 `REFERENCE_AUDIO/REFERENCE_VIDEO` 的 `GET /api/media/public/reference/{mediaId}`，任何 `RECORDING` 都不得从公开路径读取。
 
-导入只支持 `.csv`，固定列为 `referenceText`、`referenceAudioUrl`、`referenceVideoUrl`；按任务 `referenceTypes` 读取，未启用列忽略，过滤后全空的行失败。条目不接收或保存外部编号，只使用系统生成的 itemCode。返回 HTTP 202 和 importJobId，解析后立即持久化 totalRows；每处理完一行，以 `status=PROCESSING` 与 leaseOwner fencing 原子更新成功/失败计数、失败行、有限脱敏错误、心跳和租约。支持幂等、部分成功与失败行重试。单文件最多 50000 个数据行，脱敏行错误摘要最多保存 1000 条。初始导入和过期 PROCESSING 恢复固定使用 `FULL` 模式幂等重放完整源文件，只有用户显式失败行重试使用 `FAILED_ROWS`。
+导入只支持 `.csv`，固定列为 `referenceText`、`referenceAudioUrl`、`referenceVideoUrl`；按任务 `referenceTypes` 读取，未启用列忽略，过滤后全空的行失败。普通后台添加和 CSV 导入不接收来源绑定，只使用系统生成的 itemCode；专用机器写入可选成对保存 `sourcePlatform`、`sourceItemId`，并在同一任务内唯一。返回 HTTP 202 和 importJobId，解析后立即持久化 totalRows；每处理完一行，以 `status=PROCESSING` 与 leaseOwner fencing 原子更新成功/失败计数、失败行、有限脱敏错误、心跳和租约。支持幂等、部分成功与失败行重试。单文件最多 50000 个数据行，脱敏行错误摘要最多保存 1000 条。初始导入和过期 PROCESSING 恢复固定使用 `FULL` 模式幂等重放完整源文件，只有用户显式失败行重试使用 `FAILED_ROWS`。
 
 ## 7. 接口说明
 
@@ -313,12 +313,20 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 ```text
 请求方法：POST
 请求路径：/api/integrations/tasks/{taskId}/items
-请求参数：JSON；referenceText、referenceAudioUrl、referenceVideoUrl 任意非空组合；请求头 X-API-Key、Idempotency-Key
+请求参数：JSON；referenceText、referenceAudioUrl、referenceVideoUrl 任意非空组合；可选 sourcePlatform、sourceItemId 必须同时提供；请求头 X-API-Key、Idempotency-Key
 响应结构：HTTP 201 {itemId,taskId,itemCode,status,createdAt}
-错误码：401 INVALID_INTEGRATION_API_KEY；503 INTEGRATION_NOT_CONFIGURED；409 INVALID_TASK_STATE/OPERATION_IN_PROGRESS；422 ITEM_REFERENCE_REQUIRED/REFERENCE_TYPE_NOT_ENABLED/REMOTE_URL_INVALID
+错误码：401 INVALID_INTEGRATION_API_KEY；503 INTEGRATION_NOT_CONFIGURED；409 INVALID_TASK_STATE/OPERATION_IN_PROGRESS/SOURCE_ITEM_ALREADY_BOUND；422 ITEM_REFERENCE_REQUIRED/REFERENCE_TYPE_NOT_ENABLED/REMOTE_URL_INVALID/SOURCE_BINDING_INVALID
 权限要求：仅固定集成身份 INTEGRATION_IMPORT；Web Cookie、CSRF、小程序 Bearer 或其他角色均不能替代 X-API-Key
-数据一致性要求：复用任务条目创建、序号、参考类型、URL-only 和持久化幂等规则；操作人固定为 annotation-script-center；不保存外部平台编号，不下载或代理外部媒体
+数据一致性要求：复用任务条目创建、序号、参考类型、URL-only 和持久化幂等规则；操作人固定为 annotation-script-center；来源字段成对非空时按 taskId、sourcePlatform、sourceItemId 唯一，不下载或代理外部媒体
 调用位置：外部项目 XiangTianzhen/annotation-script-center 的服务器后端；浏览器扩展不得持有机器 Key
+```
+
+```text
+请求方法：POST
+请求路径：/api/integrations/tasks/by-code/{taskCode}/items
+请求参数、响应、权限和错误：与内部 taskId 写入端点相同
+数据一致性要求：先按可见 taskCode 解析内部任务；同一来源在同一任务内返回 409 SOURCE_ITEM_ALREADY_BOUND，不同任务允许保存相同来源；正常后台添加和 CSV 导入不自动写来源字段
+调用位置：台州话脚本中心后端等只掌握可见任务编号的机器调用方
 ```
 
 ```text

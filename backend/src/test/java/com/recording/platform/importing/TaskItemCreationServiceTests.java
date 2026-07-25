@@ -3,6 +3,7 @@ package com.recording.platform.importing;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.recording.platform.api.ApiException;
@@ -28,6 +29,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.springframework.dao.DuplicateKeyException;
 
 class TaskItemCreationServiceTests {
 	private TaskItemCreationService service;
@@ -161,9 +163,98 @@ class TaskItemCreationServiceTests {
 		assertThat(created.getReferenceText()).isEqualTo("外部参考文字");
 		assertThat(created.getReferenceAudioUrl()).isEqualTo("https://cdn.example.com/reference.wav");
 		assertThat(created.getReferenceVideoUrl()).isEqualTo("https://cdn.example.com/reference.mp4");
+		assertThat(created.getSourcePlatform()).isNull();
+		assertThat(created.getSourceItemId()).isNull();
 		assertThat(created.getOperations()).singleElement().satisfies((operation) -> {
 			assertThat(operation.getActorUserId()).isEqualTo("INTEGRATION-ANNOTATION-SCRIPT-CENTER");
 			assertThat(operation.getActorUsername()).isEqualTo("annotation-script-center");
+		});
+	}
+
+	@Test
+	void integrationByTaskCodeStoresTheNormalizedTaskScopedSourceBinding() {
+		when(tasks.findByTaskCode("T000001")).thenReturn(Optional.of(task));
+
+		TaskItem created = service.addIntegrationByTaskCode(
+			" T000001 ",
+			new AddTaskItemCommand("外部参考文字", null, null),
+			"external-by-code-1",
+			new TaskItemSourceBinding(" BYTEDANCE_AIDP ", " source-item-1 ")
+		);
+
+		verify(tasks).findByTaskCode("T000001");
+		assertThat(created.getTaskId()).isEqualTo("task-1");
+		assertThat(created.getSourcePlatform()).isEqualTo("BYTEDANCE_AIDP");
+		assertThat(created.getSourceItemId()).isEqualTo("source-item-1");
+	}
+
+	@Test
+	void integrationSourceBindingMustBeProvidedAsANonBlankPair() {
+		assertThat(TaskItemSourceBinding.normalize(null, null)).isNull();
+		assertThat(TaskItemSourceBinding.normalize(" ", " ")).isNull();
+		assertThatThrownBy(() -> TaskItemSourceBinding.normalize("BYTEDANCE_AIDP", null))
+			.isInstanceOfSatisfying(ApiException.class, (exception) -> {
+				assertThat(exception.getStatus().value()).isEqualTo(422);
+				assertThat(exception.getCode()).isEqualTo("SOURCE_BINDING_INVALID");
+			});
+		assertThatThrownBy(() -> TaskItemSourceBinding.normalize(" ", "source-item-1"))
+			.isInstanceOfSatisfying(ApiException.class, (exception) ->
+				assertThat(exception.getCode()).isEqualTo("SOURCE_BINDING_INVALID")
+			);
+	}
+
+	@Test
+	void integrationRejectsAnExistingSourceWithinTheSameTask() {
+		when(tasks.findByTaskCode("T000001")).thenReturn(Optional.of(task));
+		TaskItem existing = new TaskItem();
+		existing.setId("existing-item");
+		when(items.findByTaskIdAndSourcePlatformAndSourceItemId(
+			"task-1", "BYTEDANCE_AIDP", "source-item-1"
+		)).thenReturn(Optional.of(existing));
+
+		assertThatThrownBy(() -> service.addIntegrationByTaskCode(
+			"T000001",
+			new AddTaskItemCommand("外部参考文字", null, null),
+			"external-source-duplicate",
+			new TaskItemSourceBinding("BYTEDANCE_AIDP", "source-item-1")
+		)).isInstanceOfSatisfying(ApiException.class, (exception) -> {
+			assertThat(exception.getStatus().value()).isEqualTo(409);
+			assertThat(exception.getCode()).isEqualTo("SOURCE_ITEM_ALREADY_BOUND");
+		});
+	}
+
+	@Test
+	void integrationMapsAConcurrentSourceUniqueCollisionToTheSameConflict() {
+		when(tasks.findByTaskCode("T000001")).thenReturn(Optional.of(task));
+		TaskItem existing = new TaskItem();
+		existing.setId("existing-item");
+		when(items.findByTaskIdAndSourcePlatformAndSourceItemId(
+			"task-1", "BYTEDANCE_AIDP", "source-item-1"
+		)).thenReturn(Optional.empty(), Optional.of(existing));
+		when(items.save(any())).thenThrow(new DuplicateKeyException("unique_task_item_source"));
+
+		assertThatThrownBy(() -> service.addIntegrationByTaskCode(
+			"T000001",
+			new AddTaskItemCommand("外部参考文字", null, null),
+			"external-source-race",
+			new TaskItemSourceBinding("BYTEDANCE_AIDP", "source-item-1")
+		)).isInstanceOfSatisfying(ApiException.class, (exception) ->
+			assertThat(exception.getCode()).isEqualTo("SOURCE_ITEM_ALREADY_BOUND")
+		);
+	}
+
+	@Test
+	void integrationByTaskCodeRejectsAnUnknownTaskCode() {
+		when(tasks.findByTaskCode("T999999")).thenReturn(Optional.empty());
+
+		assertThatThrownBy(() -> service.addIntegrationByTaskCode(
+			"T999999",
+			new AddTaskItemCommand("外部参考文字", null, null),
+			"external-unknown-task",
+			null
+		)).isInstanceOfSatisfying(ApiException.class, (exception) -> {
+			assertThat(exception.getStatus().value()).isEqualTo(404);
+			assertThat(exception.getCode()).isEqualTo("TASK_NOT_FOUND");
 		});
 	}
 

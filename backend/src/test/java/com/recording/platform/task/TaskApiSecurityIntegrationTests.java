@@ -2,6 +2,9 @@ package com.recording.platform.task;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.lenient;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -22,6 +25,7 @@ import com.recording.platform.identity.model.UserRole;
 import com.recording.platform.importing.ImportJobService;
 import com.recording.platform.importing.TaskItemActionService;
 import com.recording.platform.importing.TaskItemCreationService;
+import com.recording.platform.importing.TaskItemSourceBinding;
 import com.recording.platform.importing.TaskItemSubmissionService;
 import com.recording.platform.security.PlatformPrincipal;
 import com.recording.platform.task.model.ImportJob;
@@ -57,6 +61,7 @@ import java.util.UUID;
 import java.util.function.Supplier;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -161,7 +166,7 @@ class TaskApiSecurityIntegrationTests {
 		created.setItemCode("T000001-0000001");
 		created.setStatus(TaskItemStatus.AVAILABLE);
 		created.setCreatedAt(Instant.parse("2026-07-24T00:00:00Z"));
-		when(creationService.addIntegration(anyString(), any(), anyString())).thenReturn(created);
+		when(creationService.addIntegration(anyString(), any(), anyString(), isNull())).thenReturn(created);
 
 		mockMvc.perform(post("/api/integrations/tasks/task-1/items")
 				.header("X-API-Key", "test-integration-key")
@@ -198,6 +203,51 @@ class TaskApiSecurityIntegrationTests {
 		mockMvc.perform(post("/api/integrations/tasks/task-1/items")
 				.cookie(new Cookie("REC_WEB_SESSION", "test-web-token"))
 				.header("Idempotency-Key", "external-add-4")
+				.contentType("application/json")
+				.content("{\"referenceText\":\"参考文字\"}"))
+			.andExpect(status().isUnauthorized())
+			.andExpect(jsonPath("$.code").value("INVALID_INTEGRATION_API_KEY"));
+	}
+
+	@Test
+	void integrationItemEndpointSupportsVisibleTaskCodeAndOptionalSourceBinding() throws Exception {
+		TaskItem created = new TaskItem();
+		created.setId("item-by-code");
+		created.setTaskId("task-internal-1");
+		created.setItemCode("T000001-0000001");
+		created.setStatus(TaskItemStatus.AVAILABLE);
+		created.setCreatedAt(Instant.parse("2026-07-25T00:00:00Z"));
+		when(creationService.addIntegrationByTaskCode(
+			eq("T000001"), any(), eq("external-by-code-1"), any()
+		)).thenReturn(created);
+
+		mockMvc.perform(post("/api/integrations/tasks/by-code/T000001/items")
+				.header("X-API-Key", "test-integration-key")
+				.header("Idempotency-Key", "external-by-code-1")
+				.contentType("application/json")
+				.content("""
+					{
+					  "referenceText":"参考文字",
+					  "sourcePlatform":"BYTEDANCE_AIDP",
+					  "sourceItemId":"source-item-1"
+					}
+					"""))
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.itemId").value("item-by-code"))
+			.andExpect(jsonPath("$.taskId").value("task-internal-1"))
+			.andExpect(jsonPath("$.itemCode").value("T000001-0000001"));
+
+		ArgumentCaptor<TaskItemSourceBinding> source = ArgumentCaptor.forClass(TaskItemSourceBinding.class);
+		verify(creationService).addIntegrationByTaskCode(
+			eq("T000001"), any(), eq("external-by-code-1"), source.capture()
+		);
+		org.assertj.core.api.Assertions.assertThat(source.getValue().sourcePlatform())
+			.isEqualTo("BYTEDANCE_AIDP");
+		org.assertj.core.api.Assertions.assertThat(source.getValue().sourceItemId())
+			.isEqualTo("source-item-1");
+
+		mockMvc.perform(post("/api/integrations/tasks/by-code/T000001/items")
+				.header("Idempotency-Key", "external-by-code-no-key")
 				.contentType("application/json")
 				.content("{\"referenceText\":\"参考文字\"}"))
 			.andExpect(status().isUnauthorized())

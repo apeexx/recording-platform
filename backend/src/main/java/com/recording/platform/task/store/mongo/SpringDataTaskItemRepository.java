@@ -10,6 +10,9 @@ import java.util.Collection;
 
 interface SpringDataTaskItemRepository extends MongoRepository<TaskItem, String> {
 	Optional<TaskItem> findByTaskIdAndCreationOperationId(String taskId, String creationOperationId);
+	Optional<TaskItem> findByTaskIdAndSourcePlatformAndSourceItemId(
+		String taskId, String sourcePlatform, String sourceItemId
+	);
 	Page<TaskItem> findAllByTaskId(String taskId, Pageable pageable);
 	void deleteAllByTaskId(String taskId);
 	Page<TaskItem> findAllByStatusAndReviewerIdIsNull(TaskItemStatus status, Pageable pageable);

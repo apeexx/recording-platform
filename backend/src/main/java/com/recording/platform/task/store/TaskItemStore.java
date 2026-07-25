@@ -13,6 +13,11 @@ public interface TaskItemStore {
 	default Optional<TaskItem> findByTaskIdAndCreationOperationId(String taskId, String operationId) {
 		return Optional.empty();
 	}
+	default Optional<TaskItem> findByTaskIdAndSourcePlatformAndSourceItemId(
+		String taskId, String sourcePlatform, String sourceItemId
+	) {
+		return Optional.empty();
+	}
 	Optional<TaskItem> claimAvailable(ClaimMutation mutation);
 	default Optional<TaskItem> claimReview(ReviewClaimMutation mutation) { return Optional.empty(); }
 	default Optional<TaskItem> claimReviewItem(ReviewItemClaimMutation mutation) { return Optional.empty(); }

@@ -19,7 +19,7 @@ public class IntegrationApiKeyAuthenticationFilter extends OncePerRequestFilter 
 	public static final String HEADER_NAME = "X-API-Key";
 	public static final String PRINCIPAL_NAME = "INTEGRATION-ANNOTATION-SCRIPT-CENTER";
 	public static final String AUTHORITY = "ROLE_INTEGRATION_IMPORT";
-	private static final String WRITE_PATH_PATTERN = "/api/integrations/tasks/[^/]+/items";
+	private static final String WRITE_PATH_PATTERN = "/api/integrations/tasks/(?:by-code/)?[^/]+/items";
 	private static final String READ_PATH_PATTERN = "/api/integrations/items/[^/]+(?:/audio)?";
 
 	private final IntegrationApiKeyAuthenticator authenticator;

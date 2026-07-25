@@ -1,5 +1,13 @@
 # AI 修改日志
 
+## 2026-07-25 增加任务编号机器写入与来源绑定
+
+- 新增 `POST /api/integrations/tasks/by-code/{taskCode}/items`，保留原内部 taskId 入口；两个入口继续仅允许 `INTEGRATION_IMPORT` 机器身份。
+- 机器写入请求可选成对携带 `sourcePlatform`、`sourceItemId`。MongoDB 使用部分唯一索引保证同一任务内来源唯一，不同任务允许相同来源；普通后台添加与 CSV 导入不写入来源字段。
+- 台州话脚本中心可直接配置可见任务编号，并以 `BYTEDANCE_AIDP + AIDP ItemID` 绑定来源；重复来源返回 `409 SOURCE_ITEM_ALREADY_BOUND`。
+- 未新增依赖，未放宽管理员、审核、任务查询、用户或公开录音权限。
+- 验证：定向幂等与安全测试 16/16、完整 Maven 测试 310/310 通过；`git diff --check` 与真实示例窄范围泄漏扫描通过。
+
 ## 2026-07-24 增加标注脚本中心机器结果读取
 
 - 时间：2026-07-24 13:07

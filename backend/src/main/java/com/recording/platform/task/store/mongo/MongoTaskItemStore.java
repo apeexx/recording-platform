@@ -51,6 +51,14 @@ public class MongoTaskItemStore implements TaskItemStore {
 		return repository.findByTaskIdAndCreationOperationId(taskId, operationId);
 	}
 	@Override
+	public Optional<TaskItem> findByTaskIdAndSourcePlatformAndSourceItemId(
+		String taskId, String sourcePlatform, String sourceItemId
+	) {
+		return repository.findByTaskIdAndSourcePlatformAndSourceItemId(
+			taskId, sourcePlatform, sourceItemId
+		);
+	}
+	@Override
 	public Optional<TaskItem> updateReferencesIfAvailable(UpdateTaskItemReferencesMutation mutation) {
 		TaskItem snapshot = new TaskItem();
 		snapshot.setId(mutation.itemId());

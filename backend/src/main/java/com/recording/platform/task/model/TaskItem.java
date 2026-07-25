@@ -27,6 +27,12 @@ import org.springframework.data.mongodb.core.mapping.Document;
 		def = "{'taskId': 1, 'creationOperationId': 1}",
 		unique = true,
 		partialFilter = "{'creationOperationId': {'$type': 'string'}}"
+	),
+	@CompoundIndex(
+		name = "unique_task_item_source",
+		def = "{'taskId': 1, 'sourcePlatform': 1, 'sourceItemId': 1}",
+		unique = true,
+		partialFilter = "{'sourcePlatform': {'$type': 'string'}, 'sourceItemId': {'$type': 'string'}}"
 	)
 })
 public class TaskItem {
@@ -38,6 +44,8 @@ public class TaskItem {
 	private long sequence;
 	private String itemCode;
 	private String creationOperationId;
+	private String sourcePlatform;
+	private String sourceItemId;
 	private TaskItemStatus status;
 	private String collectorId;
 	private String reviewerId;

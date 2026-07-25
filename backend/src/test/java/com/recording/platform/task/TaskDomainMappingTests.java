@@ -55,6 +55,7 @@ class TaskDomainMappingTests {
 		assertCollection(TaskItem.class, "task_items");
 		assertCompoundIndex(TaskItem.class, true, "taskId", "itemCode");
 		assertThat(Arrays.stream(TaskItem.class.getDeclaredFields()).map(Field::getName))
+			.contains("sourcePlatform", "sourceItemId")
 			.doesNotContain("externalItemId");
 		CompoundIndex collectorPending = findCompoundIndex(TaskItem.class, "collectorId", "taskId");
 		assertThat(collectorPending.unique()).isFalse();
@@ -64,6 +65,13 @@ class TaskDomainMappingTests {
 		CompoundIndex creationOperation = findCompoundIndex(TaskItem.class, "taskId", "creationOperationId");
 		assertThat(creationOperation.unique()).isTrue();
 		assertThat(creationOperation.partialFilter()).contains("creationOperationId").contains("$type");
+		CompoundIndex sourceBinding = findCompoundIndex(
+			TaskItem.class, "taskId", "sourcePlatform", "sourceItemId"
+		);
+		assertThat(sourceBinding.name()).isEqualTo("unique_task_item_source");
+		assertThat(sourceBinding.unique()).isTrue();
+		assertThat(sourceBinding.partialFilter().replace(" ", ""))
+			.isEqualTo("{'sourcePlatform':{'$type':'string'},'sourceItemId':{'$type':'string'}}");
 	}
 
 	private void assertCollection(Class<?> type, String collection) {

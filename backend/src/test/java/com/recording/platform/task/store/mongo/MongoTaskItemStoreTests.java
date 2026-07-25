@@ -18,6 +18,7 @@ import com.recording.platform.task.store.ReviewItemClaimMutation;
 import com.recording.platform.task.store.SubmitMutation;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import org.bson.Document;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -32,6 +33,30 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 
 class MongoTaskItemStoreTests {
+	@Test
+	void sourceBindingLookupDelegatesTheCompleteTaskScopedIdentity() {
+		SpringDataTaskItemRepository repository = org.mockito.Mockito.mock(SpringDataTaskItemRepository.class);
+		MongoTemplate template = org.mockito.Mockito.mock(MongoTemplate.class);
+		TaskItem expected = new TaskItem();
+		expected.setId("item-1");
+		expected.setTaskId("task-1");
+		expected.setSourcePlatform("BYTEDANCE_AIDP");
+		expected.setSourceItemId("source-item-1");
+		when(repository.findByTaskIdAndSourcePlatformAndSourceItemId(
+			"task-1", "BYTEDANCE_AIDP", "source-item-1"
+		)).thenReturn(Optional.of(expected));
+		MongoTaskItemStore store = new MongoTaskItemStore(repository, template);
+
+		Optional<TaskItem> result = store.findByTaskIdAndSourcePlatformAndSourceItemId(
+			"task-1", "BYTEDANCE_AIDP", "source-item-1"
+		);
+
+		assertThat(result).containsSame(expected);
+		verify(repository).findByTaskIdAndSourcePlatformAndSourceItemId(
+			"task-1", "BYTEDANCE_AIDP", "source-item-1"
+		);
+	}
+
 	@Test
 	void claimUsesAnAtomicAvailableQuerySortedByTaskSequence() {
 		SpringDataTaskItemRepository repository = org.mockito.Mockito.mock(SpringDataTaskItemRepository.class);
