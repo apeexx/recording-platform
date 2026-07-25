@@ -122,6 +122,25 @@ Windows PowerShell 本地联调可使用一键启动脚本：
 
 后端提供公开只读就绪接口 `GET /api/health/ready`：仅返回 `overall`、`mongo`、`storage` 的 `UP/DOWN`；全部就绪时为 HTTP 200，任一项失败时为 HTTP 503，不返回 URI、绝对路径、密码或异常文本。
 
+## 生产部署脚本
+
+Ubuntu 生产服务器完成 MongoDB、根目录 `.env`、持久化目录、Java 17、NVM
+Node.js 22 和 PM2 的前置配置后，可在仓库根目录运行：
+
+```bash
+./scripts/deploy-production.sh
+```
+
+脚本要求干净的 `main` 工作区，只使用 `git pull --ff-only origin main` 更新；
+随后依次验证和构建 Web、后端与微信小程序，全部通过后才启动或重启单实例 PM2
+后端，并以本机 `/api/health/ready` 三项全 `UP` 作为成功条件。npm 和 Maven 默认
+使用国内公开镜像。
+
+服务器 `.env` 保持 Git 忽略且只允许部署用户读取，任何数据库密码、微信
+AppSecret、管理员密码和原始集成 API Key 都不得写入部署脚本、PM2 配置或 Git。
+Nginx、Certbot、防火墙、备份、回滚和微信小程序发布仍由独立运维步骤完成。
+完整前置条件、失败行为和诊断命令见 [`scripts/README.md`](scripts/README.md)。
+
 ## 身份、会话与接口边界
 
 - 身份数据分为 `web_users` 与 `miniprogram_users`：后台账号 ID 使用 `WEB-...` 前缀并保存 ADMIN/REVIEWER 角色，小程序采集员 ID 使用 `MINI-...` 前缀且不在文档中存储角色（鉴权与响应中固定为 COLLECTOR）。两类账号可使用相同登录名，因为唯一约束分别属于各自集合。后台账号使用 BCrypt 密码；所有新编码密码至少 8 个字符且 UTF-8 不超过 72 字节。首管理员仅在 `web_users` 没有 `ADMIN` 且同时配置 `INITIAL_ADMIN_USERNAME`、`INITIAL_ADMIN_PASSWORD` 时创建；首次登录必须改密。
