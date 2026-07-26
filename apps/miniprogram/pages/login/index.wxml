@@ -3,10 +3,6 @@
   <view class="brand-mark"><image src="/assets/branding/yanshu-avatar-144.png"/></view>
   <view class="brand-slogan">让声音成为时光的画笔</view>
   <view class="brand-copy">安全、便捷地完成语音数据采集</view>
-  <view class="audience-notice">
-    <view class="audience-notice-title">内部使用说明</view>
-    <view class="audience-notice-copy">本小程序仅面向重庆砚数科技有限公司内部员工及经授权的录音采集人员，用于领取、录制和提交语音数据采集任务。首次使用请在项目管理员安排下登录并完善资料；未受邀人员请勿登录或提交个人信息。</view>
-  </view>
   <view class="login-card">
     <block wx:if="{{mode==='wechat'}}">
       <view class="mode-title">微信快捷登录</view><view class="mode-copy">内部及授权人员可使用当前微信身份登录</view>
@@ -19,5 +15,9 @@
       <button class="account-button" loading="{{loading}}" bindtap="accountLogin">登录</button>
     </block>
     <view class="switch" bindtap="switchMode">{{mode==='wechat'?'切换账号登录':'切换微信登录'}} ›</view>
+  </view>
+  <view class="audience-notice">
+    <view class="audience-notice-title">内部使用说明</view>
+    <view class="audience-notice-copy">本小程序仅面向重庆砚数科技有限公司内部员工及经授权的录音采集人员，用于领取、录制和提交语音数据采集任务。首次使用请在项目管理员安排下登录并完善资料；未受邀人员请勿登录或提交个人信息。</view>
   </view>
 </view>
