@@ -20,12 +20,13 @@ test('小程序统一清除原生按钮边框并区分普通、迷你、胶囊�
   assert.match(playerStyle, /\.play-button\{[^}]*border-radius:50%/)
 })
 
-test('只有任务大厅、任务数据和我的统计开启下拉刷新', () => {
+test('只有数据浏览页开启下拉刷新', () => {
   assert.equal(pageConfig('tasks').enablePullDownRefresh, true)
   assert.equal(pageConfig('work-list').enablePullDownRefresh, true)
-  assert.equal(pageConfig('profile').enablePullDownRefresh, true)
+  assert.equal(pageConfig('statistics').enablePullDownRefresh, true)
+  assert.equal(pageConfig('submission-records').enablePullDownRefresh, true)
 
-  for (const page of ['login', 'profile-settings', 'work']) {
+  for (const page of ['login', 'profile', 'profile-settings', 'work']) {
     assert.notEqual(pageConfig(page).enablePullDownRefresh, true)
   }
 })

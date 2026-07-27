@@ -17,7 +17,13 @@ Component({
 		attached() {
 			this.player = createAudioPlayback({
 				createContext: () => wx.createInnerAudioContext(),
-				onState: ({ playing, progress, timeText }) => this.setData({ playing, progress, timeText }),
+				onState: ({ playing, progress, timeText, durationMillis }) => {
+					this.setData({ playing, progress, timeText })
+					if (durationMillis > 0 && durationMillis !== this.lastReportedDuration) {
+						this.lastReportedDuration = durationMillis
+						this.triggerEvent('durationchange', { durationMillis })
+					}
+				},
 				onError: message => this.triggerEvent('error', { message }),
 			})
 			this.player.setSource(this.properties.src, this.properties.durationMillis)

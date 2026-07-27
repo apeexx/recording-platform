@@ -70,6 +70,8 @@ public class MongoTaskItemStore implements TaskItemStore {
 			.set("referenceVideoUrl", mutation.referenceVideoUrl())
 			.set("referenceAudioMediaId", mutation.referenceAudioMediaId())
 			.set("referenceVideoMediaId", mutation.referenceVideoMediaId())
+			.unset("referenceAudioDurationMillis")
+			.unset("referenceVideoDurationMillis")
 			.set("updatedAt", mutation.occurredAt())
 			.inc("revision", 1L)
 			.push("operations", OperationHistory.referenceEdit(
@@ -146,6 +148,10 @@ public class MongoTaskItemStore implements TaskItemStore {
 		Update update = new Update()
 			.set("currentResult", mutation.result())
 			.set("status", mutation.targetStatus())
+			.set("firstSubmittedAt", mutation.firstSubmittedAt())
+			.set("latestSubmittedAt", mutation.occurredAt())
+			.set("referenceAudioDurationMillis", mutation.referenceAudioDurationMillis())
+			.set("referenceVideoDurationMillis", mutation.referenceVideoDurationMillis())
 			.set("updatedAt", mutation.occurredAt())
 			.inc("revision", 1L)
 			.push("submissions", SubmissionHistory.from(mutation))
@@ -472,6 +478,8 @@ public class MongoTaskItemStore implements TaskItemStore {
 			.unset("reviewerId")
 			.unset("assignmentId")
 			.unset("currentResult")
+			.unset("firstSubmittedAt")
+			.unset("latestSubmittedAt")
 			.set("updatedAt", mutation.occurredAt())
 			.inc("revision", 1L)
 			.push("operations", OperationHistory.release(mutation, snapshot));

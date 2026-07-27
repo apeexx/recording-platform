@@ -40,9 +40,46 @@ import java.util.Optional;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.mock.web.MockMultipartFile;
 
 class TaskItemSubmissionServiceTests {
+	@Test
+	void everySubmissionValidatesAndPassesReferenceDurationsToThePoolMutation() {
+		TaskItemStore items = org.mockito.Mockito.mock(TaskItemStore.class);
+		TaskStore tasks = org.mockito.Mockito.mock(TaskStore.class);
+		TaskPoolService pool = org.mockito.Mockito.mock(TaskPoolService.class);
+		RecordingMediaStorage storage = org.mockito.Mockito.mock(RecordingMediaStorage.class);
+		MediaAssetStore assets = org.mockito.Mockito.mock(MediaAssetStore.class);
+		MediaCleanupService cleanup = org.mockito.Mockito.mock(MediaCleanupService.class);
+		TaskItem pending = item(false);
+		pending.setReferenceAudioUrl("https://example.test/reference.mp3");
+		when(items.findById("item-1")).thenReturn(Optional.of(pending));
+		TaskItemActionResult committed = new TaskItemActionResult(
+			"item-1", TaskItemStatus.SUBMITTED, 2, "assignment-1", new TaskItemResult(null, "文本")
+		);
+		when(pool.submit(eq("item-1"), any(), any())).thenReturn(committed);
+		TaskItemSubmissionService service = new TaskItemSubmissionService(
+			items, tasks, pool, storage, assets, cleanup,
+			Clock.fixed(Instant.parse("2026-07-11T12:00:00Z"), ZoneOffset.UTC)
+		);
+		SubmitTaskItemForm form = new SubmitTaskItemForm(
+			"submit-1", "assignment-1", 1, "文本", 15_000L, 0L
+		);
+		PlatformPrincipal collector = new PlatformPrincipal(
+			"session-1", "collector-1", "collector", "张三",
+			UserRole.COLLECTOR, SessionType.MINIPROGRAM, false
+		);
+
+		assertThat(service.submit("item-1", form, null, collector)).isEqualTo(committed);
+
+		ArgumentCaptor<com.recording.platform.task.service.SubmitTaskItemCommand> command =
+			ArgumentCaptor.forClass(com.recording.platform.task.service.SubmitTaskItemCommand.class);
+		verify(pool).submit(eq("item-1"), command.capture(), eq(collector));
+		assertThat(command.getValue().referenceAudioDurationMillis()).isEqualTo(15_000L);
+		assertThat(command.getValue().referenceVideoDurationMillis()).isZero();
+	}
+
 	@Test
 	void concurrentDuplicateOperationOnlyTouchesTheStableCurrentFileOnce() throws Exception {
 		TaskItemStore items = org.mockito.Mockito.mock(TaskItemStore.class);

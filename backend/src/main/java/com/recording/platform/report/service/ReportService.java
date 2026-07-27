@@ -5,6 +5,9 @@ import com.recording.platform.identity.model.UserRole;
 import com.recording.platform.report.dto.ReviewerSummary;
 import com.recording.platform.report.dto.WorkSummary;
 import com.recording.platform.report.dto.SubmissionView;
+import com.recording.platform.report.dto.CollectorReportTaskList;
+import com.recording.platform.report.dto.CollectorTaskReport;
+import com.recording.platform.report.dto.CollectorTaskReportItem;
 import com.recording.platform.api.PageResponse;
 import com.recording.platform.security.PlatformPrincipal;
 import com.recording.platform.task.model.OperationHistory;
@@ -109,6 +112,31 @@ public class ReportService {
 		return new PageResponse<>(List.copyOf(rows.subList(from, to)), safePage, safeSize, rows.size());
 	}
 
+	public CollectorReportTaskList myTasks(PlatformPrincipal actor) {
+		requireCollector(actor);
+		return new CollectorReportTaskList(List.copyOf(queries.findCollectorTasks(actor.userId())));
+	}
+
+	public CollectorTaskReport myTask(String taskId, PlatformPrincipal actor) {
+		requireCollector(actor);
+		return queries.collectorTaskReport(actor.userId(), taskId)
+			.orElseThrow(() -> new ApiException(
+				HttpStatus.NOT_FOUND, "REPORT_TASK_NOT_FOUND", "没有可统计的任务数据"
+			));
+	}
+
+	public PageResponse<CollectorTaskReportItem> myTaskSubmissions(
+		String taskId, int page, int size, PlatformPrincipal actor
+	) {
+		requireCollector(actor);
+		int safePage = Math.max(page, 0);
+		int safeSize = Math.min(Math.max(size, 1), 100);
+		var result = queries.findCollectorTaskSubmissions(
+			actor.userId(), taskId, PageRequest.of(safePage, safeSize)
+		);
+		return new PageResponse<>(result.getContent(), result.getNumber(), result.getSize(), result.getTotalElements());
+	}
+
 	private WorkSummary work(List<TaskItem> values) {
 		long submissions = 0, cumulativeDuration = 0, completed = 0, currentDuration = 0, releases = 0, discards = 0;
 		for (TaskItem item : values) {
@@ -133,6 +161,9 @@ public class ReportService {
 	private void requireAdminOrSelfCollector(String collectorId, PlatformPrincipal actor) {
 		if (actor == null || actor.role() != UserRole.ADMIN
 			&& (actor.role() != UserRole.COLLECTOR || !actor.userId().equals(collectorId))) throw forbidden();
+	}
+	private void requireCollector(PlatformPrincipal actor) {
+		if (actor == null || actor.role() != UserRole.COLLECTOR || queries == null) throw forbidden();
 	}
 	private void requireAdmin(PlatformPrincipal actor) { if (actor == null || actor.role() != UserRole.ADMIN) throw forbidden(); }
 	private ApiException forbidden() { return new ApiException(HttpStatus.FORBIDDEN, "ACCESS_DENIED", "没有权限查看该统计"); }

@@ -14,12 +14,12 @@ test('登录和资料操作错误使用悬浮反馈而非底部错误文字', ()
 })
 
 test('任务大厅、任务数据和统计保留可重试阻塞状态', () => {
-  for (const page of ['tasks', 'work-list', 'profile']) {
+  for (const page of ['tasks', 'work-list', 'statistics']) {
     const script = read(`pages/${page}/index.js`)
     const template = read(`pages/${page}/index.wxml`)
     assert.match(script, /loadError/)
     assert.match(template, /loadError/)
-    assert.match(template, /bindtap="load"/)
+    assert.match(template, /bindtap="load(?:Tasks)?"/)
   }
 })
 

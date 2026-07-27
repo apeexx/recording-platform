@@ -97,6 +97,7 @@ public class TaskPoolService {
 		validateSubmission(configuration, text, command.audio());
 		TaskItemStatus target = configuration.isHumanReviewEnabled()
 			? TaskItemStatus.SUBMITTED : TaskItemStatus.COMPLETED;
+		Instant occurredAt = Instant.now(clock);
 		SubmitMutation mutation = new SubmitMutation(
 			itemId,
 			actor.userId(),
@@ -106,7 +107,10 @@ public class TaskPoolService {
 			requiredOperationId(command.operationId()),
 			new TaskItemResult(command.audio(), text),
 			target,
-			Instant.now(clock)
+			occurredAt,
+			item.getFirstSubmittedAt() == null ? occurredAt : item.getFirstSubmittedAt(),
+			command.referenceAudioDurationMillis(),
+			command.referenceVideoDurationMillis()
 		);
 		return finishOrReplay(items.submitIfCurrent(mutation), itemId, command.operationId(), actor.userId());
 	}

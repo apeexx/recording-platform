@@ -4,6 +4,9 @@ import com.recording.platform.api.PageResponse;
 import com.recording.platform.report.dto.ReviewerSummary;
 import com.recording.platform.report.dto.SubmissionView;
 import com.recording.platform.report.dto.WorkSummary;
+import com.recording.platform.report.dto.CollectorReportTaskList;
+import com.recording.platform.report.dto.CollectorTaskReport;
+import com.recording.platform.report.dto.CollectorTaskReportItem;
 import com.recording.platform.report.service.ReportService;
 import com.recording.platform.security.PlatformPrincipal;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -44,5 +47,28 @@ public class ReportController {
 		@AuthenticationPrincipal PlatformPrincipal actor
 	) {
 		return reports.mySubmissions(page, size, actor);
+	}
+
+	@GetMapping("/me/tasks")
+	public CollectorReportTaskList myTasks(@AuthenticationPrincipal PlatformPrincipal actor) {
+		return reports.myTasks(actor);
+	}
+
+	@GetMapping("/me/tasks/{taskId}")
+	public CollectorTaskReport myTask(
+		@org.springframework.web.bind.annotation.PathVariable String taskId,
+		@AuthenticationPrincipal PlatformPrincipal actor
+	) {
+		return reports.myTask(taskId, actor);
+	}
+
+	@GetMapping("/me/tasks/{taskId}/submissions")
+	public PageResponse<CollectorTaskReportItem> myTaskSubmissions(
+		@org.springframework.web.bind.annotation.PathVariable String taskId,
+		@RequestParam(defaultValue = "0") int page,
+		@RequestParam(defaultValue = "20") int size,
+		@AuthenticationPrincipal PlatformPrincipal actor
+	) {
+		return reports.myTaskSubmissions(taskId, page, size, actor);
 	}
 }

@@ -22,6 +22,7 @@ Page({
   data: {
     item: {}, configuration: {}, loading: true, loadError: '', referenceAudioPath: '', referenceVideoPath: '',
     audioPath: '', audioDuration: 0, recordingDurationText: '00:00', text: '', recordState: 'idle',
+    referenceAudioDurationMillis: 0, referenceVideoDurationMillis: 0,
     levelBars: waveformBars(0), submitting: false, releasing: false,
     statusText: '待录制', editable: true, readOnly: false, canRelease: true, submitLabel: '提交作业',
     autoClaimNextEnabled: true, showAutoClaimNext: true,
@@ -63,6 +64,8 @@ Page({
       this.session = null
       this.setData({
         item, configuration, text: item.currentResult?.text || '', statusText: statusText[item.status] || item.status,
+        referenceAudioDurationMillis: 0, referenceVideoDurationMillis: 0,
+        referenceAudioPath: '', referenceVideoPath: '',
         editable, readOnly, canRelease: item.status === 'RECORDING_PENDING' || item.status === 'REWORK_PENDING',
         submitLabel: item.status === 'SUBMITTED' ? '保存修改' : '提交作业',
         showAutoClaimNext: item.status === 'RECORDING_PENDING' || item.status === 'REWORK_PENDING',
@@ -114,6 +117,21 @@ Page({
     } catch (error) { feedback.error(error.message || '录音保存失败') }
   },
   textInput(event) { if (this.data.editable) this.setData({ text: event.detail.value }) },
+  copyReferenceText() {
+    const data = this.data.item.referenceText
+    if (!data) return
+    wx.setClipboardData({
+      data,
+      success: () => feedback.success('参考文本已复制'),
+      fail: () => feedback.error('复制失败，请重试'),
+    })
+  },
+  referenceAudioDurationChange(event) {
+    this.setData({ referenceAudioDurationMillis: Math.max(0, Number(event.detail?.durationMillis) || 0) })
+  },
+  referenceVideoLoadedMetadata(event) {
+    this.setData({ referenceVideoDurationMillis: Math.max(0, Math.round((Number(event.detail?.duration) || 0) * 1000)) })
+  },
   audioPlaybackError(event) {
     feedback.error(event.detail?.message || '音频播放失败')
   },
@@ -141,6 +159,13 @@ Page({
   },
   async submit() {
     if (!this.data.editable) return
+    const hasReferenceAudio = !!(this.data.item.referenceAudioUrl || this.data.item.referenceAudioMediaId)
+    const hasReferenceVideo = !!(this.data.item.referenceVideoUrl || this.data.item.referenceVideoMediaId)
+    if (hasReferenceAudio && this.data.referenceAudioDurationMillis <= 0
+      || hasReferenceVideo && this.data.referenceVideoDurationMillis <= 0) {
+      feedback.error('参考媒体尚未加载完成，请稍后重试')
+      return
+    }
     const validation = validateSubmission(this.data.configuration, { audio: this.data.audioPath, text: this.data.text })
     if (validation) { feedback.error(validation.message); return }
     this.setData({ submitting: true })
@@ -150,6 +175,8 @@ Page({
       await api.submit(this.itemId, {
         operationId: api.operationId('submit'), assignmentId: this.data.item.assignmentId,
         expectedRevision: this.data.item.revision, text: this.data.text.trim(), audioPath: this.data.audioPath,
+        referenceAudioDurationMillis: this.data.referenceAudioDurationMillis,
+        referenceVideoDurationMillis: this.data.referenceVideoDurationMillis,
       })
       if (sourceStatus === 'SUBMITTED') {
         feedback.success('修改已保存')

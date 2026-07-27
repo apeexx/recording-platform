@@ -37,6 +37,7 @@ public class TaskItemSubmissionService {
 	private final MediaAssetStore assets;
 	private final MediaCleanupService cleanup;
 	private final Clock clock;
+	private final ReferenceMediaDurationPolicy durationPolicy = new ReferenceMediaDurationPolicy();
 	private final ReentrantLock[] itemLocks = createLocks();
 
 	public TaskItemSubmissionService(
@@ -85,6 +86,9 @@ public class TaskItemSubmissionService {
 				form.operationId(), form.assignmentId(), form.expectedRevision(), form.text(), null
 			), actor);
 		}
+		ReferenceMediaDurationPolicy.Durations referenceDurations = durationPolicy.validate(
+			item, form.referenceAudioDurationMillis(), form.referenceVideoDurationMillis()
+		);
 		TaskItemResult previous = item.getCurrentResult();
 		SubmittedRecording previousAudio = previous == null ? null : previous.audio();
 		if (audio == null || audio.isEmpty()) {
@@ -93,7 +97,8 @@ public class TaskItemSubmissionService {
 			TaskItemActionResult result;
 			try {
 				result = pool.submit(itemId, new SubmitTaskItemCommand(
-					form.operationId(), form.assignmentId(), form.expectedRevision(), form.text(), null
+					form.operationId(), form.assignmentId(), form.expectedRevision(), form.text(), null,
+					referenceDurations.audioMillis(), referenceDurations.videoMillis()
 				), actor);
 			} catch (RuntimeException exception) {
 				rollback(retirement, exception);
@@ -124,7 +129,8 @@ public class TaskItemSubmissionService {
 		try {
 			assets.save(asset);
 			result = pool.submit(itemId, new SubmitTaskItemCommand(
-				form.operationId(), form.assignmentId(), form.expectedRevision(), form.text(), prepared.recording()
+				form.operationId(), form.assignmentId(), form.expectedRevision(), form.text(), prepared.recording(),
+				referenceDurations.audioMillis(), referenceDurations.videoMillis()
 			), actor);
 		} catch (RuntimeException exception) {
 			replacement.rollback();

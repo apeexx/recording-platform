@@ -173,8 +173,9 @@ class MongoTaskItemStoreTests {
 		));
 
 		ArgumentCaptor<Query> query = ArgumentCaptor.forClass(Query.class);
+		ArgumentCaptor<Update> update = ArgumentCaptor.forClass(Update.class);
 		org.mockito.Mockito.verify(template).findAndModify(
-			query.capture(), any(Update.class), any(FindAndModifyOptions.class), eq(TaskItem.class)
+			query.capture(), update.capture(), any(FindAndModifyOptions.class), eq(TaskItem.class)
 		);
 		assertThat(query.getValue().getQueryObject())
 			.containsEntry("_id", "item-1")
@@ -187,6 +188,8 @@ class MongoTaskItemStoreTests {
 		assertThat(query.getValue().getQueryObject()).containsKey("operations.operationId");
 		assertThat((Document) query.getValue().getQueryObject().get("operations.operationId"))
 			.containsEntry("$ne", "submit-1");
+		assertThat(update.getValue().getUpdateObject().toString())
+			.contains("firstSubmittedAt", "latestSubmittedAt");
 	}
 
 	@Test
@@ -203,8 +206,9 @@ class MongoTaskItemStoreTests {
 		));
 
 		ArgumentCaptor<Query> query = ArgumentCaptor.forClass(Query.class);
+		ArgumentCaptor<Update> update = ArgumentCaptor.forClass(Update.class);
 		org.mockito.Mockito.verify(template).findAndModify(
-			query.capture(), any(Update.class), any(FindAndModifyOptions.class), eq(TaskItem.class)
+			query.capture(), update.capture(), any(FindAndModifyOptions.class), eq(TaskItem.class)
 		);
 		assertThat(query.getValue().getQueryObject())
 			.containsEntry("_id", "item-1")
@@ -213,6 +217,8 @@ class MongoTaskItemStoreTests {
 		assertThat((Document) query.getValue().getQueryObject().get("status"))
 			.extracting("$in")
 			.isEqualTo(List.of(TaskItemStatus.RECORDING_PENDING, TaskItemStatus.REWORK_PENDING));
+		assertThat(update.getValue().getUpdateObject().toString())
+			.contains("firstSubmittedAt", "latestSubmittedAt");
 	}
 
 	@Test

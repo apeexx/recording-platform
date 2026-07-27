@@ -14,3 +14,27 @@ test('作业页直接读取任务配置并移除版本文案', () => {
   assert.match(template, /文本或录音至少提交一项/)
   assert.match(template, /recordingDurationText/)
 })
+
+test('参考文本支持长按选择和复制全文', () => {
+  const script = fs.readFileSync(path.join(root, 'pages/work/index.js'), 'utf8')
+  const template = fs.readFileSync(path.join(root, 'pages/work/index.wxml'), 'utf8')
+  assert.match(template, /user-select="true"/)
+  assert.match(template, /bindtap="copyReferenceText">复制全文/)
+  assert.match(script, /copyReferenceText\(\)/)
+  assert.match(script, /wx\.setClipboardData/)
+})
+
+test('每次提交都核对并发送参考音视频时长', () => {
+  const script = fs.readFileSync(path.join(root, 'pages/work/index.js'), 'utf8')
+  const template = fs.readFileSync(path.join(root, 'pages/work/index.wxml'), 'utf8')
+  const api = fs.readFileSync(path.join(root, 'services/api.js'), 'utf8')
+  const player = fs.readFileSync(path.join(root, 'components/audio-player/index.js'), 'utf8')
+  assert.match(template, /binddurationchange="referenceAudioDurationChange"/)
+  assert.match(template, /bindloadedmetadata="referenceVideoLoadedMetadata"/)
+  assert.match(script, /referenceAudioDurationMillis/)
+  assert.match(script, /referenceVideoDurationMillis/)
+  assert.match(script, /参考媒体尚未加载完成/)
+  assert.match(api, /referenceAudioDurationMillis:String\(payload\.referenceAudioDurationMillis\|\|0\)/)
+  assert.match(api, /referenceVideoDurationMillis:String\(payload\.referenceVideoDurationMillis\|\|0\)/)
+  assert.match(player, /triggerEvent\('durationchange',\s*\{\s*durationMillis\s*\}\)/)
+})

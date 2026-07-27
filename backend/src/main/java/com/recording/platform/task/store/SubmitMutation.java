@@ -13,6 +13,25 @@ public record SubmitMutation(
 	String operationId,
 	TaskItemResult result,
 	TaskItemStatus targetStatus,
-	Instant occurredAt
+	Instant occurredAt,
+	Instant firstSubmittedAt,
+	long referenceAudioDurationMillis,
+	long referenceVideoDurationMillis
 ) {
+	public SubmitMutation(
+		String itemId,
+		String collectorId,
+		String actorUsername,
+		String assignmentId,
+		long expectedRevision,
+		String operationId,
+		TaskItemResult result,
+		TaskItemStatus targetStatus,
+		Instant occurredAt
+	) {
+		this(
+			itemId, collectorId, actorUsername, assignmentId, expectedRevision, operationId,
+			result, targetStatus, occurredAt, occurredAt, 0, 0
+		);
+	}
 }

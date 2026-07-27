@@ -60,12 +60,17 @@ public class TaskItemController {
 		@RequestParam String assignmentId,
 		@RequestParam long expectedRevision,
 		@RequestParam(required = false) String text,
+		@RequestParam(required = false) Long referenceAudioDurationMillis,
+		@RequestParam(required = false) Long referenceVideoDurationMillis,
 		@RequestPart(required = false) MultipartFile audio,
 		@AuthenticationPrincipal PlatformPrincipal actor
 	) {
 		return submissions.submit(
 			itemId,
-			new SubmitTaskItemForm(operationId, assignmentId, expectedRevision, text),
+			new SubmitTaskItemForm(
+				operationId, assignmentId, expectedRevision, text,
+				referenceAudioDurationMillis, referenceVideoDurationMillis
+			),
 			audio,
 			actor
 		);

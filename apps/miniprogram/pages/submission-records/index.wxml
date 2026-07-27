@@ -1,0 +1,15 @@
+<view class="page records-page">
+  <view class="card task-summary"><view class="title">{{taskName||'任务提交记录'}}</view><view class="subtle">{{taskCode}}</view></view>
+  <view wx:if="{{loading&&!items.length}}" class="empty">正在加载提交记录…</view>
+  <view wx:elif="{{loadError&&!items.length}}" class="empty"><view>{{loadError}}</view><button class="button" bindtap="refresh">重新加载</button></view>
+  <view wx:elif="{{!items.length}}" class="empty">暂无提交记录</view>
+  <block wx:else>
+    <view wx:for="{{items}}" wx:key="itemId" class="card record-card" data-item-id="{{item.itemId}}" bindtap="openSubmission">
+      <view class="record-top"><view class="record-code">{{item.itemCode}}</view><view class="tag">{{item.statusText}}</view></view>
+      <view class="record-line">最新提交：{{item.latestSubmittedAtText}}</view>
+      <view class="record-line">当前录音：{{item.recordingDurationText}}</view>
+      <view class="chevron">›</view>
+    </view>
+    <view class="load-state">{{loadingMore?'正在加载…':(hasMore?'继续上拉加载':'已经到底了')}}</view>
+  </block>
+</view>

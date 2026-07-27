@@ -20,7 +20,9 @@ import com.recording.platform.report.store.ReportQueryStore;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 class ReportServiceTests {
@@ -110,6 +112,38 @@ class ReportServiceTests {
 
 		assertThat(service.collector("collector-1", admin())).isEqualTo(expected);
 		assertThat(service.mySubmissions(0, 20, collector()).items()).containsExactly(row);
+	}
+
+	@Test
+	void collectorTaskDashboardUsesOneCurrentAssignmentRowPerItem() {
+		TaskItemStore items = mock(TaskItemStore.class);
+		ReportQueryStore queries = mock(ReportQueryStore.class);
+		var task = new com.recording.platform.report.dto.CollectorReportTask(
+			"task-1", "T000001", "普通话录音", Instant.parse("2026-07-27T07:20:00Z")
+		);
+		var summary = new com.recording.platform.report.dto.CollectorTaskReportSummary(
+			2, 1, 12_000, 30_000, 8_000
+		);
+		var day = new com.recording.platform.report.dto.CollectorTaskDaySummary(
+			LocalDate.of(2026, 7, 27), 2, 12_000, 30_000, 8_000
+		);
+		var row = new com.recording.platform.report.dto.CollectorTaskReportItem(
+			"item-1", "T000001-0000001",
+			Instant.parse("2026-07-27T06:00:00Z"), Instant.parse("2026-07-27T07:20:00Z"),
+			TaskItemStatus.COMPLETED, 12_000, 15_000, 4_000, true, true
+		);
+		var report = new com.recording.platform.report.dto.CollectorTaskReport(
+			"task-1", "T000001", "普通话录音", summary, List.of(day), List.of(row)
+		);
+		when(queries.findCollectorTasks("collector-1")).thenReturn(List.of(task));
+		when(queries.collectorTaskReport("collector-1", "task-1")).thenReturn(Optional.of(report));
+		when(queries.findCollectorTaskSubmissions("collector-1", "task-1", PageRequest.of(0, 20)))
+			.thenReturn(new PageImpl<>(List.of(row), PageRequest.of(0, 20), 1));
+		ReportService service = new ReportService(items, queries);
+
+		assertThat(service.myTasks(collector()).items()).containsExactly(task);
+		assertThat(service.myTask("task-1", collector())).isEqualTo(report);
+		assertThat(service.myTaskSubmissions("task-1", 0, 20, collector()).items()).containsExactly(row);
 	}
 
 	private TaskItem item(String id, TaskItemStatus status) {

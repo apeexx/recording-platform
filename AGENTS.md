@@ -38,7 +38,7 @@ MongoDB 身份、会话与统一 API 错误基础
 本文件 AGENTS.md
 ```
 
-当前已实现身份、会话、后台用户管理、微信登录边界、语音生成持久化，以及嵌入式任务配置、授权申请、任务池领取、录音提交/返修/释放、人工审核、动态状态、软废弃恢复、媒体读取和 CSV 导入后端闭环；Web 已实现后台身份、任务配置、数据池/导入、权限、审核、用户、操作记录与统计页面。平台领域已整体移除，仍不实现机器审核执行或真实 AI 转写。
+当前已实现身份、会话、后台用户管理、微信登录边界、语音生成持久化，以及嵌入式任务配置、授权申请、任务池领取、录音提交/返修/释放、人工审核、动态状态、软废弃恢复、媒体读取和 CSV 导入后端闭环；Web 已实现后台身份、任务配置、数据池/导入、权限、审核、用户、操作记录与统计页面，小程序已实现独立的按任务个人统计、每日分段和倒序提交记录。平台领域已整体移除，仍不实现机器审核执行或真实 AI 转写。
 
 Spring Security 已配置为不透明服务端会话，不使用 JWT。除 Web/微信登录与接管接口外，其余 `/api/**` 默认认证；管理员、任务管理、授权管理、导入和语音生成接口按角色保护，采集写接口仅允许 `COLLECTOR` 小程序 Bearer 身份；外部集成仅允许专用 API Key 访问明确列出的四个端点。
 
@@ -225,7 +225,7 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 ## 7. 接口说明
 
 当前后端提供身份、会话、后台用户管理、语音生成、任务配置、授权、任务池、人工审核、动态状态、软废弃恢复、录音媒体、导入及外部完成结果读取 API；尚不提供机器审核执行或真实 AI 转写 API。
-当前同时提供操作记录与统计 API：条目操作记录按权限读取，全局操作记录仅 ADMIN/REVIEWER；任务和指定采集员汇总仅 ADMIN，审核员可查看本人统计，采集员可查看本人汇总及逐次提交明细。
+当前同时提供操作记录与统计 API：条目操作记录按权限读取，全局操作记录仅 ADMIN/REVIEWER；任务和指定采集员汇总仅 ADMIN，审核员可查看本人统计；采集员按最近提交任务查看当前 assignment 汇总、每日分段及倒序提交明细。
 
 所有 API 响应必须带 `X-Request-Id`；错误响应统一为 `{ code, message, requestId, details? }`。未预期异常只能返回脱敏摘要，不得返回堆栈、数据库内部消息、密钥或完整第三方 payload。统一状态至少覆盖 400、401、403、404、409、413、415、422、429、500 和 503。
 
@@ -409,12 +409,23 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 ```text
 请求方法：POST
 请求路径：/api/task-items/{itemId}/submit、/release、/reject
-请求参数：submit multipart operationId、assignmentId、expectedRevision、text?、audio?；release/reject JSON operationId、expectedRevision，reject 另含 reason
+请求参数：submit multipart operationId、assignmentId、expectedRevision、text?、audio?、referenceAudioDurationMillis、referenceVideoDurationMillis；release/reject JSON operationId、expectedRevision，reject 另含 reason
 响应结构：{itemId,status,revision,assignmentId,result}
-错误码：409 STALE_STATE；413 UPLOAD_TOO_LARGE；422 录音格式/采样率/声道/时长/驳回原因错误
+错误码：409 STALE_STATE/REFERENCE_DURATION_MISMATCH；413 UPLOAD_TOO_LARGE；422 录音格式/采样率/声道/时长/驳回原因错误，以及 REFERENCE_DURATION_REQUIRED/REFERENCE_DURATION_NOT_APPLICABLE
 权限要求：submit/release 仅当前 COLLECTOR（ADMIN 也可 release）；reject 仅 ADMIN/REVIEWER
-数据一致性要求：operationId 绑定操作者并返回首次结果；人工审核任务提交到 SUBMITTED 且领取前可覆盖提交，免审任务直接 COMPLETED；稳定 current 文件原子替换；驳回保留原采集员；释放清当前结果但保留提交/操作历史；提交/释放成功后的旧文件和 metadata 清理持久化并可由 operation 重放/启动恢复重试
+数据一致性要求：operationId 绑定操作者并返回首次结果；每次提交均核对参考音视频时长，不存在的参考源必须为 0，存在的参考源必须为正数；首次提交保存基准值，后续误差不超过 1000 毫秒时沿用基准，超过时拒绝；人工审核任务提交到 SUBMITTED 且领取前可覆盖提交，免审任务直接 COMPLETED；稳定 current 文件原子替换；驳回保留原采集员；释放清当前结果、当前 assignment 的统计锚点与采集员归属，但保留提交/操作历史；提交/释放成功后的旧文件和 metadata 清理持久化并可由 operation 重放/启动恢复重试
 前端调用位置：apps/miniprogram/pages/work/*、apps/web/src/pages/admin/review/*
+```
+
+```text
+请求方法：GET
+请求路径：/api/reports/me/tasks、/api/reports/me/tasks/{taskId}、/api/reports/me/tasks/{taskId}/submissions
+请求参数：任务列表无业务参数；任务汇总使用 taskId；完整提交记录使用 taskId、page、size
+响应结构：任务列表 {items:[{taskId,taskCode,taskName,latestSubmittedAt}]}；任务汇总 {taskId,taskCode,taskName,summary,days,recentSubmissions}，summary 含 submissionCount、completedCount、recordingDurationMillis、referenceAudioDurationMillis、referenceVideoDurationMillis，days 按日期倒序且不含每日完成数，recentSubmissions 固定最近 3 条；完整记录返回分页结构
+错误码：404 REPORT_TASK_NOT_FOUND
+权限要求：仅当前 COLLECTOR 小程序 Bearer
+数据一致性要求：直接聚合 task_items 当前数据库快照，仅统计仍属于当前采集员且具有 firstSubmittedAt 的当前 assignment；同一条目在一个 assignment 内只计 1 条，返修和覆盖提交不重复增加；当前结果录音时长始终取最新值，COMPLETED 时即最终值；参考音视频分别统计，无对应媒体时为 0；管理员释放回 AVAILABLE 后该条目立即退出原采集员统计，历史 submissions/operations 不删除；任务列表和提交明细均按 latestSubmittedAt 倒序
+前端调用位置：apps/miniprogram/pages/statistics/*、apps/miniprogram/pages/submission-records/*
 ```
 
 ```text
@@ -636,13 +647,13 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 
 ```text
 集合名称：task_items
-字段名称：taskId、sequence、itemCode、creationOperationId、status、collectorId、reviewerId、assignmentId、reviewAssignmentId、revision、参考字段、currentResult、currentRejection、submissions（含提交时 collectorId）、operations、discardedPreviousStatus、createdAt、updatedAt
+字段名称：taskId、sequence、itemCode、creationOperationId、status、collectorId、reviewerId、assignmentId、reviewAssignmentId、revision、参考字段、referenceAudioDurationMillis、referenceVideoDurationMillis、firstSubmittedAt、latestSubmittedAt、currentResult、currentRejection、submissions（含提交时 collectorId）、operations、discardedPreviousStatus、createdAt、updatedAt
 字段类型：字符串、枚举、数值、嵌套文档、数组、UTC Instant
 默认值：新条目 AVAILABLE、revision=0、历史数组为空
 唯一约束：(taskId,itemCode)；creationOperationId 存在时任务内唯一；普通 RECORDING_PENDING 与 REWORK_PENDING 均不设采集员持有数量唯一约束
 索引：上述业务唯一索引；(taskId,status,sequence) 领取索引；(collectorId,status)；普通查询索引 (collectorId,taskId,status)
-数据兼容策略：条目通过 taskId 读取已冻结任务配置；当前结果可替换/清除，提交与操作历史只追加
-迁移步骤：应用启动时先确保普通索引 `collector_task_status` 创建成功，再幂等删除旧 `unique_collector_recording_pending` 与 `unique_collector_task_recording_pending`；失败则终止启动，不改写现有条目
+数据兼容策略：条目通过 taskId 读取已冻结任务配置；当前结果可替换/清除，提交与操作历史只追加；个人统计只读当前 assignment 字段，不回扫历史 submissions
+迁移步骤：本轮按已确认方案不兼容旧统计数据，更新后重置数据库；应用启动时仍先确保普通索引 `collector_task_status` 创建成功，再幂等删除旧 `unique_collector_recording_pending` 与 `unique_collector_task_recording_pending`，失败则终止启动
 回滚方式：备份集合与本地媒体；恢复任一旧唯一索引前必须先处理与其口径冲突的多条普通 RECORDING_PENDING，否则索引无法重建；不得只回滚 Mongo 或只回滚文件
 ```
 

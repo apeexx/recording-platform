@@ -1,0 +1,33 @@
+<view class="page statistics-page">
+  <view wx:if="{{loading&&!report}}" class="empty">正在加载任务统计…</view>
+  <view wx:elif="{{loadError&&!report}}" class="empty"><view>{{loadError}}</view><button class="button" bindtap="loadTasks">重新加载</button></view>
+  <view wx:elif="{{!tasks.length}}" class="empty">暂无可统计的提交数据</view>
+  <block wx:else>
+    <view class="card report-heading">
+      <view class="eyebrow">当前任务</view>
+      <picker mode="selector" range="{{taskNames}}" value="{{selectedTaskIndex}}" bindchange="taskChange">
+        <view class="task-picker">{{taskNames[selectedTaskIndex]}}<text>⌄</text></view>
+      </picker>
+    </view>
+    <view class="metric-grid">
+      <view class="card metric-card primary"><view class="metric">{{report.summary.submissionCount||0}}</view><view class="metric-label">提交条数</view></view>
+      <view class="card metric-card primary"><view class="metric">{{report.summary.completedCount||0}}</view><view class="metric-label">完成条数</view></view>
+      <view class="card metric-card"><view class="metric metric-duration">{{report.summary.recordingDurationText}}</view><view class="metric-label">录音时长</view></view>
+      <view class="card metric-card"><view class="metric metric-duration">{{report.summary.referenceAudioDurationText}}</view><view class="metric-label">参考音频时长</view></view>
+      <view class="card metric-card wide"><view class="metric metric-duration">{{report.summary.referenceVideoDurationText}}</view><view class="metric-label">参考视频时长</view></view>
+    </view>
+    <view class="section-heading"><view class="section-title">每日提交</view><view class="subtle">按首次提交日期统计</view></view>
+    <view wx:if="{{!report.days.length}}" class="card empty compact">暂无每日数据</view>
+    <view wx:for="{{report.days}}" wx:key="date" class="card day-card">
+      <view class="day-top"><view class="day-date">{{item.date}}</view><view class="day-count">{{item.submissionCount}} 条</view></view>
+      <view class="day-metrics"><text>录音 {{item.recordingDurationText}}</text><text>音频源 {{item.referenceAudioDurationText}}</text><text>视频源 {{item.referenceVideoDurationText}}</text></view>
+    </view>
+    <view class="section-heading recent-heading"><view class="section-title">最近提交</view><view class="more-link" bindtap="openMore">更多 ›</view></view>
+    <view wx:if="{{!report.recentSubmissions.length}}" class="card empty compact">暂无提交记录</view>
+    <view wx:for="{{report.recentSubmissions}}" wx:key="itemId" class="card submission-card" data-item-id="{{item.itemId}}" bindtap="openSubmission">
+      <view class="submission-top"><view class="submission-code">{{item.itemCode}}</view><view class="tag">{{item.statusText}}</view></view>
+      <view class="subtle">最新提交：{{item.latestSubmittedAtText}}</view>
+      <view class="chevron">›</view>
+    </view>
+  </block>
+</view>

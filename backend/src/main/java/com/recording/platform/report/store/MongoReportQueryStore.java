@@ -3,6 +3,11 @@ package com.recording.platform.report.store;
 import com.recording.platform.report.dto.SubmissionView;
 import com.recording.platform.report.dto.WorkSummary;
 import com.recording.platform.report.dto.ReviewerSummary;
+import com.recording.platform.report.dto.CollectorReportTask;
+import com.recording.platform.report.dto.CollectorTaskDaySummary;
+import com.recording.platform.report.dto.CollectorTaskReport;
+import com.recording.platform.report.dto.CollectorTaskReportItem;
+import com.recording.platform.report.dto.CollectorTaskReportSummary;
 import com.recording.platform.task.model.TaskItemStatus;
 import com.mongodb.client.MongoCollection;
 import java.time.Instant;
@@ -11,6 +16,8 @@ import java.util.Date;
 import java.util.List;
 import java.util.ArrayDeque;
 import java.time.Duration;
+import java.time.LocalDate;
+import java.util.Optional;
 import org.bson.Document;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -21,9 +28,11 @@ import org.springframework.stereotype.Repository;
 @Repository
 public class MongoReportQueryStore implements ReportQueryStore {
 	private final MongoCollection<Document> items;
+	private final MongoCollection<Document> tasks;
 
 	public MongoReportQueryStore(MongoTemplate mongoTemplate) {
 		this.items = mongoTemplate.getCollection("task_items");
+		this.tasks = mongoTemplate.getCollection("tasks");
 	}
 
 	@Override
@@ -142,6 +151,173 @@ public class MongoReportQueryStore implements ReportQueryStore {
 			}
 		}
 		return new ReviewerSummary(claims, releases, approvals, rejections, decisions == 0 ? 0 : duration / decisions);
+	}
+
+	@Override
+	public List<CollectorReportTask> findCollectorTasks(String collectorId) {
+		List<Document> pipeline = List.of(
+			new Document("$match", collectorMatch(collectorId, null)),
+			new Document("$group", new Document("_id", "$taskId")
+				.append("latestSubmittedAt", new Document("$max", "$latestSubmittedAt"))),
+			new Document("$sort", new Document("latestSubmittedAt", -1).append("_id", 1)),
+			new Document("$lookup", new Document("from", "tasks")
+				.append("localField", "_id").append("foreignField", "_id").append("as", "task")),
+			new Document("$unwind", "$task"),
+			new Document("$project", new Document("_id", 0)
+				.append("taskId", "$_id")
+				.append("taskCode", "$task.taskCode")
+				.append("taskName", "$task.name")
+				.append("latestSubmittedAt", 1))
+		);
+		List<CollectorReportTask> result = new ArrayList<>();
+		for (Document row : items.aggregate(pipeline)) {
+			result.add(new CollectorReportTask(
+				row.getString("taskId"), row.getString("taskCode"), row.getString("taskName"),
+				instant(row.get("latestSubmittedAt"))
+			));
+		}
+		return List.copyOf(result);
+	}
+
+	@Override
+	public Optional<CollectorTaskReport> collectorTaskReport(String collectorId, String taskId) {
+		Document task = tasks.find(new Document("_id", taskId)).first();
+		if (task == null) return Optional.empty();
+		Document summaryRow = items.aggregate(List.of(
+			new Document("$match", collectorMatch(collectorId, taskId)),
+			new Document("$group", new Document("_id", null)
+				.append("submissionCount", new Document("$sum", 1))
+				.append("completedCount", new Document("$sum", new Document("$cond", List.of(
+					new Document("$eq", List.of("$status", "COMPLETED")), 1, 0
+				))))
+				.append("recordingDurationMillis", new Document("$sum", new Document(
+					"$ifNull", List.of("$currentResult.audio.durationMillis", 0)
+				)))
+				.append("referenceAudioDurationMillis", new Document("$sum", new Document(
+					"$ifNull", List.of("$referenceAudioDurationMillis", 0)
+				)))
+				.append("referenceVideoDurationMillis", new Document("$sum", new Document(
+					"$ifNull", List.of("$referenceVideoDurationMillis", 0)
+				))))
+		)).first();
+		if (summaryRow == null) return Optional.empty();
+
+		List<Document> dayPipeline = List.of(
+			new Document("$match", collectorMatch(collectorId, taskId)),
+			new Document("$project", new Document()
+				.append("date", new Document("$dateToString", new Document()
+					.append("format", "%Y-%m-%d")
+					.append("date", "$firstSubmittedAt")
+					.append("timezone", "Asia/Shanghai")))
+				.append("recordingDurationMillis", new Document(
+					"$ifNull", List.of("$currentResult.audio.durationMillis", 0)
+				))
+				.append("referenceAudioDurationMillis", new Document(
+					"$ifNull", List.of("$referenceAudioDurationMillis", 0)
+				))
+				.append("referenceVideoDurationMillis", new Document(
+					"$ifNull", List.of("$referenceVideoDurationMillis", 0)
+				))),
+			new Document("$group", new Document("_id", "$date")
+				.append("submissionCount", new Document("$sum", 1))
+				.append("recordingDurationMillis", new Document("$sum", "$recordingDurationMillis"))
+				.append("referenceAudioDurationMillis", new Document("$sum", "$referenceAudioDurationMillis"))
+				.append("referenceVideoDurationMillis", new Document("$sum", "$referenceVideoDurationMillis"))),
+			new Document("$sort", new Document("_id", -1))
+		);
+		List<CollectorTaskDaySummary> days = new ArrayList<>();
+		for (Document row : items.aggregate(dayPipeline)) {
+			days.add(new CollectorTaskDaySummary(
+				LocalDate.parse(row.getString("_id")),
+				number(row, "submissionCount"),
+				number(row, "recordingDurationMillis"),
+				number(row, "referenceAudioDurationMillis"),
+				number(row, "referenceVideoDurationMillis")
+			));
+		}
+		List<CollectorTaskReportItem> recent = findCollectorTaskSubmissions(
+			collectorId, taskId, Pageable.ofSize(3)
+		).getContent();
+		return Optional.of(new CollectorTaskReport(
+			taskId,
+			task.getString("taskCode"),
+			task.getString("name"),
+			new CollectorTaskReportSummary(
+				number(summaryRow, "submissionCount"),
+				number(summaryRow, "completedCount"),
+				number(summaryRow, "recordingDurationMillis"),
+				number(summaryRow, "referenceAudioDurationMillis"),
+				number(summaryRow, "referenceVideoDurationMillis")
+			),
+			List.copyOf(days),
+			List.copyOf(recent)
+		));
+	}
+
+	@Override
+	public Page<CollectorTaskReportItem> findCollectorTaskSubmissions(
+		String collectorId, String taskId, Pageable pageable
+	) {
+		Document match = collectorMatch(collectorId, taskId);
+		List<Document> pagePipeline = new ArrayList<>();
+		pagePipeline.add(new Document("$match", match));
+		pagePipeline.add(new Document("$sort", new Document("latestSubmittedAt", -1).append("itemCode", 1)));
+		pagePipeline.add(new Document("$skip", pageable.getOffset()));
+		pagePipeline.add(new Document("$limit", pageable.getPageSize()));
+		pagePipeline.add(new Document("$project", new Document()
+			.append("itemId", "$_id")
+			.append("itemCode", 1)
+			.append("firstSubmittedAt", 1)
+			.append("latestSubmittedAt", 1)
+			.append("currentItemStatus", "$status")
+			.append("recordingDurationMillis", new Document(
+				"$ifNull", List.of("$currentResult.audio.durationMillis", 0)
+			))
+			.append("referenceAudioDurationMillis", new Document(
+				"$ifNull", List.of("$referenceAudioDurationMillis", 0)
+			))
+			.append("referenceVideoDurationMillis", new Document(
+				"$ifNull", List.of("$referenceVideoDurationMillis", 0)
+			))
+			.append("textPresent", new Document("$and", List.of(
+				new Document("$ne", java.util.Arrays.asList(
+					new Document("$ifNull", java.util.Arrays.asList("$currentResult.text", null)), null
+				)),
+				new Document("$ne", List.of("$currentResult.text", ""))
+			)))
+			.append("audioPresent", new Document("$ne", java.util.Arrays.asList(
+				new Document("$ifNull", java.util.Arrays.asList("$currentResult.audio", null)), null
+			)))));
+		List<CollectorTaskReportItem> result = new ArrayList<>();
+		for (Document row : items.aggregate(pagePipeline)) result.add(collectorTaskItem(row));
+		Document count = items.aggregate(List.of(
+			new Document("$match", match),
+			new Document("$count", "total")
+		)).first();
+		return new PageImpl<>(result, pageable, count == null ? 0 : number(count, "total"));
+	}
+
+	private Document collectorMatch(String collectorId, String taskId) {
+		Document match = new Document("collectorId", collectorId)
+			.append("firstSubmittedAt", new Document("$exists", true))
+			.append("status", new Document("$nin", List.of("AVAILABLE", "DISCARDED")));
+		if (taskId != null) match.append("taskId", taskId);
+		return match;
+	}
+
+	private CollectorTaskReportItem collectorTaskItem(Document row) {
+		return new CollectorTaskReportItem(
+			String.valueOf(row.get("itemId")),
+			row.getString("itemCode"),
+			instant(row.get("firstSubmittedAt")),
+			instant(row.get("latestSubmittedAt")),
+			TaskItemStatus.valueOf(row.getString("currentItemStatus")),
+			number(row, "recordingDurationMillis"),
+			number(row, "referenceAudioDurationMillis"),
+			number(row, "referenceVideoDurationMillis"),
+			Boolean.TRUE.equals(row.getBoolean("textPresent")),
+			Boolean.TRUE.equals(row.getBoolean("audioPresent"))
+		);
 	}
 
 	private Document countType(Document source, String type) {

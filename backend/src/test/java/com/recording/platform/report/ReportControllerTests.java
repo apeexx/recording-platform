@@ -38,6 +38,30 @@ class ReportControllerTests {
 		assertThat(controller.mySubmissions(0, 20, admin)).isSameAs(page);
 	}
 
+	@Test
+	void exposesCollectorTaskDashboardAndSubmissionPagination() {
+		ReportService service = mock(ReportService.class);
+		ReportController controller = new ReportController(service);
+		PlatformPrincipal collector = new PlatformPrincipal(
+			"s", "collector-1", null, "采集员", UserRole.COLLECTOR, SessionType.MINIPROGRAM, false
+		);
+		var tasks = new com.recording.platform.report.dto.CollectorReportTaskList(List.of());
+		var report = new com.recording.platform.report.dto.CollectorTaskReport(
+			"task-1", "T000001", "普通话录音",
+			new com.recording.platform.report.dto.CollectorTaskReportSummary(0, 0, 0, 0, 0),
+			List.of(), List.of()
+		);
+		PageResponse<com.recording.platform.report.dto.CollectorTaskReportItem> page =
+			new PageResponse<>(List.of(), 0, 20, 0);
+		when(service.myTasks(collector)).thenReturn(tasks);
+		when(service.myTask("task-1", collector)).thenReturn(report);
+		when(service.myTaskSubmissions("task-1", 0, 20, collector)).thenReturn(page);
+
+		assertThat(controller.myTasks(collector)).isSameAs(tasks);
+		assertThat(controller.myTask("task-1", collector)).isSameAs(report);
+		assertThat(controller.myTaskSubmissions("task-1", 0, 20, collector)).isSameAs(page);
+	}
+
 	private PlatformPrincipal admin() {
 		return new PlatformPrincipal("s", "admin-1", "admin", "管理员", UserRole.ADMIN, SessionType.WEB, false);
 	}

@@ -2,8 +2,10 @@
   "pages": [
     "pages/login/index",
     "pages/tasks/index",
-	"pages/work-list/index",
+    "pages/work-list/index",
     "pages/work/index",
+    "pages/statistics/index",
+    "pages/submission-records/index",
     "pages/profile/index",
     "pages/profile-settings/index"
   ],
@@ -19,6 +21,7 @@
     "backgroundColor": "#ffffff",
     "list": [
       {"pagePath": "pages/tasks/index", "text": "任务", "iconPath": "assets/tabbar/tasks.png", "selectedIconPath": "assets/tabbar/tasks-active.png"},
+      {"pagePath": "pages/statistics/index", "text": "统计", "iconPath": "assets/tabbar/statistics.png", "selectedIconPath": "assets/tabbar/statistics-active.png"},
       {"pagePath": "pages/profile/index", "text": "我的", "iconPath": "assets/tabbar/profile.png", "selectedIconPath": "assets/tabbar/profile-active.png"}
     ]
   },

@@ -8,9 +8,12 @@
         <view class="status-actions"><view class="tag">{{statusText}}</view><button wx:if="{{canRelease}}" class="trash-button" loading="{{releasing}}" aria-label="释放任务" bindtap="release"><image src="../../assets/icons/iconfont/trash.svg" mode="aspectFit" /></button></view>
       </view>
       <view wx:if="{{item.currentRejection}}" class="rejection-box"><text>驳回原因：</text><text wx:for="{{item.currentRejection.reasons}}" wx:key="*this">{{item}} </text><text>{{item.currentRejection.note}}</text></view>
-      <view wx:if="{{item.referenceText}}" class="reference-text">{{item.referenceText}}</view>
-      <audio-player wx:if="{{referenceAudioPath}}" class="reference-player" src="{{referenceAudioPath}}" label="参考音频" duration-millis="0" binderror="referenceAudioPlaybackError" />
-      <video wx:if="{{referenceVideoPath}}" class="media" src="{{referenceVideoPath}}" controls binderror="videoPlaybackError" />
+      <view wx:if="{{item.referenceText}}" class="reference-copy">
+        <view class="reference-copy-header"><view class="section-title">参考文本</view><button class="copy-reference-button" bindtap="copyReferenceText">复制全文</button></view>
+        <text class="reference-text" user-select="true">{{item.referenceText}}</text>
+      </view>
+      <audio-player wx:if="{{referenceAudioPath}}" class="reference-player" src="{{referenceAudioPath}}" label="参考音频" duration-millis="0" binddurationchange="referenceAudioDurationChange" binderror="referenceAudioPlaybackError" />
+      <video wx:if="{{referenceVideoPath}}" class="media" src="{{referenceVideoPath}}" controls bindloadedmetadata="referenceVideoLoadedMetadata" binderror="videoPlaybackError" />
     </view>
 
     <view wx:if="{{editable}}" class="card recorder-card">
