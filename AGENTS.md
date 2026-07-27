@@ -409,7 +409,7 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 ```text
 请求方法：POST
 请求路径：/api/task-items/{itemId}/submit、/release、/reject
-请求参数：submit multipart operationId、assignmentId、expectedRevision、text?、audio?、referenceAudioDurationMillis、referenceVideoDurationMillis；release/reject JSON operationId、expectedRevision，reject 另含 reason
+请求参数：submit 在包含录音时使用 multipart operationId、assignmentId、expectedRevision、text?、audio、referenceAudioDurationMillis、referenceVideoDurationMillis；纯文本提交在同一路径使用 application/json，字段相同但不含 audio；release/reject JSON operationId、expectedRevision，reject 另含 reason
 响应结构：{itemId,status,revision,assignmentId,result}
 错误码：409 STALE_STATE/REFERENCE_DURATION_MISMATCH；413 UPLOAD_TOO_LARGE；422 录音格式/采样率/声道/时长/驳回原因错误，以及 REFERENCE_DURATION_REQUIRED/REFERENCE_DURATION_NOT_APPLICABLE
 权限要求：submit/release 仅当前 COLLECTOR（ADMIN 也可 release）；reject 仅 ADMIN/REVIEWER
@@ -424,7 +424,7 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 响应结构：任务列表 {items:[{taskId,taskCode,taskName,latestSubmittedAt}]}；任务汇总 {taskId,taskCode,taskName,summary,days,recentSubmissions}，summary 含 submissionCount、completedCount、recordingDurationMillis、referenceAudioDurationMillis、referenceVideoDurationMillis，days 按日期倒序且不含每日完成数，recentSubmissions 固定最近 3 条；完整记录返回分页结构
 错误码：404 REPORT_TASK_NOT_FOUND
 权限要求：仅当前 COLLECTOR 小程序 Bearer
-数据一致性要求：直接聚合 task_items 当前数据库快照，仅统计仍属于当前采集员且具有 firstSubmittedAt 的当前 assignment；同一条目在一个 assignment 内只计 1 条，返修和覆盖提交不重复增加；当前结果录音时长始终取最新值，COMPLETED 时即最终值；参考音视频分别统计，无对应媒体时为 0；管理员释放回 AVAILABLE 后该条目立即退出原采集员统计，历史 submissions/operations 不删除；任务列表和提交明细均按 latestSubmittedAt 倒序
+数据一致性要求：直接聚合 task_items 当前数据库快照，仅统计仍属于当前采集员且具有 firstSubmittedAt 的当前 assignment；同一条目在一个 assignment 内只计 1 条，返修和覆盖提交不重复增加；当前结果录音时长始终取最新值，COMPLETED 时即最终值；参考音视频分别统计，无对应媒体时为 0；管理员释放回 AVAILABLE 后该条目立即退出原采集员统计，历史 submissions/operations 不删除；任务列表和提交明细均按 latestSubmittedAt 倒序；Mongo 原始查询必须将 task_items 中的字符串 taskId 转换为 tasks 集合实际使用的 ObjectId 后读取任务资料
 前端调用位置：apps/miniprogram/pages/statistics/*、apps/miniprogram/pages/submission-records/*
 ```
 

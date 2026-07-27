@@ -19,6 +19,7 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.util.Optional;
 import org.bson.Document;
+import org.bson.types.ObjectId;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
@@ -159,20 +160,15 @@ public class MongoReportQueryStore implements ReportQueryStore {
 			new Document("$match", collectorMatch(collectorId, null)),
 			new Document("$group", new Document("_id", "$taskId")
 				.append("latestSubmittedAt", new Document("$max", "$latestSubmittedAt"))),
-			new Document("$sort", new Document("latestSubmittedAt", -1).append("_id", 1)),
-			new Document("$lookup", new Document("from", "tasks")
-				.append("localField", "_id").append("foreignField", "_id").append("as", "task")),
-			new Document("$unwind", "$task"),
-			new Document("$project", new Document("_id", 0)
-				.append("taskId", "$_id")
-				.append("taskCode", "$task.taskCode")
-				.append("taskName", "$task.name")
-				.append("latestSubmittedAt", 1))
+			new Document("$sort", new Document("latestSubmittedAt", -1).append("_id", 1))
 		);
 		List<CollectorReportTask> result = new ArrayList<>();
 		for (Document row : items.aggregate(pipeline)) {
+			String taskId = row.getString("_id");
+			Document task = findTask(taskId);
+			if (task == null) continue;
 			result.add(new CollectorReportTask(
-				row.getString("taskId"), row.getString("taskCode"), row.getString("taskName"),
+				taskId, task.getString("taskCode"), task.getString("name"),
 				instant(row.get("latestSubmittedAt"))
 			));
 		}
@@ -181,7 +177,7 @@ public class MongoReportQueryStore implements ReportQueryStore {
 
 	@Override
 	public Optional<CollectorTaskReport> collectorTaskReport(String collectorId, String taskId) {
-		Document task = tasks.find(new Document("_id", taskId)).first();
+		Document task = findTask(taskId);
 		if (task == null) return Optional.empty();
 		Document summaryRow = items.aggregate(List.of(
 			new Document("$match", collectorMatch(collectorId, taskId)),
@@ -303,6 +299,12 @@ public class MongoReportQueryStore implements ReportQueryStore {
 			.append("status", new Document("$nin", List.of("AVAILABLE", "DISCARDED")));
 		if (taskId != null) match.append("taskId", taskId);
 		return match;
+	}
+
+	private Document findTask(String taskId) {
+		if (taskId == null) return null;
+		Object storedId = ObjectId.isValid(taskId) ? new ObjectId(taskId) : taskId;
+		return tasks.find(new Document("_id", storedId)).first();
 	}
 
 	private CollectorTaskReportItem collectorTaskItem(Document row) {

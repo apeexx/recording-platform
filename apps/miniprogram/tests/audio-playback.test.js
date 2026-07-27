@@ -79,6 +79,49 @@ test('资源可播放后会补齐未知总时长', () => {
 	player.dispose()
 })
 
+test('资源可播放事件过早时会自动重试读取总时长', () => {
+	const context = fakeContext()
+	const states = []
+	const scheduled = []
+	const player = createAudioPlayback({
+		createContext: () => context,
+		onState: state => states.push(state),
+		schedule: callback => { scheduled.push(callback); return callback },
+		cancel: () => {},
+	})
+	player.setSource('/tmp/reference.wav', 0)
+	context.emit('canplay')
+	assert.equal(scheduled.length, 1)
+	assert.equal(states.at(-1).durationMillis, 0)
+	context.duration = 7
+	scheduled.shift()()
+	assert.equal(states.at(-1).durationMillis, 7_000)
+	assert.equal(states.at(-1).timeText, '00:07')
+	player.dispose()
+})
+
+test('切换资源会取消旧资源的时长重试', () => {
+	const context = fakeContext()
+	const scheduled = []
+	const cancelled = []
+	const states = []
+	const player = createAudioPlayback({
+		createContext: () => context,
+		onState: state => states.push(state),
+		schedule: callback => { scheduled.push(callback); return callback },
+		cancel: timer => cancelled.push(timer),
+	})
+	player.setSource('/tmp/first.wav', 0)
+	context.emit('canplay')
+	const staleProbe = scheduled.shift()
+	player.setSource('/tmp/second.wav', 0)
+	assert.deepEqual(cancelled, [staleProbe])
+	context.duration = 9
+	staleProbe()
+	assert.equal(states.at(-1).durationMillis, 0)
+	player.dispose()
+})
+
 test('多个音频实例可以同时播放并转发各自错误', () => {
 	assert.equal(typeof createAudioPlayback, 'function')
 	const firstContext = fakeContext()

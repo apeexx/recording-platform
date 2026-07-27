@@ -76,6 +76,15 @@ public class TaskItemController {
 		);
 	}
 
+	@PostMapping(value = "/{itemId}/submit", consumes = MediaType.APPLICATION_JSON_VALUE)
+	public TaskItemActionResult submitText(
+		@PathVariable String itemId,
+		@Valid @RequestBody SubmitTaskItemRequest request,
+		@AuthenticationPrincipal PlatformPrincipal actor
+	) {
+		return submissions.submit(itemId, request.toForm(), null, actor);
+	}
+
 	@PostMapping("/{itemId}/release")
 	public TaskItemActionResult release(
 		@PathVariable String itemId,

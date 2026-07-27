@@ -52,20 +52,24 @@ function referenceMediaUrl(mediaId) {
 }
 
 function uploadSubmission(itemId, payload) {
-  const formData={operationId:payload.operationId,assignmentId:payload.assignmentId,expectedRevision:String(payload.expectedRevision),text:payload.text||'',referenceAudioDurationMillis:String(payload.referenceAudioDurationMillis||0),referenceVideoDurationMillis:String(payload.referenceVideoDurationMillis||0)}
-  if (!payload.audioPath) return multipartTextSubmit(itemId,formData)
+  const submission={
+    operationId:payload.operationId,
+    assignmentId:payload.assignmentId,
+    expectedRevision:payload.expectedRevision,
+    text:payload.text||'',
+    referenceAudioDurationMillis:Number(payload.referenceAudioDurationMillis)||0,
+    referenceVideoDurationMillis:Number(payload.referenceVideoDurationMillis)||0,
+  }
+  if (!payload.audioPath) return request(`/api/task-items/${encodeURIComponent(itemId)}/submit`,{
+    method:'POST',data:submission,header:{'Content-Type':'application/json'},
+  })
+  const formData=Object.fromEntries(Object.entries(submission).map(([key,value])=>[key,String(value)]))
   return new Promise((resolve,reject)=>wx.uploadFile({
     url:`${config.apiBaseUrl}/api/task-items/${encodeURIComponent(itemId)}/submit`,filePath:payload.audioPath,name:'audio',formData,
     header:{Authorization:`Bearer ${token()}`},
     success:res=>res.statusCode>=200&&res.statusCode<300?resolve(responseData(res)):reject(requestError(res,true)),
     fail:reason=>{const error=new Error(reason.errMsg||'上传失败');error.network=true;reject(error)}
   }))
-}
-
-function multipartTextSubmit(itemId, fields) {
-  const boundary=`----RecordingPlatform${Date.now()}`
-  const body=Object.entries(fields).map(([key,value])=>`--${boundary}\r\nContent-Disposition: form-data; name="${key}"\r\n\r\n${value}\r\n`).join('')+`--${boundary}--\r\n`
-  return request(`/api/task-items/${encodeURIComponent(itemId)}/submit`,{method:'POST',data:body,header:{'Content-Type':`multipart/form-data; boundary=${boundary}`}})
 }
 
 module.exports = {

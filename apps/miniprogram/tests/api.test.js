@@ -59,6 +59,24 @@ test('历史参考媒体生成无需鉴权头的公网播放地址', () => {
   )
 })
 
+test('纯文本提交使用 JSON 而不是手工 multipart', async () => {
+  let captured
+  const api = loadApi({
+    getStorageSync: () => ({token:'opaque-token'}),
+    request: options => { captured=options;options.success({statusCode:200,data:{status:'COMPLETED'}}) }
+  })
+  await api.submit('item-1', {
+    operationId:'submit-1', assignmentId:'assignment-1', expectedRevision:2,
+    text:'纯文本结果', referenceAudioDurationMillis:15000, referenceVideoDurationMillis:0,
+  })
+  assert.equal(captured.method, 'POST')
+  assert.equal(captured.header['Content-Type'], 'application/json')
+  assert.deepEqual(captured.data, {
+    operationId:'submit-1', assignmentId:'assignment-1', expectedRevision:2,
+    text:'纯文本结果', referenceAudioDurationMillis:15000, referenceVideoDurationMillis:0,
+  })
+})
+
 test('自定义头像通过鉴权上传到后端持久化', async () => {
   let captured
   const api=loadApi({getStorageSync:()=>({token:'opaque-token'}),uploadFile:options=>{captured=options;options.success({statusCode:200,data:'{"hasCustomAvatar":true}'})}})

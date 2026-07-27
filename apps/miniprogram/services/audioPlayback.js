@@ -3,13 +3,23 @@ function formatDuration(milliseconds) {
 	return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
 }
 
-function createAudioPlayback({ createContext, onState = () => {}, onError = () => {} } = {}) {
+function createAudioPlayback({
+	createContext,
+	onState = () => {},
+	onError = () => {},
+	schedule = (callback, delay) => setTimeout(callback, delay),
+	cancel = timer => clearTimeout(timer),
+} = {}) {
 	const context = createContext()
+	const durationProbeDelays = [80, 160, 320, 640, 1000]
 	let source = ''
 	let durationMillis = 0
 	let currentMillis = 0
 	let playing = false
 	let disposed = false
+	let sourceVersion = 0
+	let durationProbeTimer = null
+	let durationProbeAttempt = 0
 
 	function emit() {
 		const progress = durationMillis > 0 ? Math.min(100, Math.max(0, currentMillis / durationMillis * 100)) : 0
@@ -22,9 +32,38 @@ function createAudioPlayback({ createContext, onState = () => {}, onError = () =
 		})
 	}
 
+	function cancelDurationProbe() {
+		if (durationProbeTimer !== null) cancel(durationProbeTimer)
+		durationProbeTimer = null
+		durationProbeAttempt = 0
+	}
+
+	function readMeasuredDuration() {
+		const measuredDuration = Math.max(0, (Number(context.duration) || 0) * 1000)
+		if (measuredDuration <= 0) return false
+		durationMillis = measuredDuration
+		cancelDurationProbe()
+		emit()
+		return true
+	}
+
+	function scheduleDurationProbe(version) {
+		if (disposed || !source || durationProbeTimer !== null
+			|| durationProbeAttempt >= durationProbeDelays.length) return
+		const delay = durationProbeDelays[durationProbeAttempt]
+		durationProbeAttempt += 1
+		durationProbeTimer = schedule(() => {
+			durationProbeTimer = null
+			if (disposed || version !== sourceVersion) return
+			if (!readMeasuredDuration()) scheduleDurationProbe(version)
+		}, delay)
+	}
+
 	const player = {
 		setSource(nextSource, nextDurationMillis = 0) {
 			if (disposed) return
+			cancelDurationProbe()
+			sourceVersion += 1
 			if (source) context.pause()
 			source = nextSource || ''
 			durationMillis = Math.max(0, Number(nextDurationMillis) || 0)
@@ -52,6 +91,8 @@ function createAudioPlayback({ createContext, onState = () => {}, onError = () =
 		dispose() {
 			if (disposed) return
 			disposed = true
+			cancelDurationProbe()
+			sourceVersion += 1
 			context.destroy()
 		},
 	}
@@ -68,16 +109,15 @@ function createAudioPlayback({ createContext, onState = () => {}, onError = () =
 	})
 	context.onCanplay(() => {
 		if (disposed) return
-		const measuredDuration = Math.max(0, (Number(context.duration) || 0) * 1000)
-		if (measuredDuration > 0) durationMillis = measuredDuration
-		emit()
+		if (!readMeasuredDuration()) {
+			emit()
+			scheduleDurationProbe(sourceVersion)
+		}
 	})
 	context.onTimeUpdate(() => {
 		if (disposed) return
 		currentMillis = Math.max(0, (Number(context.currentTime) || 0) * 1000)
-		const measuredDuration = Math.max(0, (Number(context.duration) || 0) * 1000)
-		if (measuredDuration > 0) durationMillis = measuredDuration
-		emit()
+		if (!readMeasuredDuration()) emit()
 	})
 	context.onEnded(() => {
 		if (disposed) return

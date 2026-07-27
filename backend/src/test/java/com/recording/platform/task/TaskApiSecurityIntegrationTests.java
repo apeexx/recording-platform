@@ -27,6 +27,7 @@ import com.recording.platform.importing.TaskItemActionService;
 import com.recording.platform.importing.TaskItemCreationService;
 import com.recording.platform.importing.TaskItemSourceBinding;
 import com.recording.platform.importing.TaskItemSubmissionService;
+import com.recording.platform.importing.SubmitTaskItemForm;
 import com.recording.platform.security.PlatformPrincipal;
 import com.recording.platform.task.model.ImportJob;
 import com.recording.platform.task.model.ImportJobStatus;
@@ -66,6 +67,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -383,6 +385,45 @@ class TaskApiSecurityIntegrationTests {
 				.with(csrf()))
 			.andExpect(status().isAccepted())
 			.andExpect(jsonPath("$.importJobId").value(job.getId()));
+	}
+
+	@Test
+	void textOnlySubmissionAcceptsJsonOnTheSameEndpoint() throws Exception {
+		PlatformPrincipal collector = principal("collector-1", UserRole.COLLECTOR, SessionType.MINIPROGRAM);
+		TaskItemActionResult submitted = new TaskItemActionResult(
+			"item-1", TaskItemStatus.COMPLETED, 2, "assignment-1", null
+		);
+		when(submissionService.submit(anyString(), any(), any(), any())).thenReturn(submitted);
+		ArgumentCaptor<SubmitTaskItemForm> form = ArgumentCaptor.forClass(SubmitTaskItemForm.class);
+
+		mockMvc.perform(post("/api/task-items/item-1/submit")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+					{
+					  "operationId": "submit-json-1",
+					  "assignmentId": "assignment-1",
+					  "expectedRevision": 1,
+					  "text": "纯文本结果",
+					  "referenceAudioDurationMillis": 15000,
+					  "referenceVideoDurationMillis": 0
+					}
+					""")
+				.with(authentication(new TestingAuthenticationToken(collector, null, "ROLE_COLLECTOR")))
+				.header(HttpHeaders.AUTHORIZATION, "Bearer test-miniprogram-token"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.status").value("COMPLETED"));
+
+		verify(submissionService).submit(eq("item-1"), form.capture(), isNull(), eq(collector));
+		org.assertj.core.api.Assertions.assertThat(form.getValue())
+			.extracting(
+				SubmitTaskItemForm::operationId,
+				SubmitTaskItemForm::assignmentId,
+				SubmitTaskItemForm::expectedRevision,
+				SubmitTaskItemForm::text,
+				SubmitTaskItemForm::referenceAudioDurationMillis,
+				SubmitTaskItemForm::referenceVideoDurationMillis
+			)
+			.containsExactly("submit-json-1", "assignment-1", 1L, "纯文本结果", 15_000L, 0L);
 	}
 
 	@Test
