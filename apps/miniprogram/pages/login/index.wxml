@@ -17,7 +17,7 @@
     <view class="switch" bindtap="switchMode">{{mode==='wechat'?'切换账号登录':'切换微信登录'}} ›</view>
   </view>
   <view class="audience-notice">
-    <view class="audience-notice-title">内部使用说明</view>
-    <view class="audience-notice-copy">本小程序仅面向重庆砚数科技有限公司内部员工及经授权的录音采集人员，用于领取、录制和提交语音数据采集任务。首次使用请在项目管理员安排下登录并完善资料；未受邀人员请勿登录或提交个人信息。</view>
+    <view class="audience-notice-title">账号使用与鉴权说明</view>
+    <view class="audience-notice-copy">本小程序为重庆砚数科技有限公司内部业务工具，不面向公众开放注册，仅限本公司内部员工及经项目管理员邀请、授权的录音采集人员使用。登录时系统将核验微信身份或数字账号，进入录音任务前还会核验对应任务授权；未通过身份或任务授权核验的人员无法领取、录制或提交任务。未获邀请或授权的人员请勿登录或提交个人信息。</view>
   </view>
 </view>
