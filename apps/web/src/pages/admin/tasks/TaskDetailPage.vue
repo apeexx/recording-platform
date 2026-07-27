@@ -346,10 +346,10 @@ onBeforeUnmount(stopImportTracking)
           <AsyncState :loading="false" :error="''" :empty="!items.length">
             <div class="business-table-wrap">
               <table class="business-table">
-                <thead><tr><th>选择</th><th>编号</th><th>状态</th><th>采集员</th><th>结果</th><th>操作</th></tr></thead>
+                <thead><tr><th>选择</th><th>编号</th><th>状态</th><th>采集员 ID</th><th>采集员姓名</th><th>结果</th><th>操作</th></tr></thead>
                 <tbody><tr v-for="row in items" :key="row.id">
                   <td><label class="business-check colored-checkbox"><input type="checkbox" :checked="selected.has(row.id)" :aria-label="`选择 ${row.itemCode}`" @change="toggle(row)"><span class="visually-hidden">选择</span></label></td>
-                  <td>{{ row.itemCode }}</td><td>{{ statusLabel('item', row.status) }}</td><td>{{ row.collectorId || '-' }}</td>
+                  <td>{{ row.itemCode }}</td><td>{{ statusLabel('item', row.status) }}</td><td>{{ row.collectorId || '-' }}</td><td>{{ row.collectorName || '-' }}</td>
                   <td>{{ row.currentResult?.audio?.durationMillis ? `${Math.round(row.currentResult.audio.durationMillis / 1000)}秒` : row.currentResult?.text ? '文本' : '-' }}</td>
                   <td class="table-actions">
                     <template v-if="row.status === 'AVAILABLE'">

@@ -2,6 +2,7 @@ import { httpRequest } from './httpClient.js'
 import { queryString } from './apiUtils.js'
 export const reportApi = {
   tasks(params = {}) { return httpRequest(`/api/reports/tasks${queryString(params)}`) },
+  taskCollectors(taskId, params = {}) { return httpRequest(`/api/reports/tasks/${encodeURIComponent(taskId)}/collectors${queryString(params)}`) },
   collectors(params = {}) { return httpRequest(`/api/reports/collectors${queryString(params)}`) },
   reviewers(params = {}) { return httpRequest(`/api/reports/reviewers${queryString(params)}`) },
   me(params = {}) { return httpRequest(`/api/reports/me${queryString(params)}`) },

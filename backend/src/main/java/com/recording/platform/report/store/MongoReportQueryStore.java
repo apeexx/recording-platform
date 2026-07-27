@@ -8,6 +8,7 @@ import com.recording.platform.report.dto.CollectorTaskDaySummary;
 import com.recording.platform.report.dto.CollectorTaskReport;
 import com.recording.platform.report.dto.CollectorTaskReportItem;
 import com.recording.platform.report.dto.CollectorTaskReportSummary;
+import com.recording.platform.report.dto.CollectorRankingRow;
 import com.recording.platform.task.model.TaskItemStatus;
 import com.mongodb.client.MongoCollection;
 import java.time.Instant;
@@ -38,6 +39,13 @@ public class MongoReportQueryStore implements ReportQueryStore {
 
 	@Override
 	public WorkSummary aggregateWork(String collectorId, String taskId) {
+		return aggregateWork(collectorId, taskId, null, null);
+	}
+
+	@Override
+	public WorkSummary aggregateWork(
+		String collectorId, String taskId, Instant fromInclusive, Instant toExclusive
+	) {
 		List<Document> pipeline = new ArrayList<>();
 		Document match = new Document();
 		if (collectorId != null) match.append("$or", List.of(
@@ -46,6 +54,7 @@ public class MongoReportQueryStore implements ReportQueryStore {
 			new Document("operations.actorUserId", collectorId)
 		));
 		if (taskId != null) match.append("taskId", taskId);
+		appendDateRange(match, "firstSubmittedAt", fromInclusive, toExclusive);
 		if (!match.isEmpty()) pipeline.add(new Document("$match", match));
 		Document allSubmissions = new Document("$ifNull", List.of("$submissions", List.of()));
 		Document submissions = collectorId == null ? allSubmissions
@@ -69,6 +78,24 @@ public class MongoReportQueryStore implements ReportQueryStore {
 			.append("currentDuration", new Document("$cond", List.of(
 				completedCondition(collectorId),
 				new Document("$ifNull", List.of("$currentResult.audio.durationMillis", 0)), 0)))
+			.append("effectiveSubmission", new Document("$cond", List.of(effectiveCondition(collectorId), 1, 0)))
+			.append("effectiveCompleted", new Document("$cond", List.of(
+				new Document("$and", List.of(
+					effectiveCondition(collectorId), new Document("$eq", List.of("$status", "COMPLETED"))
+				)), 1, 0
+			)))
+			.append("effectiveRecordingDuration", new Document("$cond", List.of(
+				effectiveCondition(collectorId),
+				new Document("$ifNull", List.of("$currentResult.audio.durationMillis", 0)), 0
+			)))
+			.append("referenceAudioDuration", new Document("$cond", List.of(
+				effectiveCondition(collectorId),
+				new Document("$ifNull", List.of("$referenceAudioDurationMillis", 0)), 0
+			)))
+			.append("referenceVideoDuration", new Document("$cond", List.of(
+				effectiveCondition(collectorId),
+				new Document("$ifNull", List.of("$referenceVideoDurationMillis", 0)), 0
+			)))
 			.append("releaseCount", countType(operations, "RELEASE"))
 			.append("discardCount", countType(operations, "ADMIN_DISCARD"))));
 		pipeline.add(new Document("$group", new Document("_id", null)
@@ -76,13 +103,21 @@ public class MongoReportQueryStore implements ReportQueryStore {
 			.append("submissionDuration", new Document("$sum", "$submissionDuration"))
 			.append("completed", new Document("$sum", "$completed"))
 			.append("currentDuration", new Document("$sum", "$currentDuration"))
+			.append("effectiveSubmission", new Document("$sum", "$effectiveSubmission"))
+			.append("effectiveCompleted", new Document("$sum", "$effectiveCompleted"))
+			.append("effectiveRecordingDuration", new Document("$sum", "$effectiveRecordingDuration"))
+			.append("referenceAudioDuration", new Document("$sum", "$referenceAudioDuration"))
+			.append("referenceVideoDuration", new Document("$sum", "$referenceVideoDuration"))
 			.append("releaseCount", new Document("$sum", "$releaseCount"))
 			.append("discardCount", new Document("$sum", "$discardCount"))));
 		Document result = items.aggregate(pipeline).first();
 		if (result == null) return new WorkSummary(0, 0, 0, 0, 0, 0);
 		return new WorkSummary(number(result, "submissionCount"), number(result, "submissionDuration"),
 			number(result, "completed"), number(result, "currentDuration"),
-			number(result, "releaseCount"), number(result, "discardCount"));
+			number(result, "releaseCount"), number(result, "discardCount"),
+			number(result, "effectiveSubmission"), number(result, "effectiveCompleted"),
+			number(result, "effectiveRecordingDuration"), number(result, "referenceAudioDuration"),
+			number(result, "referenceVideoDuration"));
 	}
 
 	@Override
@@ -120,18 +155,27 @@ public class MongoReportQueryStore implements ReportQueryStore {
 
 	@Override
 	public ReviewerSummary aggregateReviewer(String reviewerId) {
-		List<Document> pipeline = List.of(
-			new Document("$unwind", "$operations"),
-			new Document("$match", new Document("operations.actorUserId", reviewerId)
-				.append("operations.type", new Document("$in", List.of(
-					"REVIEW_CLAIM", "REVIEW_RELEASE", "REVIEW_APPROVE", "REVIEW_REJECT"
-				)))),
-			new Document("$sort", new Document("operations.occurredAt", 1)),
-			new Document("$group", new Document("_id", "$_id")
-				.append("operations", new Document("$push", "$operations")))
-		);
+		return aggregateReviewer(reviewerId, null, null, null);
+	}
+
+	@Override
+	public ReviewerSummary aggregateReviewer(
+		String reviewerId, String taskId, Instant fromInclusive, Instant toExclusive
+	) {
+		List<Document> stages = new ArrayList<>();
+		if (taskId != null) stages.add(new Document("$match", new Document("taskId", taskId)));
+		stages.add(new Document("$unwind", "$operations"));
+		Document operationMatch = new Document("operations.actorUserId", reviewerId)
+			.append("operations.type", new Document("$in", List.of(
+				"REVIEW_CLAIM", "REVIEW_RELEASE", "REVIEW_APPROVE", "REVIEW_REJECT"
+			)));
+		appendDateRange(operationMatch, "operations.occurredAt", fromInclusive, toExclusive);
+		stages.add(new Document("$match", operationMatch));
+		stages.add(new Document("$sort", new Document("operations.occurredAt", 1)));
+		stages.add(new Document("$group", new Document("_id", "$_id")
+			.append("operations", new Document("$push", "$operations"))));
 		long claims = 0, releases = 0, approvals = 0, rejections = 0, duration = 0, decisions = 0;
-		for (Document item : items.aggregate(pipeline)) {
+		for (Document item : items.aggregate(stages)) {
 			ArrayDeque<Instant> claimedAt = new ArrayDeque<>();
 			@SuppressWarnings("unchecked") List<Document> operations = (List<Document>) item.getOrDefault("operations", List.of());
 			for (Document operation : operations) {
@@ -177,10 +221,21 @@ public class MongoReportQueryStore implements ReportQueryStore {
 
 	@Override
 	public Optional<CollectorTaskReport> collectorTaskReport(String collectorId, String taskId) {
+		return collectorTaskReport(collectorId, taskId, null);
+	}
+
+	@Override
+	public Optional<CollectorTaskReport> collectorTaskReport(
+		String collectorId, String taskId, LocalDate date
+	) {
 		Document task = findTask(taskId);
 		if (task == null) return Optional.empty();
+		Instant fromInclusive = date == null ? null
+			: date.atStartOfDay(java.time.ZoneId.of("Asia/Shanghai")).toInstant();
+		Instant toExclusive = date == null ? null
+			: date.plusDays(1).atStartOfDay(java.time.ZoneId.of("Asia/Shanghai")).toInstant();
 		Document summaryRow = items.aggregate(List.of(
-			new Document("$match", collectorMatch(collectorId, taskId)),
+			new Document("$match", collectorMatch(collectorId, taskId, fromInclusive, toExclusive)),
 			new Document("$group", new Document("_id", null)
 				.append("submissionCount", new Document("$sum", 1))
 				.append("completedCount", new Document("$sum", new Document("$cond", List.of(
@@ -196,10 +251,15 @@ public class MongoReportQueryStore implements ReportQueryStore {
 					"$ifNull", List.of("$referenceVideoDurationMillis", 0)
 				))))
 		)).first();
-		if (summaryRow == null) return Optional.empty();
+		if (summaryRow == null) {
+			if (date == null || items.countDocuments(collectorMatch(collectorId, taskId)) == 0) {
+				return Optional.empty();
+			}
+			summaryRow = new Document();
+		}
 
 		List<Document> dayPipeline = List.of(
-			new Document("$match", collectorMatch(collectorId, taskId)),
+			new Document("$match", collectorMatch(collectorId, taskId, fromInclusive, toExclusive)),
 			new Document("$project", new Document()
 				.append("date", new Document("$dateToString", new Document()
 					.append("format", "%Y-%m-%d")
@@ -232,7 +292,7 @@ public class MongoReportQueryStore implements ReportQueryStore {
 			));
 		}
 		List<CollectorTaskReportItem> recent = findCollectorTaskSubmissions(
-			collectorId, taskId, Pageable.ofSize(3)
+			collectorId, taskId, date, Pageable.ofSize(3)
 		).getContent();
 		return Optional.of(new CollectorTaskReport(
 			taskId,
@@ -254,7 +314,18 @@ public class MongoReportQueryStore implements ReportQueryStore {
 	public Page<CollectorTaskReportItem> findCollectorTaskSubmissions(
 		String collectorId, String taskId, Pageable pageable
 	) {
-		Document match = collectorMatch(collectorId, taskId);
+		return findCollectorTaskSubmissions(collectorId, taskId, null, pageable);
+	}
+
+	@Override
+	public Page<CollectorTaskReportItem> findCollectorTaskSubmissions(
+		String collectorId, String taskId, LocalDate date, Pageable pageable
+	) {
+		Instant fromInclusive = date == null ? null
+			: date.atStartOfDay(java.time.ZoneId.of("Asia/Shanghai")).toInstant();
+		Instant toExclusive = date == null ? null
+			: date.plusDays(1).atStartOfDay(java.time.ZoneId.of("Asia/Shanghai")).toInstant();
+		Document match = collectorMatch(collectorId, taskId, fromInclusive, toExclusive);
 		List<Document> pagePipeline = new ArrayList<>();
 		pagePipeline.add(new Document("$match", match));
 		pagePipeline.add(new Document("$sort", new Document("latestSubmittedAt", -1).append("itemCode", 1)));
@@ -294,11 +365,61 @@ public class MongoReportQueryStore implements ReportQueryStore {
 	}
 
 	private Document collectorMatch(String collectorId, String taskId) {
+		return collectorMatch(collectorId, taskId, null, null);
+	}
+
+	private Document collectorMatch(
+		String collectorId, String taskId, Instant fromInclusive, Instant toExclusive
+	) {
 		Document match = new Document("collectorId", collectorId)
 			.append("firstSubmittedAt", new Document("$exists", true))
 			.append("status", new Document("$nin", List.of("AVAILABLE", "DISCARDED")));
 		if (taskId != null) match.append("taskId", taskId);
+		appendDateRange(match, "firstSubmittedAt", fromInclusive, toExclusive);
 		return match;
+	}
+
+	@Override
+	public Page<CollectorRankingRow> findCollectorRankings(
+		String taskId, Instant fromInclusive, Instant toExclusive, String sortField, Pageable pageable
+	) {
+		Document match = new Document("taskId", taskId)
+			.append("collectorId", new Document("$ne", null))
+			.append("firstSubmittedAt", new Document("$exists", true))
+			.append("status", new Document("$nin", List.of("AVAILABLE", "DISCARDED")));
+		appendDateRange(match, "firstSubmittedAt", fromInclusive, toExclusive);
+		Document group = new Document("_id", "$collectorId")
+			.append("submissionCount", new Document("$sum", 1))
+			.append("completedCount", new Document("$sum", new Document("$cond", List.of(
+				new Document("$eq", List.of("$status", "COMPLETED")), 1, 0
+			))))
+			.append("recordingDurationMillis", new Document("$sum",
+				new Document("$ifNull", List.of("$currentResult.audio.durationMillis", 0))))
+			.append("referenceAudioDurationMillis", new Document("$sum",
+				new Document("$ifNull", List.of("$referenceAudioDurationMillis", 0))))
+			.append("referenceVideoDurationMillis", new Document("$sum",
+				new Document("$ifNull", List.of("$referenceVideoDurationMillis", 0))));
+		List<Document> base = List.of(
+			new Document("$match", match),
+			new Document("$group", group)
+		);
+		List<Document> rowsPipeline = new ArrayList<>(base);
+		rowsPipeline.add(new Document("$sort", new Document(sortField, -1).append("_id", 1)));
+		rowsPipeline.add(new Document("$skip", pageable.getOffset()));
+		rowsPipeline.add(new Document("$limit", pageable.getPageSize()));
+		List<CollectorRankingRow> rows = new ArrayList<>();
+		for (Document row : items.aggregate(rowsPipeline)) {
+			rows.add(new CollectorRankingRow(
+				row.getString("_id"), null,
+				number(row, "submissionCount"), number(row, "completedCount"),
+				number(row, "recordingDurationMillis"), number(row, "referenceAudioDurationMillis"),
+				number(row, "referenceVideoDurationMillis")
+			));
+		}
+		List<Document> countPipeline = new ArrayList<>(base);
+		countPipeline.add(new Document("$count", "total"));
+		Document count = items.aggregate(countPipeline).first();
+		return new PageImpl<>(rows, pageable, count == null ? 0 : number(count, "total"));
 	}
 
 	private Document findTask(String taskId) {
@@ -333,6 +454,31 @@ public class MongoReportQueryStore implements ReportQueryStore {
 		return collectorId == null ? completed : new Document("$and", List.of(
 			completed, new Document("$eq", List.of("$collectorId", collectorId))
 		));
+	}
+
+	private Document effectiveCondition(String collectorId) {
+		Document condition = new Document("$and", List.of(
+			new Document("$ne", List.of("$status", "AVAILABLE")),
+			new Document("$ne", List.of("$status", "DISCARDED")),
+			new Document("$ne", java.util.Arrays.asList(
+				new Document("$ifNull", java.util.Arrays.asList("$firstSubmittedAt", null)), null
+			))
+		));
+		return collectorId == null ? condition : new Document("$and", List.of(
+			condition, new Document("$eq", List.of("$collectorId", collectorId))
+		));
+	}
+
+	private void appendDateRange(
+		Document match, String field, Instant fromInclusive, Instant toExclusive
+	) {
+		if (fromInclusive == null && toExclusive == null) return;
+		Document range = new Document();
+		if (fromInclusive != null) range.append("$gte", Date.from(fromInclusive));
+		if (toExclusive != null) range.append("$lt", Date.from(toExclusive));
+		Object existing = match.get(field);
+		if (existing instanceof Document document) document.putAll(range);
+		else match.append(field, range);
 	}
 
 	private SubmissionView submission(Document document) {

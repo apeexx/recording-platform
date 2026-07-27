@@ -110,6 +110,34 @@ public class ReviewController {
 		));
 	}
 
+	@PostMapping("/batch/claim")
+	public List<BatchReviewResult> batchClaim(
+		@Valid @RequestBody BatchItemsRequest request,
+		@AuthenticationPrincipal PlatformPrincipal actor
+	) {
+		return execute("review:batch-claim", request.operationId(),
+			new TypeReference<List<BatchReviewResult>>() { }, () -> reviews.batchClaim(
+				request.operationId(),
+				request.items().stream()
+					.map(item -> new BatchReviewCommand(item.itemId(), item.expectedRevision(), null)).toList(),
+				actor
+			));
+	}
+
+	@PostMapping("/batch/assign")
+	public List<BatchReviewResult> batchAssign(
+		@Valid @RequestBody BatchAssignRequest request,
+		@AuthenticationPrincipal PlatformPrincipal actor
+	) {
+		return execute("review:batch-assign", request.operationId(),
+			new TypeReference<List<BatchReviewResult>>() { }, () -> reviews.batchAssign(
+				request.operationId(), request.reviewerId(),
+				request.items().stream()
+					.map(item -> new BatchReviewCommand(item.itemId(), item.expectedRevision(), null)).toList(),
+				actor
+			));
+	}
+
 	@PostMapping("/{itemId}/release")
 	public TaskItem release(
 		@PathVariable String itemId,
@@ -160,6 +188,16 @@ public class ReviewController {
 		@NotNull Long expectedRevision
 	) { }
 	public record BatchApproveItem(@NotBlank String itemId, @NotNull Long expectedRevision, String text) { }
+	public record BatchItem(@NotBlank String itemId, @NotNull Long expectedRevision) { }
+	public record BatchItemsRequest(
+		@NotBlank String operationId,
+		@NotNull List<@Valid BatchItem> items
+	) { }
+	public record BatchAssignRequest(
+		@NotBlank String operationId,
+		@NotBlank String reviewerId,
+		@NotNull List<@Valid BatchItem> items
+	) { }
 	public record BatchApproveRequest(
 		@NotBlank String operationId,
 		@NotNull List<@Valid BatchApproveItem> items

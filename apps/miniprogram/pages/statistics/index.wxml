@@ -8,6 +8,12 @@
       <picker mode="selector" range="{{taskNames}}" value="{{selectedTaskIndex}}" bindchange="taskChange">
         <view class="task-picker">{{taskNames[selectedTaskIndex]}}<text>⌄</text></view>
       </picker>
+      <view class="date-filter">
+        <picker mode="date" value="{{selectedDate}}" bindchange="dateChange">
+          <view class="date-picker">{{selectedDate||'全部日期'}}<text>选择日期 ›</text></view>
+        </picker>
+        <button wx:if="{{selectedDate}}" class="date-clear" bindtap="clearDate">清除</button>
+      </view>
     </view>
     <view class="metric-grid">
       <view class="card metric-card primary"><view class="metric">{{report.summary.submissionCount||0}}</view><view class="metric-label">提交条数</view></view>

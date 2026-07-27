@@ -101,8 +101,8 @@ module.exports = {
   submit: uploadSubmission,
   release: (id,revision,op)=>request(`/api/task-items/${encodeURIComponent(id)}/release`,{method:'POST',data:{operationId:op,expectedRevision:revision}}),
   reportTasks: ()=>request('/api/reports/me/tasks'),
-  taskReport: id=>request(`/api/reports/me/tasks/${encodeURIComponent(id)}`),
-  taskSubmissions: (id,page=0,size=20)=>request(`/api/reports/me/tasks/${encodeURIComponent(id)}/submissions?page=${page}&size=${size}`),
+  taskReport: (id,date='')=>request(`/api/reports/me/tasks/${encodeURIComponent(id)}${date?`?date=${encodeURIComponent(date)}`:''}`),
+  taskSubmissions: (id,page=0,size=20,date='')=>request(`/api/reports/me/tasks/${encodeURIComponent(id)}/submissions?page=${page}&size=${size}${date?`&date=${encodeURIComponent(date)}`:''}`),
   myReport: ()=>request('/api/reports/me'),
   mySubmissions: (page=0)=>request(`/api/reports/me/submissions?page=${page}&size=5`)
 }

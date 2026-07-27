@@ -8,6 +8,7 @@ import com.recording.platform.report.dto.SubmissionView;
 import com.recording.platform.report.dto.CollectorReportTaskList;
 import com.recording.platform.report.dto.CollectorTaskReport;
 import com.recording.platform.report.dto.CollectorTaskReportItem;
+import com.recording.platform.report.dto.CollectorRankingRow;
 import com.recording.platform.api.PageResponse;
 import com.recording.platform.security.PlatformPrincipal;
 import com.recording.platform.task.model.OperationHistory;
@@ -17,6 +18,7 @@ import com.recording.platform.task.model.TaskItemStatus;
 import com.recording.platform.task.store.TaskItemStore;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -26,18 +28,29 @@ import org.springframework.stereotype.Service;
 import com.recording.platform.report.store.ReportQueryStore;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.beans.factory.annotation.Autowired;
+import com.recording.platform.identity.store.IdentityDirectory;
+import com.recording.platform.identity.model.IdentityUser;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 public class ReportService {
 	private final TaskItemStore items;
 	private final ReportQueryStore queries;
+	private final IdentityDirectory users;
 
-	public ReportService(TaskItemStore items) { this(items, null); }
+	public ReportService(TaskItemStore items) { this(items, null, null); }
+
+	public ReportService(TaskItemStore items, ReportQueryStore queries) {
+		this(items, queries, null);
+	}
 
 	@Autowired
-	public ReportService(TaskItemStore items, ReportQueryStore queries) {
+	public ReportService(TaskItemStore items, ReportQueryStore queries, IdentityDirectory users) {
 		this.items = items;
 		this.queries = queries;
+		this.users = users;
 	}
 
 	public WorkSummary collector(String collectorId, PlatformPrincipal actor) {
@@ -45,9 +58,23 @@ public class ReportService {
 		return queries == null ? work(items.findForReport(collectorId, null)) : queries.aggregateWork(collectorId, null);
 	}
 
+	public WorkSummary collector(
+		String collectorId, String taskId, LocalDate fromDate, LocalDate toDate, PlatformPrincipal actor
+	) {
+		requireAdminOrSelfCollector(collectorId, actor);
+		ReportDateRange range = ReportDateRange.of(fromDate, toDate);
+		return queries.aggregateWork(collectorId, blankToNull(taskId), range.fromInclusive(), range.toExclusive());
+	}
+
 	public WorkSummary task(String taskId, PlatformPrincipal actor) {
 		requireAdmin(actor);
 		return queries == null ? work(items.findForReport(null, taskId)) : queries.aggregateWork(null, taskId);
+	}
+
+	public WorkSummary task(String taskId, LocalDate fromDate, LocalDate toDate, PlatformPrincipal actor) {
+		requireAdmin(actor);
+		ReportDateRange range = ReportDateRange.of(fromDate, toDate);
+		return queries.aggregateWork(null, taskId, range.fromInclusive(), range.toExclusive());
 	}
 
 	public ReviewerSummary reviewer(String reviewerId, PlatformPrincipal actor) {
@@ -76,6 +103,45 @@ public class ReportService {
 			}
 		}
 		return new ReviewerSummary(claims, releases, approvals, rejections, decisions == 0 ? 0 : totalMillis / decisions);
+	}
+
+	public ReviewerSummary reviewer(
+		String reviewerId, String taskId, LocalDate fromDate, LocalDate toDate, PlatformPrincipal actor
+	) {
+		if (actor == null || actor.role() != UserRole.ADMIN
+			&& (actor.role() != UserRole.REVIEWER || !actor.userId().equals(reviewerId))) throw forbidden();
+		ReportDateRange range = ReportDateRange.of(fromDate, toDate);
+		return queries.aggregateReviewer(
+			reviewerId, blankToNull(taskId), range.fromInclusive(), range.toExclusive()
+		);
+	}
+
+	public PageResponse<CollectorRankingRow> taskCollectors(
+		String taskId, LocalDate fromDate, LocalDate toDate, String sortBy,
+		int page, int size, PlatformPrincipal actor
+	) {
+		requireAdmin(actor);
+		ReportDateRange range = ReportDateRange.of(fromDate, toDate);
+		String sortField = switch (sortBy == null ? "" : sortBy) {
+			case "submissionCount" -> "submissionCount";
+			case "recordingDurationMillis" -> "recordingDurationMillis";
+			case "referenceAudioDurationMillis" -> "referenceAudioDurationMillis";
+			case "referenceVideoDurationMillis" -> "referenceVideoDurationMillis";
+			default -> "completedCount";
+		};
+		int safePage = Math.max(page, 0);
+		int safeSize = Math.min(Math.max(size, 1), 100);
+		var result = queries.findCollectorRankings(
+			taskId, range.fromInclusive(), range.toExclusive(), sortField, PageRequest.of(safePage, safeSize)
+		);
+		Map<String, IdentityUser> identities = users == null ? Map.of() : users.findAllByIdIn(
+			result.getContent().stream().map(CollectorRankingRow::collectorId).toList()
+		).stream().collect(Collectors.toMap(IdentityUser::id, Function.identity()));
+		List<CollectorRankingRow> rows = result.getContent().stream()
+			.map(row -> row.withName(
+				identities.containsKey(row.collectorId()) ? identities.get(row.collectorId()).name() : null
+			)).toList();
+		return new PageResponse<>(rows, result.getNumber(), result.getSize(), result.getTotalElements());
 	}
 
 	public Object me(PlatformPrincipal actor) {
@@ -125,6 +191,14 @@ public class ReportService {
 			));
 	}
 
+	public CollectorTaskReport myTask(String taskId, LocalDate date, PlatformPrincipal actor) {
+		requireCollector(actor);
+		return queries.collectorTaskReport(actor.userId(), taskId, date)
+			.orElseThrow(() -> new ApiException(
+				HttpStatus.NOT_FOUND, "REPORT_TASK_NOT_FOUND", "没有可统计的任务数据"
+			));
+	}
+
 	public PageResponse<CollectorTaskReportItem> myTaskSubmissions(
 		String taskId, int page, int size, PlatformPrincipal actor
 	) {
@@ -133,6 +207,18 @@ public class ReportService {
 		int safeSize = Math.min(Math.max(size, 1), 100);
 		var result = queries.findCollectorTaskSubmissions(
 			actor.userId(), taskId, PageRequest.of(safePage, safeSize)
+		);
+		return new PageResponse<>(result.getContent(), result.getNumber(), result.getSize(), result.getTotalElements());
+	}
+
+	public PageResponse<CollectorTaskReportItem> myTaskSubmissions(
+		String taskId, LocalDate date, int page, int size, PlatformPrincipal actor
+	) {
+		requireCollector(actor);
+		int safePage = Math.max(page, 0);
+		int safeSize = Math.min(Math.max(size, 1), 100);
+		var result = queries.findCollectorTaskSubmissions(
+			actor.userId(), taskId, date, PageRequest.of(safePage, safeSize)
 		);
 		return new PageResponse<>(result.getContent(), result.getNumber(), result.getSize(), result.getTotalElements());
 	}
@@ -162,6 +248,7 @@ public class ReportService {
 		if (actor == null || actor.role() != UserRole.ADMIN
 			&& (actor.role() != UserRole.COLLECTOR || !actor.userId().equals(collectorId))) throw forbidden();
 	}
+	private String blankToNull(String value) { return value == null || value.isBlank() ? null : value.trim(); }
 	private void requireCollector(PlatformPrincipal actor) {
 		if (actor == null || actor.role() != UserRole.COLLECTOR || queries == null) throw forbidden();
 	}

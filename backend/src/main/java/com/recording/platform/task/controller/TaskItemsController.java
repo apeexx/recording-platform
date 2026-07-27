@@ -23,6 +23,11 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import com.recording.platform.identity.store.IdentityDirectory;
+import com.recording.platform.identity.model.IdentityUser;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/tasks/{taskId}/items")
@@ -31,17 +36,20 @@ public class TaskItemsController {
 	private final TaskPoolService pool;
 	private final TaskItemStore items;
 	private final IdempotencyService idempotency;
+	private final IdentityDirectory users;
 
 	public TaskItemsController(
 		TaskItemCreationService creation,
 		TaskPoolService pool,
 		TaskItemStore items,
-		IdempotencyService idempotency
+		IdempotencyService idempotency,
+		IdentityDirectory users
 	) {
 		this.creation = creation;
 		this.pool = pool;
 		this.items = items;
 		this.idempotency = idempotency;
+		this.users = users;
 	}
 
 	@PostMapping
@@ -77,10 +85,22 @@ public class TaskItemsController {
 		@RequestParam(defaultValue = "0") int page,
 		@RequestParam(defaultValue = "20") int size
 	) {
-		return PageResponse.from(items.findAllByTaskId(
+		var result = items.findAllByTaskId(
 			taskId,
 			PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100))
-		));
+		);
+		Map<String, IdentityUser> identities = users.findAllByIdIn(
+			result.getContent().stream()
+				.flatMap(item -> java.util.stream.Stream.of(item.getCollectorId(), item.getReviewerId()))
+				.filter(java.util.Objects::nonNull).distinct().toList()
+		).stream().collect(Collectors.toMap(IdentityUser::id, Function.identity()));
+		result.getContent().forEach(item -> {
+			IdentityUser collector = identities.get(item.getCollectorId());
+			IdentityUser reviewer = identities.get(item.getReviewerId());
+			item.setCollectorName(collector == null ? null : collector.name());
+			item.setReviewerName(reviewer == null ? null : reviewer.name());
+		});
+		return PageResponse.from(result);
 	}
 
 	public record AddItemRequest(

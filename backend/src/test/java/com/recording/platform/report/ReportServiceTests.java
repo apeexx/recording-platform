@@ -1,6 +1,7 @@
 package com.recording.platform.report;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -26,6 +27,35 @@ import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 class ReportServiceTests {
+	@Test
+	void taskSummaryPassesInclusiveShanghaiDateRangeToMongoQuery() {
+		TaskItemStore items = mock(TaskItemStore.class);
+		ReportQueryStore queries = mock(ReportQueryStore.class);
+		var expected = new com.recording.platform.report.dto.WorkSummary(
+			2, 3_000, 1, 2_000, 0, 0, 2, 1, 2_000, 9_000, 4_000
+		);
+		Instant from = Instant.parse("2026-07-26T16:00:00Z");
+		Instant to = Instant.parse("2026-07-27T16:00:00Z");
+		when(queries.aggregateWork("collector-1", "task-1", from, to)).thenReturn(expected);
+		ReportService service = new ReportService(items, queries);
+
+		var result = service.collector(
+			"collector-1", "task-1", LocalDate.of(2026, 7, 27), LocalDate.of(2026, 7, 27), admin()
+		);
+
+		assertThat(result).isEqualTo(expected);
+	}
+
+	@Test
+	void rejectsAnInvertedReportDateRange() {
+		ReportService service = new ReportService(mock(TaskItemStore.class), mock(ReportQueryStore.class));
+
+		assertThatThrownBy(() -> service.task(
+			"task-1", LocalDate.of(2026, 7, 28), LocalDate.of(2026, 7, 27), admin()
+		)).isInstanceOfSatisfying(com.recording.platform.api.ApiException.class,
+			error -> assertThat(error.getCode()).isEqualTo("INVALID_REPORT_DATE_RANGE"));
+	}
+
 	@Test
 	void collectorSummarySeparatesCumulativeReworkFromCurrentValidResults() {
 		TaskItemStore items = mock(TaskItemStore.class);

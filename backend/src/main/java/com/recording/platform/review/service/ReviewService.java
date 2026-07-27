@@ -95,10 +95,14 @@ public class ReviewService {
 		Page<TaskItem> pool = items.findReviewPoolByTaskId(
 			taskId, actor.role() == UserRole.ADMIN, actor.role() == UserRole.REVIEWER ? actor.userId() : null, pageable
 		);
-		Map<String, IdentityUser> collectors = users == null ? Map.of() : users.findAllByIdIn(
-			pool.getContent().stream().map(TaskItem::getCollectorId).filter(java.util.Objects::nonNull).distinct().toList()
+		Map<String, IdentityUser> identities = users == null ? Map.of() : users.findAllByIdIn(
+			pool.getContent().stream()
+				.flatMap(item -> java.util.stream.Stream.of(item.getCollectorId(), item.getReviewerId()))
+				.filter(java.util.Objects::nonNull).distinct().toList()
 		).stream().collect(Collectors.toMap(IdentityUser::id, Function.identity()));
-		return pool.map(item -> ReviewPoolItemView.from(item, collectors.get(item.getCollectorId())));
+		return pool.map(item -> ReviewPoolItemView.from(
+			item, identities.get(item.getCollectorId()), identities.get(item.getReviewerId())
+		));
 	}
 
 	public Page<TaskItem> pool(Pageable pageable, PlatformPrincipal actor) {
@@ -177,6 +181,50 @@ public class ReviewService {
 				);
 				TaskItem updated = items.adminApproveReviewIfCurrent(mutation).orElseThrow(this::stale);
 				results.add(BatchReviewResult.success(item.getId(), updated.getRevision()));
+			} catch (ApiException exception) {
+				results.add(BatchReviewResult.failure(command.itemId(), exception.getCode(), exception.getMessage()));
+			}
+		}
+		return results;
+	}
+
+	public List<BatchReviewResult> batchClaim(
+		String operationId, List<BatchReviewCommand> commands, PlatformPrincipal actor
+	) {
+		requireReviewAccess(actor);
+		return batchItems(operationId, commands, (command, index) ->
+			claimItem(command.itemId(), requiredOperationId(operationId) + ":" + index,
+				command.expectedRevision(), actor)
+		);
+	}
+
+	public List<BatchReviewResult> batchAssign(
+		String operationId, String reviewerId, List<BatchReviewCommand> commands, PlatformPrincipal actor
+	) {
+		if (actor == null || actor.role() != UserRole.ADMIN) {
+			throw new ApiException(HttpStatus.FORBIDDEN, "ACCESS_DENIED", "没有权限执行此操作");
+		}
+		return batchItems(operationId, commands, (command, index) ->
+			assign(command.itemId(), reviewerId, requiredOperationId(operationId) + ":" + index,
+				command.expectedRevision(), actor)
+		);
+	}
+
+	private List<BatchReviewResult> batchItems(
+		String operationId,
+		List<BatchReviewCommand> commands,
+		java.util.function.BiFunction<BatchReviewCommand, Integer, TaskItem> mutation
+	) {
+		requiredOperationId(operationId);
+		if (commands == null || commands.isEmpty() || commands.size() > 100) {
+			throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "INVALID_BATCH_SIZE", "批量操作数量必须为 1 到 100");
+		}
+		List<BatchReviewResult> results = new ArrayList<>();
+		for (int index = 0; index < commands.size(); index++) {
+			BatchReviewCommand command = commands.get(index);
+			try {
+				TaskItem updated = mutation.apply(command, index);
+				results.add(BatchReviewResult.success(command.itemId(), updated.getRevision()));
 			} catch (ApiException exception) {
 				results.add(BatchReviewResult.failure(command.itemId(), exception.getCode(), exception.getMessage()));
 			}

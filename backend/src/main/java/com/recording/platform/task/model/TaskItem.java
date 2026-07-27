@@ -7,6 +7,7 @@ import lombok.Getter;
 import lombok.Setter;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.Version;
+import org.springframework.data.annotation.Transient;
 import org.springframework.data.mongodb.core.index.CompoundIndex;
 import org.springframework.data.mongodb.core.index.CompoundIndexes;
 import org.springframework.data.mongodb.core.mapping.Document;
@@ -49,6 +50,10 @@ public class TaskItem {
 	private TaskItemStatus status;
 	private String collectorId;
 	private String reviewerId;
+	@Transient
+	private String collectorName;
+	@Transient
+	private String reviewerName;
 	private String reviewAssignmentId;
 	private String assignmentId;
 	private long revision;

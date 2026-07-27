@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import java.time.LocalDate;
 
 @RestController
 @RequestMapping("/api/reports")
@@ -23,18 +24,54 @@ public class ReportController {
 	public ReportController(ReportService reports) { this.reports = reports; }
 
 	@GetMapping("/tasks")
-	public WorkSummary task(@RequestParam String taskId, @AuthenticationPrincipal PlatformPrincipal actor) {
-		return reports.task(taskId, actor);
+	public WorkSummary task(
+		@RequestParam String taskId,
+		@RequestParam(required = false) LocalDate fromDate,
+		@RequestParam(required = false) LocalDate toDate,
+		@AuthenticationPrincipal PlatformPrincipal actor
+	) {
+		return reports.task(taskId, fromDate, toDate, actor);
 	}
+
+	public WorkSummary task(String taskId, PlatformPrincipal actor) { return reports.task(taskId, actor); }
 
 	@GetMapping("/collectors")
-	public WorkSummary collector(@RequestParam String userId, @AuthenticationPrincipal PlatformPrincipal actor) {
-		return reports.collector(userId, actor);
+	public WorkSummary collector(
+		@RequestParam String userId,
+		@RequestParam(required = false) String taskId,
+		@RequestParam(required = false) LocalDate fromDate,
+		@RequestParam(required = false) LocalDate toDate,
+		@AuthenticationPrincipal PlatformPrincipal actor
+	) {
+		return reports.collector(userId, taskId, fromDate, toDate, actor);
 	}
 
+	public WorkSummary collector(String userId, PlatformPrincipal actor) { return reports.collector(userId, actor); }
+
 	@GetMapping("/reviewers")
-	public ReviewerSummary reviewer(@RequestParam String userId, @AuthenticationPrincipal PlatformPrincipal actor) {
-		return reports.reviewer(userId, actor);
+	public ReviewerSummary reviewer(
+		@RequestParam String userId,
+		@RequestParam(required = false) String taskId,
+		@RequestParam(required = false) LocalDate fromDate,
+		@RequestParam(required = false) LocalDate toDate,
+		@AuthenticationPrincipal PlatformPrincipal actor
+	) {
+		return reports.reviewer(userId, taskId, fromDate, toDate, actor);
+	}
+
+	public ReviewerSummary reviewer(String userId, PlatformPrincipal actor) { return reports.reviewer(userId, actor); }
+
+	@GetMapping("/tasks/{taskId}/collectors")
+	public PageResponse<com.recording.platform.report.dto.CollectorRankingRow> taskCollectors(
+		@org.springframework.web.bind.annotation.PathVariable String taskId,
+		@RequestParam(required = false) LocalDate fromDate,
+		@RequestParam(required = false) LocalDate toDate,
+		@RequestParam(defaultValue = "completedCount") String sortBy,
+		@RequestParam(defaultValue = "0") int page,
+		@RequestParam(defaultValue = "20") int size,
+		@AuthenticationPrincipal PlatformPrincipal actor
+	) {
+		return reports.taskCollectors(taskId, fromDate, toDate, sortBy, page, size, actor);
 	}
 
 	@GetMapping("/me")
@@ -57,17 +94,29 @@ public class ReportController {
 	@GetMapping("/me/tasks/{taskId}")
 	public CollectorTaskReport myTask(
 		@org.springframework.web.bind.annotation.PathVariable String taskId,
+		@RequestParam(required = false) LocalDate date,
 		@AuthenticationPrincipal PlatformPrincipal actor
 	) {
+		return reports.myTask(taskId, date, actor);
+	}
+
+	public CollectorTaskReport myTask(String taskId, PlatformPrincipal actor) {
 		return reports.myTask(taskId, actor);
 	}
 
 	@GetMapping("/me/tasks/{taskId}/submissions")
 	public PageResponse<CollectorTaskReportItem> myTaskSubmissions(
 		@org.springframework.web.bind.annotation.PathVariable String taskId,
+		@RequestParam(required = false) LocalDate date,
 		@RequestParam(defaultValue = "0") int page,
 		@RequestParam(defaultValue = "20") int size,
 		@AuthenticationPrincipal PlatformPrincipal actor
+	) {
+		return reports.myTaskSubmissions(taskId, date, page, size, actor);
+	}
+
+	public PageResponse<CollectorTaskReportItem> myTaskSubmissions(
+		String taskId, int page, int size, PlatformPrincipal actor
 	) {
 		return reports.myTaskSubmissions(taskId, page, size, actor);
 	}

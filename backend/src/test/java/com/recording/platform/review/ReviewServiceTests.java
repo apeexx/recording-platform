@@ -235,7 +235,7 @@ class ReviewServiceTests {
 		when(items.findReviewPoolByTaskId("task-1", false, "reviewer-1", page))
 			.thenReturn(new PageImpl<>(List.of(own), page, 1));
 		IdentityUser collector = new IdentityUser("collector-1",UserType.MINIPROGRAM,null,"采集员一",UserRole.COLLECTOR,UserStatus.ACTIVE,false,null,null);
-		when(users.findAllByIdIn(List.of("collector-1"))).thenReturn(List.of(collector));
+		when(users.findAllByIdIn(any())).thenReturn(List.of(collector));
 		ReviewService service = new ReviewService(items, users, mock(TaskStore.class), CLOCK);
 
 		var result = service.pool("task-1", page, reviewer());
@@ -318,6 +318,78 @@ class ReviewServiceTests {
 		assertThat(results.get(1).success()).isFalse();
 		assertThat(results.get(1).code()).isEqualTo("STALE_STATE");
 		verify(items, org.mockito.Mockito.times(2)).adminApproveReviewIfCurrent(any(AdminReviewApproveMutation.class));
+	}
+
+	@Test
+	void adminBatchClaimsSelectedSubmittedItemsAndReturnsPerItemConflicts() {
+		TaskItemStore items = mock(TaskItemStore.class);
+		TaskItem first = submitted("item-1", 3);
+		TaskItem second = submitted("item-2", 5);
+		when(items.findById("item-1")).thenReturn(Optional.of(first));
+		when(items.findById("item-2")).thenReturn(Optional.of(second));
+		TaskItem claimed = assigned("item-1", 4);
+		when(items.claimReviewItem(any())).thenReturn(Optional.of(claimed), Optional.empty());
+		ReviewService service = new ReviewService(items, mock(IdentityDirectory.class), mock(TaskStore.class), CLOCK);
+
+		var results = service.batchClaim(
+			"batch-claim",
+			List.of(new BatchReviewCommand("item-1", 3, null), new BatchReviewCommand("item-2", 5, null)),
+			admin()
+		);
+
+		assertThat(results).hasSize(2);
+		assertThat(results.get(0).success()).isTrue();
+		assertThat(results.get(1).code()).isEqualTo("STALE_STATE");
+	}
+
+	@Test
+	void adminBatchAssignsSelectedSubmittedItemsToOneActiveReviewer() {
+		TaskItemStore items = mock(TaskItemStore.class);
+		IdentityDirectory users = mock(IdentityDirectory.class);
+		IdentityUser target = new IdentityUser(
+			"reviewer-2", UserType.WEB, "reviewer-2", "审核员二",
+			UserRole.REVIEWER, UserStatus.ACTIVE, false, null, null
+		);
+		when(users.findById("reviewer-2")).thenReturn(Optional.of(target));
+		TaskItem first = submitted("item-1", 3);
+		when(items.findById("item-1")).thenReturn(Optional.of(first));
+		TaskItem assigned = assigned("item-1", 4);
+		assigned.setReviewerId("reviewer-2");
+		when(items.assignReviewIfCurrent(any())).thenReturn(Optional.of(assigned));
+		ReviewService service = new ReviewService(items, users, mock(TaskStore.class), CLOCK);
+
+		var results = service.batchAssign(
+			"batch-assign", "reviewer-2", List.of(new BatchReviewCommand("item-1", 3, null)), admin()
+		);
+
+		assertThat(results).singleElement().satisfies(result -> assertThat(result.success()).isTrue());
+	}
+
+	@Test
+	void reviewPoolReturnsReviewerNameSeparatelyFromReviewerId() {
+		TaskItemStore items = mock(TaskItemStore.class);
+		IdentityDirectory users = mock(IdentityDirectory.class);
+		PageRequest page = PageRequest.of(0, 20);
+		TaskItem row = assigned("item-1", 2);
+		when(items.findReviewPoolByTaskId("task-1", true, null, page))
+			.thenReturn(new PageImpl<>(List.of(row), page, 1));
+		IdentityUser collector = new IdentityUser(
+			"collector-1", UserType.MINIPROGRAM, null, "采集员一",
+			UserRole.COLLECTOR, UserStatus.ACTIVE, false, null, null
+		);
+		IdentityUser reviewer = new IdentityUser(
+			"reviewer-1", UserType.WEB, "reviewer", "审核员一",
+			UserRole.REVIEWER, UserStatus.ACTIVE, false, null, null
+		);
+		when(users.findAllByIdIn(any())).thenReturn(List.of(collector, reviewer));
+		ReviewService service = new ReviewService(items, users, mock(TaskStore.class), CLOCK);
+
+		var result = service.pool("task-1", page, admin());
+
+		assertThat(result.getContent()).singleElement().satisfies(view -> {
+			assertThat(view.collectorName()).isEqualTo("采集员一");
+			assertThat(view.reviewerName()).isEqualTo("审核员一");
+		});
 	}
 
 	@Test

@@ -77,6 +77,21 @@ test('纯文本提交使用 JSON 而不是手工 multipart', async () => {
   })
 })
 
+test('任务统计和更多提交在选择日期后携带同一天参数', async () => {
+  const urls = []
+  const api = loadApi({
+    getStorageSync: () => ({token:'opaque-token'}),
+    request: options => {
+      urls.push(options.url)
+      options.success({statusCode:200,data:{items:[],summary:{},days:[],recentSubmissions:[]}})
+    }
+  })
+  await api.taskReport('task-1', '2026-07-27')
+  await api.taskSubmissions('task-1', 0, 20, '2026-07-27')
+  assert.match(urls[0], /\/api\/reports\/me\/tasks\/task-1\?date=2026-07-27$/)
+  assert.match(urls[1], /\/submissions\?page=0&size=20&date=2026-07-27$/)
+})
+
 test('自定义头像通过鉴权上传到后端持久化', async () => {
   let captured
   const api=loadApi({getStorageSync:()=>({token:'opaque-token'}),uploadFile:options=>{captured=options;options.success({statusCode:200,data:'{"hasCustomAvatar":true}'})}})

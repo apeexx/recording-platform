@@ -25,6 +25,19 @@ describe('审核页面 API', () => {
 		})
 	})
 
+	it('选中条目支持批量领取和批量分配', async () => {
+		httpRequest.mockResolvedValue([])
+		const items = [{ itemId: 'item-1', expectedRevision: 3 }]
+		await reviewApi.batchClaim(items, 'claim-selected-1')
+		await reviewApi.batchAssign(items, 'reviewer-1', 'assign-selected-1')
+		expect(httpRequest).toHaveBeenNthCalledWith(1, '/api/reviews/batch/claim', {
+			method: 'POST', json: { operationId: 'claim-selected-1', items }
+		})
+		expect(httpRequest).toHaveBeenNthCalledWith(2, '/api/reviews/batch/assign', {
+			method: 'POST', json: { operationId: 'assign-selected-1', reviewerId: 'reviewer-1', items }
+		})
+	})
+
   it('按后台角色区分审核池与工作台操作，管理员不会再看到审核员专属按钮', () => {
     const queue = readFileSync(join(process.cwd(), 'src/pages/admin/review/ReviewQueuePage.vue'), 'utf8')
     const workbench = readFileSync(join(process.cwd(), 'src/pages/admin/review/ReviewWorkbenchPage.vue'), 'utf8')
@@ -46,5 +59,18 @@ describe('审核页面 API', () => {
     const queue=readFileSync(join(process.cwd(),'src/pages/admin/review/ReviewQueuePage.vue'),'utf8')
     expect(queue).toContain('r.collectorId')
     expect(queue).not.toContain('collectorUserNo')
+  })
+
+  it('审核池允许混合勾选并按状态启用三个批量操作', () => {
+    const queue = readFileSync(join(process.cwd(), 'src/pages/admin/review/ReviewQueuePage.vue'), 'utf8')
+    expect(queue).not.toContain(":disabled=\"r.status!=='REVIEW_PENDING'\"")
+    expect(queue).toContain('claimableRows')
+    expect(queue).toContain('approvableRows')
+    expect(queue).toContain('批量领取审核')
+    expect(queue).toContain('批量分配')
+    expect(queue).toContain('批量通过')
+    expect(queue).toContain('UserSearchSelect')
+    expect(queue).toContain('<th>采集员 ID</th><th>采集员姓名</th>')
+    expect(queue).toContain('<th>审核员 ID</th><th>审核员姓名</th>')
   })
 })

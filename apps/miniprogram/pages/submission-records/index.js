@@ -20,6 +20,7 @@ Page({
   data: { taskName: '', taskCode: '', items: [], page: 0, hasMore: true, loading: true, loadingMore: false, loadError: '' },
   onLoad(options) {
     this.taskId = options.taskId || ''
+    this.date = options.date || ''
     this.setData({ taskName: decodeURIComponent(options.taskName || ''), taskCode: decodeURIComponent(options.taskCode || '') })
     this.refresh()
   },
@@ -32,7 +33,7 @@ Page({
     const hadData = previous.items.length > 0
     this.setData({ page: 0, hasMore: true, loading: true, loadError: '' })
     try {
-      const response = await getApp().globalData.api.taskSubmissions(this.taskId, 0, 20)
+      const response = await getApp().globalData.api.taskSubmissions(this.taskId, 0, 20, this.date)
       this.setData({ items: (response.items || []).map(rowView), hasMore: (response.items || []).length < response.total })
     } catch (error) {
       const message = error.message || '提交记录加载失败'
@@ -49,7 +50,7 @@ Page({
     const nextPage = this.data.page + 1
     this.setData({ page: nextPage, loadingMore: true })
     try {
-      const response = await getApp().globalData.api.taskSubmissions(this.taskId, nextPage, 20)
+      const response = await getApp().globalData.api.taskSubmissions(this.taskId, nextPage, 20, this.date)
       const nextItems = (response.items || []).map(rowView)
       const items = this.data.items.concat(nextItems)
       this.setData({ items, hasMore: items.length < response.total })

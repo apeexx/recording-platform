@@ -6,15 +6,20 @@ import com.recording.platform.task.model.TaskItemStatus;
 public record ReviewPoolItemView(
 	String id, String taskId, String itemCode, String collectorId, String collectorName, TaskItemStatus status,
 	boolean hasText, boolean hasAudio, Long audioDurationMillis, long revision,
-	String reviewerId, String reviewAssignmentId
+	String reviewerId, String reviewerName, String reviewAssignmentId
 ) {
-	static ReviewPoolItemView from(TaskItem item, com.recording.platform.identity.model.IdentityUser collector) {
+	static ReviewPoolItemView from(
+		TaskItem item,
+		com.recording.platform.identity.model.IdentityUser collector,
+		com.recording.platform.identity.model.IdentityUser reviewer
+	) {
 		var result = item.getCurrentResult();
 		return new ReviewPoolItemView(item.getId(), item.getTaskId(), item.getItemCode(), item.getCollectorId(),
 			collector == null ? null : collector.name(),
 			item.getStatus(), result != null && result.text() != null,
 			result != null && result.audio() != null,
 			result != null && result.audio() != null ? result.audio().durationMillis() : null,
-			item.getRevision(), item.getReviewerId(), item.getReviewAssignmentId());
+			item.getRevision(), item.getReviewerId(), reviewer == null ? null : reviewer.name(),
+			item.getReviewAssignmentId());
 	}
 }

@@ -27,11 +27,24 @@ test('统计页按最近任务展示五项总量每日数据和最近三条', ()
   assert.match(template, /bindtap="openSubmission"/)
 })
 
-test('更多提交页按二十条触底分页并可进入对应作业', () => {
+test('统计页可选择单日并清除为全部日期', () => {
+  const script = read('pages/statistics/index.js')
+  const template = read('pages/statistics/index.wxml')
+  assert.match(template, /mode="date"/)
+  assert.match(template, /bindchange="dateChange"/)
+  assert.match(template, /bindtap="clearDate"/)
+  assert.match(script, /selectedDate:\s*''/)
+  assert.match(script, /taskReport\(taskId,\s*this\.data\.selectedDate\)/)
+  assert.match(script, /dateChange\(event\)/)
+  assert.match(script, /clearDate\(\)/)
+  assert.match(script, /date=\$\{encodeURIComponent\(this\.data\.selectedDate\)\}/)
+})
+
+test('更多提交页按二十条触底分页并继承日期', () => {
   const script = read('pages/submission-records/index.js')
   const config = JSON.parse(read('pages/submission-records/index.json'))
-  assert.match(script, /taskSubmissions\(this\.taskId,\s*0,\s*20\)/)
-  assert.match(script, /taskSubmissions\(this\.taskId,\s*nextPage,\s*20\)/)
+  assert.match(script, /taskSubmissions\(this\.taskId,\s*0,\s*20,\s*this\.date\)/)
+  assert.match(script, /taskSubmissions\(this\.taskId,\s*nextPage,\s*20,\s*this\.date\)/)
   assert.match(script, /onReachBottom\(\)/)
   assert.match(script, /loadingMore|hasMore/)
   assert.match(script, /pages\/work\/index\?itemId=/)

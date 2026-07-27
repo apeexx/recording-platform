@@ -11,5 +11,7 @@ export const reviewApi = {
   release(itemId, expectedRevision, operationId) { return httpRequest(`/api/reviews/${e(itemId)}/release`, { method: 'POST', json: { operationId, expectedRevision } }) },
   approve(itemId, expectedRevision, text, operationId) { return httpRequest(`/api/reviews/${e(itemId)}/approve`, { method: 'POST', json: { operationId, expectedRevision, text } }) },
   reject(itemId, expectedRevision, reasons, note, operationId) { return httpRequest(`/api/reviews/${e(itemId)}/reject`, { method: 'POST', json: { operationId, expectedRevision, reasons, note } }) },
-  batchApprove(items, operationId) { return httpRequest('/api/reviews/batch/approve', { method: 'POST', json: { operationId, items } }) }
+  batchApprove(items, operationId) { return httpRequest('/api/reviews/batch/approve', { method: 'POST', json: { operationId, items } }) },
+  batchClaim(items, operationId) { return httpRequest('/api/reviews/batch/claim', { method: 'POST', json: { operationId, items } }) },
+  batchAssign(items, reviewerId, operationId) { return httpRequest('/api/reviews/batch/assign', { method: 'POST', json: { operationId, reviewerId, items } }) }
 }

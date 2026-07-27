@@ -42,7 +42,10 @@ function viewReport(report) {
 }
 
 Page({
-  data: { tasks: [], taskNames: [], selectedTaskIndex: 0, selectedTaskId: '', report: null, loading: true, loadError: '' },
+  data: {
+    tasks: [], taskNames: [], selectedTaskIndex: 0, selectedTaskId: '', selectedDate: '',
+    report: null, loading: true, loadError: '',
+  },
   onShow() {
     const state = getApp().globalData.session.current()
     if (!state?.token) { wx.reLaunch({ url: '/pages/login/index' }); return }
@@ -77,7 +80,7 @@ Page({
     }
   },
   async loadReport(taskId) {
-    const report = await getApp().globalData.api.taskReport(taskId)
+    const report = await getApp().globalData.api.taskReport(taskId, this.data.selectedDate)
     this.setData({ report: viewReport(report), loadError: '' })
   },
   async taskChange(event) {
@@ -94,12 +97,26 @@ Page({
     }
     finally { this.setData({ loading: false }) }
   },
+  async dateChange(event) {
+    const selectedDate = event.detail.value || ''
+    this.setData({ selectedDate, loading: true, loadError: '' })
+    try { await this.loadReport(this.data.selectedTaskId) }
+    catch (error) { feedback.error(error.message || '统计加载失败，请重试') }
+    finally { this.setData({ loading: false }) }
+  },
+  async clearDate() {
+    if (!this.data.selectedDate) return
+    this.setData({ selectedDate: '', loading: true, loadError: '' })
+    try { await this.loadReport(this.data.selectedTaskId) }
+    catch (error) { feedback.error(error.message || '统计加载失败，请重试') }
+    finally { this.setData({ loading: false }) }
+  },
   openSubmission(event) {
     wx.navigateTo({ url: `/pages/work/index?itemId=${encodeURIComponent(event.currentTarget.dataset.itemId)}` })
   },
   openMore() {
     const task = this.data.tasks[this.data.selectedTaskIndex]
     if (!task) return
-    wx.navigateTo({ url: `/pages/submission-records/index?taskId=${encodeURIComponent(task.taskId)}&taskName=${encodeURIComponent(task.taskName)}&taskCode=${encodeURIComponent(task.taskCode)}` })
+    wx.navigateTo({ url: `/pages/submission-records/index?taskId=${encodeURIComponent(task.taskId)}&taskName=${encodeURIComponent(task.taskName)}&taskCode=${encodeURIComponent(task.taskCode)}&date=${encodeURIComponent(this.data.selectedDate)}` })
   },
 })

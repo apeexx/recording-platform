@@ -388,7 +388,7 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 请求方法：POST / GET
 请求路径：/api/tasks/{taskId}/items、/api/tasks/{taskId}/items/start、/api/task-items/{itemId}、/api/task-items/mine
 请求参数：单条添加 JSON referenceText/referenceAudioUrl/referenceVideoUrl + Idempotency-Key；start 携带 Idempotency-Key；列表 page、size；mine 支持 taskId、kind=PENDING|SUBMITTED|FINISHED，兼容 ALL|RECORDING|REWORK
-响应结构：TaskItem 或 {items,page,size,total}；TaskItem 可包含 referenceAudioUrl、referenceVideoUrl，历史条目可为空
+响应结构：TaskItem 或 {items,page,size,total}；TaskItem 可包含 referenceAudioUrl、referenceVideoUrl、collectorName、reviewerName，历史参考 URL 可为空，未分配用户姓名为空
 错误码：404 NO_AVAILABLE_ITEM/TASK_ITEM_NOT_FOUND；409 ITEM_CONFLICT/INVALID_TASK_STATE；422 ITEM_REFERENCE_REQUIRED/REMOTE_URL_INVALID
 权限要求：添加和任务条目列表仅 ADMIN；start 仅 COLLECTOR；详情仅 ADMIN/REVIEWER/当前采集员
 数据一致性要求：DRAFT/RUNNING/PAUSED 可新增，ENDED 返回 INVALID_TASK_STATE；新条目只绑定 taskId，参考音视频只保存通过轻量语法校验的 HTTPS URL；itemCode 任务内递增唯一且不复用；添加和领取均持久化幂等
@@ -420,23 +420,34 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 ```text
 请求方法：GET
 请求路径：/api/reports/me/tasks、/api/reports/me/tasks/{taskId}、/api/reports/me/tasks/{taskId}/submissions
-请求参数：任务列表无业务参数；任务汇总使用 taskId；完整提交记录使用 taskId、page、size
+请求参数：任务列表无业务参数；任务汇总使用 taskId 和可选 date=YYYY-MM-DD；完整提交记录使用 taskId、page、size 和可选 date=YYYY-MM-DD；日期为空表示全部
 响应结构：任务列表 {items:[{taskId,taskCode,taskName,latestSubmittedAt}]}；任务汇总 {taskId,taskCode,taskName,summary,days,recentSubmissions}，summary 含 submissionCount、completedCount、recordingDurationMillis、referenceAudioDurationMillis、referenceVideoDurationMillis，days 按日期倒序且不含每日完成数，recentSubmissions 固定最近 3 条；完整记录返回分页结构
 错误码：404 REPORT_TASK_NOT_FOUND
 权限要求：仅当前 COLLECTOR 小程序 Bearer
-数据一致性要求：直接聚合 task_items 当前数据库快照，仅统计仍属于当前采集员且具有 firstSubmittedAt 的当前 assignment；同一条目在一个 assignment 内只计 1 条，返修和覆盖提交不重复增加；当前结果录音时长始终取最新值，COMPLETED 时即最终值；参考音视频分别统计，无对应媒体时为 0；管理员释放回 AVAILABLE 后该条目立即退出原采集员统计，历史 submissions/operations 不删除；任务列表和提交明细均按 latestSubmittedAt 倒序；Mongo 原始查询必须将 task_items 中的字符串 taskId 转换为 tasks 集合实际使用的 ObjectId 后读取任务资料
+数据一致性要求：直接聚合 task_items 当前数据库快照，仅统计仍属于当前采集员且具有 firstSubmittedAt 的当前 assignment；同一条目在一个 assignment 内只计 1 条，返修和覆盖提交不重复增加；当前结果录音时长始终取最新值，COMPLETED 时即最终值；参考音视频分别统计，无对应媒体时为 0；指定 date 后汇总、每日数据、最近 3 条和完整提交记录均限定 Asia/Shanghai 当天；管理员释放回 AVAILABLE 后该条目立即退出原采集员统计，历史 submissions/operations 不删除；任务列表和提交明细均按 latestSubmittedAt 倒序；Mongo 原始查询必须将 task_items 中的字符串 taskId 转换为 tasks 集合实际使用的 ObjectId 后读取任务资料
 前端调用位置：apps/miniprogram/pages/statistics/*、apps/miniprogram/pages/submission-records/*
 ```
 
 ```text
 请求方法：GET / POST
-请求路径：/api/reviews/tasks、/api/reviews/tasks/{taskId}/pool|claim|claim-batch、/api/reviews/{itemId}/claim|release|approve|reject、/api/reviews/assign、/api/reviews/batch/approve
-请求参数：领取头或请求体 operationId/Idempotency-Key；指定领取、释放和决定携带 expectedRevision；分配携带 reviewerId；通过可补改 text；驳回携带 reasons/note
+请求路径：/api/reviews/tasks、/api/reviews/tasks/{taskId}/pool|claim|claim-batch、/api/reviews/{itemId}/claim|release|approve|reject、/api/reviews/assign、/api/reviews/batch/claim|assign|approve
+请求参数：领取头或请求体 operationId/Idempotency-Key；指定领取、释放和决定携带 expectedRevision；单条/批量分配携带 reviewerId；所选条目批量领取与分配携带 operationId 和最多 100 个 itemId/expectedRevision；通过可补改 text；驳回携带 reasons/note
 响应结构：任务审核摘要、TaskItem、审核池分页或逐条批量结果
 错误码：404 NO_REVIEW_ITEM；409 STALE_STATE；422 INVALID_REVIEWER/INVALID_BATCH_SIZE/审核内容错误
-权限要求：ADMIN/REVIEWER 可查看审核池并领取指定条目；批量领取仅 REVIEWER；分配和批量通过仅 ADMIN；决定必须已有审核领取或分配
-数据一致性要求：领取和分配只处理 SUBMITTED 并原子转 REVIEW_PENDING；释放原子回到 SUBMITTED；决定只处理已有 reviewerId 与 reviewAssignmentId 的 REVIEW_PENDING；所有写入保持持久化幂等和 revision/CAS
+权限要求：ADMIN/REVIEWER 可查看审核池并领取指定条目；按数量随机批量领取仅 REVIEWER；所选条目批量领取允许 ADMIN/REVIEWER；分配和批量通过仅 ADMIN；决定必须已有审核领取或分配
+数据一致性要求：领取和分配只处理 SUBMITTED 并原子转 REVIEW_PENDING；释放原子回到 SUBMITTED；决定只处理已有 reviewerId 与 reviewAssignmentId 的 REVIEW_PENDING；所选条目批量操作按输入顺序返回逐条成功/失败结果，每条使用独立幂等子键并保持 revision/CAS，状态已变化时该条失败且不影响其他条目
 前端调用位置：apps/web/src/lib/reviewApi.js、apps/web/src/pages/admin/review/*
+```
+
+```text
+请求方法：GET
+请求路径：/api/reports/tasks、/api/reports/tasks/{taskId}/collectors、/api/reports/collectors、/api/reports/reviewers
+请求参数：任务汇总支持可选 fromDate、toDate；采集员/审核员汇总支持 userId、可选 taskId、fromDate、toDate；任务采集员排名另支持 sortBy=completedCount|submissionCount|recordingDurationMillis|referenceAudioDurationMillis|referenceVideoDurationMillis、page、size
+响应结构：汇总保留 cumulativeSubmissions、cumulativeDurationMillis、currentCompletedCount、currentDurationMillis、releaseCount、discardCount，并增加 submissionCount、completedCount、recordingDurationMillis、referenceAudioDurationMillis、referenceVideoDurationMillis；排名分页返回采集员 ID、姓名及五项统计
+错误码：403 ACCESS_DENIED；422 INVALID_REPORT_DATE_RANGE
+权限要求：任务、指定采集员汇总及排名仅 ADMIN；审核员汇总 ADMIN 可查指定审核员，REVIEWER 仅可查本人
+数据一致性要求：日期使用 Asia/Shanghai 自然日闭区间，允许单边日期；fromDate 晚于 toDate 返回 422；统计直接聚合当前有效 task_items，按 firstSubmittedAt 计提交/完成，AVAILABLE 与 DISCARDED 不计入当前五项统计，时长缺失按 0；姓名通过身份目录批量补全，不冗余写入任务条目
+前端调用位置：apps/web/src/lib/reportApi.js、apps/web/src/pages/admin/reports/*
 ```
 
 ```text
