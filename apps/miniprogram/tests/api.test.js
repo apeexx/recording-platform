@@ -92,6 +92,24 @@ test('任务统计和更多提交在选择日期后携带同一天参数', async
   assert.match(urls[1], /\/submissions\?page=0&size=20&date=2026-07-27$/)
 })
 
+test('释放备注、标记无效和恢复使用同一条目状态接口', async () => {
+  const calls = []
+  const api = loadApi({
+    getStorageSync: () => ({token:'opaque-token'}),
+    request: options => { calls.push(options); options.success({statusCode:200,data:{revision:4}}) }
+  })
+  await api.release('item-1', 2, 'release-1', '参考内容不清晰')
+  await api.discard('item-1', 3, 'discard-1', '视频内容无效')
+  await api.restore('item-1', 4, 'restore-1')
+
+  assert.match(calls[0].url, /\/api\/task-items\/item-1\/release$/)
+  assert.deepEqual(calls[0].data, {operationId:'release-1',expectedRevision:2,note:'参考内容不清晰'})
+  assert.match(calls[1].url, /\/api\/task-items\/item-1\/discard$/)
+  assert.deepEqual(calls[1].data, {operationId:'discard-1',expectedRevision:3,reason:'视频内容无效'})
+  assert.match(calls[2].url, /\/api\/task-items\/item-1\/restore$/)
+  assert.deepEqual(calls[2].data, {operationId:'restore-1',expectedRevision:4})
+})
+
 test('自定义头像通过鉴权上传到后端持久化', async () => {
   let captured
   const api=loadApi({getStorageSync:()=>({token:'opaque-token'}),uploadFile:options=>{captured=options;options.success({statusCode:200,data:'{"hasCustomAvatar":true}'})}})

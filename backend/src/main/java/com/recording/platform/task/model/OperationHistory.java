@@ -59,12 +59,13 @@ public class OperationHistory {
 	}
 
 	public static OperationHistory release(ReleaseMutation mutation, TaskItem item) {
+		String note = mutation.note() == null ? "" : "，备注：" + mutation.note();
 		return create(
 			mutation.operationId(),
 			"RELEASE",
 			mutation.actorUserId(),
 			mutation.actorUsername(),
-			mutation.actorUsername() + "释放了任务条目",
+			mutation.actorUsername() + "释放了任务条目" + note,
 			mutation.occurredAt(),
 			item
 		);

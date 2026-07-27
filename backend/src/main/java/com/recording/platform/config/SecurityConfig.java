@@ -45,7 +45,7 @@ public class SecurityConfig {
 			String path = request.getRequestURI();
 			return path.matches("/api/tasks/[^/]+/items/start")
 				|| path.matches("/api/tasks/[^/]+/access-requests")
-				|| path.matches("/api/task-items/[^/]+/(submit|release)");
+				|| path.matches("/api/task-items/[^/]+/(submit|release|discard|restore)");
 		};
 		http.csrf((csrf) -> csrf
 			.csrfTokenRepository(csrfTokens)
@@ -105,9 +105,12 @@ public class SecurityConfig {
 			.requestMatchers(HttpMethod.POST, "/api/reviews/assign", "/api/reviews/batch/approve")
 				.hasRole("ADMIN")
 			.requestMatchers("/api/reviews/**").hasAnyRole("ADMIN", "REVIEWER")
-			.requestMatchers(HttpMethod.POST, "/api/task-items/*/status", "/api/task-items/*/discard", "/api/task-items/*/restore")
+			.requestMatchers(HttpMethod.POST, "/api/task-items/*/status")
 				.hasRole("ADMIN")
+			.requestMatchers(HttpMethod.POST, "/api/task-items/*/discard", "/api/task-items/*/restore")
+				.hasAnyRole("ADMIN", "COLLECTOR")
 			.requestMatchers(HttpMethod.POST, "/api/task-items/batch/**").hasRole("ADMIN")
+			.requestMatchers("/api/batch-operation-jobs/**").hasAnyRole("ADMIN", "REVIEWER")
 			.requestMatchers(HttpMethod.PUT, "/api/task-items/*").hasRole("ADMIN")
 			.requestMatchers(HttpMethod.DELETE, "/api/task-items/*").hasRole("ADMIN")
 			.requestMatchers(HttpMethod.POST, "/api/tasks/*/items/start", "/api/tasks/*/access-requests")

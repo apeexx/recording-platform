@@ -157,6 +157,7 @@ public class TaskPoolService {
 		String itemId,
 		String operationId,
 		long expectedRevision,
+		String note,
 		PlatformPrincipal actor
 	) {
 		if (actor == null || (actor.role() != UserRole.COLLECTOR && actor.role() != UserRole.ADMIN)) {
@@ -183,9 +184,16 @@ public class TaskPoolService {
 			actor.role() == UserRole.ADMIN,
 			expectedRevision,
 			requiredOperationId(operationId),
-			Instant.now(clock)
+			Instant.now(clock),
+			optionalNote(note)
 		);
 		return finishOrReplay(items.releaseIfCurrent(mutation), itemId, operationId, actor.userId());
+	}
+
+	public TaskItemActionResult release(
+		String itemId, String operationId, long expectedRevision, PlatformPrincipal actor
+	) {
+		return release(itemId, operationId, expectedRevision, null, actor);
 	}
 
 	private TaskItemActionResult finishOrReplay(
@@ -266,6 +274,13 @@ public class TaskPoolService {
 	}
 
 	private String trimToNull(String value) { return value == null || value.isBlank() ? null : value.trim(); }
+	private String optionalNote(String value) {
+		String normalized = trimToNull(value);
+		if (normalized != null && normalized.length() > 200) {
+			throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "INVALID_RELEASE_NOTE", "释放备注不能超过 200 个字符");
+		}
+		return normalized;
+	}
 	private String latestSubmissionOperationId(TaskItem item) {
 		if (item.getSubmissions() == null || item.getSubmissions().isEmpty()) return null;
 		return item.getSubmissions().get(item.getSubmissions().size() - 1).getOperationId();

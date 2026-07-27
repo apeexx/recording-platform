@@ -9,6 +9,13 @@ public record ReleaseMutation(
 	boolean admin,
 	long expectedRevision,
 	String operationId,
-	Instant occurredAt
+	Instant occurredAt,
+	String note
 ) {
+	public ReleaseMutation(
+		String itemId, String actorUserId, String actorUsername, boolean admin,
+		long expectedRevision, String operationId, Instant occurredAt
+	) {
+		this(itemId, actorUserId, actorUsername, admin, expectedRevision, operationId, occurredAt, null);
+	}
 }

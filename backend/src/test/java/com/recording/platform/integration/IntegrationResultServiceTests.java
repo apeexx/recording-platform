@@ -43,6 +43,19 @@ class IntegrationResultServiceTests {
 	}
 
 	@Test
+	void discardedItemKeepsDiscardedStatusWithoutExposingItsRetainedResult() {
+		TaskItem item = item(TaskItemStatus.DISCARDED);
+		item.setCurrentResult(new TaskItemResult(recording("media-retained"), "废弃前结果"));
+		when(items.findById("item-1")).thenReturn(Optional.of(item));
+
+		IntegrationResultView result = service.get("item-1");
+
+		assertThat(result.status()).isEqualTo(TaskItemStatus.DISCARDED);
+		assertThat(result.text()).isNull();
+		assertThat(result.audioAvailable()).isFalse();
+	}
+
+	@Test
 	void completedItemExposesOnlyCurrentTextAndAudioAvailability() {
 		TaskItem item = item(TaskItemStatus.COMPLETED);
 		item.setCurrentResult(new TaskItemResult(recording("media-current"), "最终文字"));

@@ -97,7 +97,7 @@ public class MongoReportQueryStore implements ReportQueryStore {
 				new Document("$ifNull", List.of("$referenceVideoDurationMillis", 0)), 0
 			)))
 			.append("releaseCount", countType(operations, "RELEASE"))
-			.append("discardCount", countType(operations, "ADMIN_DISCARD"))));
+			.append("discardCount", countTypes(operations, List.of("ADMIN_DISCARD", "COLLECTOR_DISCARD")))));
 		pipeline.add(new Document("$group", new Document("_id", null)
 			.append("submissionCount", new Document("$sum", "$submissionCount"))
 			.append("submissionDuration", new Document("$sum", "$submissionDuration"))
@@ -447,6 +447,12 @@ public class MongoReportQueryStore implements ReportQueryStore {
 		return new Document("$size", new Document("$filter", new Document()
 			.append("input", source).append("as", "operation")
 			.append("cond", new Document("$eq", List.of("$$operation.type", type)))));
+	}
+
+	private Document countTypes(Document source, List<String> types) {
+		return new Document("$size", new Document("$filter", new Document()
+			.append("input", source).append("as", "operation")
+			.append("cond", new Document("$in", List.of("$$operation.type", types)))));
 	}
 
 	private Document completedCondition(String collectorId) {

@@ -42,10 +42,10 @@ describe('审核页面 API', () => {
     const queue = readFileSync(join(process.cwd(), 'src/pages/admin/review/ReviewQueuePage.vue'), 'utf8')
     const workbench = readFileSync(join(process.cwd(), 'src/pages/admin/review/ReviewWorkbenchPage.vue'), 'utf8')
 
-    expect(queue).toContain("const isAdmin=computed(()=>session.user.value?.role==='ADMIN')")
-	expect(queue).toContain("isReviewer=computed(()=>session.user.value?.role==='REVIEWER')")
+    expect(queue).toContain("const isAdmin = computed(() => session.user.value?.role === 'ADMIN')")
+	expect(queue).toContain("const isReviewer = computed(() => session.user.value?.role === 'REVIEWER')")
     expect(queue).toContain('v-if="isReviewer" class="button-primary" @click="claim"')
-	expect(queue).toContain("r.status==='SUBMITTED'")
+	expect(queue).toContain("row.status === 'SUBMITTED'")
 	expect(queue).toContain('领取审核')
 	expect(queue).toContain('已提交')
 	expect(queue).toContain('待审核')

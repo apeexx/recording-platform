@@ -10,6 +10,7 @@ const statusText = {
   SUBMITTED: '已提交',
   REVIEW_PENDING: '待审核',
   COMPLETED: '已完成',
+  DISCARDED: '已废弃',
 }
 const editableStatuses = new Set(['RECORDING_PENDING', 'REWORK_PENDING', 'SUBMITTED'])
 const readOnlyStatuses = new Set(['REVIEW_PENDING', 'COMPLETED', 'AI_PROCESSING'])
@@ -17,14 +18,22 @@ function durationText(duration) {
   const seconds = Math.floor(Math.max(Number(duration) || 0, 0) / 1000)
   return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
 }
+function dateTimeText(value) {
+  if (!value) return '-'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '-'
+  const part = number => String(number).padStart(2, '0')
+  return `${date.getFullYear()}-${part(date.getMonth() + 1)}-${part(date.getDate())} ${part(date.getHours())}:${part(date.getMinutes())}:${part(date.getSeconds())}`
+}
 
 Page({
   data: {
     item: {}, configuration: {}, loading: true, loadError: '', referenceAudioPath: '', referenceVideoPath: '',
     audioPath: '', audioDuration: 0, recordingDurationText: '00:00', text: '', recordState: 'idle',
     referenceAudioDurationMillis: 0, referenceVideoDurationMillis: 0,
-    levelBars: waveformBars(0), submitting: false, releasing: false,
-    statusText: '待录制', editable: true, readOnly: false, canRelease: true, submitLabel: '提交作业',
+    levelBars: waveformBars(0), submitting: false, releasing: false, discarding: false, restoring: false,
+    statusText: '待录制', editable: true, readOnly: false, canRelease: true, canDiscard: true,
+    isDiscarded: false, discardedAtText: '-', submitLabel: '提交作业',
     autoClaimNextEnabled: true, showAutoClaimNext: true,
   },
   async onLoad(options) {
@@ -60,13 +69,16 @@ Page({
       const configuration = task.configuration || {}
       const editable = editableStatuses.has(item.status)
       const readOnly = readOnlyStatuses.has(item.status) || !editable
+      const activeRecording = item.status === 'RECORDING_PENDING' || item.status === 'REWORK_PENDING'
       await this.session?.dispose()
       this.session = null
       this.setData({
         item, configuration, text: item.currentResult?.text || '', statusText: statusText[item.status] || item.status,
         referenceAudioDurationMillis: 0, referenceVideoDurationMillis: 0,
         referenceAudioPath: '', referenceVideoPath: '',
-        editable, readOnly, canRelease: item.status === 'RECORDING_PENDING' || item.status === 'REWORK_PENDING',
+        editable, readOnly, canRelease: activeRecording, canDiscard: activeRecording,
+        isDiscarded: item.status === 'DISCARDED',
+        discardedAtText: dateTimeText(item.currentDiscard?.discardedAt),
         submitLabel: item.status === 'SUBMITTED' ? '保存修改' : '提交作业',
         showAutoClaimNext: item.status === 'RECORDING_PENDING' || item.status === 'REWORK_PENDING',
       })
@@ -208,18 +220,68 @@ Page({
   release() {
     if (!this.data.canRelease) return
     wx.showModal({
-      title: '释放到数据池', content: '是否释放回数据池？当前未提交结果将被清除，操作历史仍保留。', confirmColor: '#c2413b',
+      title: '释放回数据池', content: '', editable: true, placeholderText: '可选：填写释放备注', confirmColor: '#2563eb',
       success: async result => {
         if (!result.confirm) return
         this.setData({ releasing: true })
         try {
           const api = getApp().globalData.api
-          await api.release(this.itemId, this.data.item.revision, api.operationId('release'))
+          await api.release(this.itemId, this.data.item.revision, api.operationId('release'), (result.content || '').trim())
           feedback.success('已释放到数据池')
           setTimeout(() => wx.navigateBack({ delta: 1 }), 400)
         } catch (error) {
           feedback.error(error.message || '释放失败')
         } finally { this.setData({ releasing: false }) }
+      },
+    })
+  },
+  discard() {
+    if (!this.data.canDiscard) return
+    wx.showModal({
+      title: '标记为无效数据', content: '', editable: true, placeholderText: '请输入无效原因（必填）', confirmColor: '#c2413b',
+      success: result => {
+        if (!result.confirm) return
+        const reason = (result.content || '').trim()
+        if (!reason || reason.length > 200) {
+          feedback.error('无效原因必须为 1 到 200 个字符')
+          return
+        }
+        wx.showModal({
+          title: '确认标记无效', content: '标记后数据进入“废弃数据”，不会回到可领取池。',
+          confirmColor: '#c2413b',
+          success: async confirmation => {
+            if (!confirmation.confirm) return
+            this.setData({ discarding: true })
+            try {
+              const api = getApp().globalData.api
+              await api.discard(this.itemId, this.data.item.revision, api.operationId('discard'), reason)
+              feedback.success('已标记为无效数据')
+              setTimeout(() => wx.navigateBack({ delta: 1 }), 400)
+            } catch (error) {
+              if (error.code === 'STALE_STATE') await this.load()
+              feedback.error(error.message || '标记无效失败')
+            } finally { this.setData({ discarding: false }) }
+          },
+        })
+      },
+    })
+  },
+  restore() {
+    if (!this.data.isDiscarded) return
+    wx.showModal({
+      title: '恢复数据', content: '确认恢复到废弃前的录制状态？', confirmColor: '#2563eb',
+      success: async result => {
+        if (!result.confirm) return
+        this.setData({ restoring: true })
+        try {
+          const api = getApp().globalData.api
+          await api.restore(this.itemId, this.data.item.revision, api.operationId('restore'))
+          feedback.success('数据已恢复')
+          await this.load()
+        } catch (error) {
+          if (error.code === 'STALE_STATE') await this.load()
+          feedback.error(error.message || '恢复失败')
+        } finally { this.setData({ restoring: false }) }
       },
     })
   },

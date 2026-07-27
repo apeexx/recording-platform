@@ -58,22 +58,52 @@ public class TaskItemAdministrationService {
 		return items.adminTransitionIfCurrent(mutation).orElseThrow(this::stale);
 	}
 
-	public TaskItem discard(String itemId, String operationId, long expectedRevision, PlatformPrincipal actor) {
-		requireAdmin(actor);
+	public TaskItem discard(
+		String itemId, String operationId, long expectedRevision, String reason, PlatformPrincipal actor
+	) {
+		requireAdminOrCollector(actor);
 		TaskItem item = requireCurrent(itemId, expectedRevision);
 		if (item.getStatus() == TaskItemStatus.DISCARDED) throw stale();
+		String normalizedReason = trimToNull(reason);
+		if (actor.role() == UserRole.COLLECTOR) {
+			if (!actor.userId().equals(item.getCollectorId())) throw forbidden();
+			if (item.getStatus() != TaskItemStatus.RECORDING_PENDING
+				&& item.getStatus() != TaskItemStatus.REWORK_PENDING) {
+				throw invalid("INVALID_DISCARD_STATE", "只有待录制或待返工数据可以标记为无效");
+			}
+			if (normalizedReason == null || normalizedReason.length() > 200) {
+				throw invalid("INVALID_DISCARD_REASON", "无效原因必须为 1 到 200 个字符");
+			}
+		} else if (normalizedReason == null) {
+			normalizedReason = "管理员标记为无效数据";
+		} else if (normalizedReason.length() > 200) {
+			throw invalid("INVALID_DISCARD_REASON", "无效原因不能超过 200 个字符");
+		}
 		return items.adminDiscardIfCurrent(mutation(
-			item, TaskItemStatus.DISCARDED, item.getCollectorId(), item.getAssignmentId(), operationId, actor
+			item, TaskItemStatus.DISCARDED, item.getCollectorId(), item.getAssignmentId(),
+			operationId, normalizedReason, actor
 		)).orElseThrow(this::stale);
 	}
 
+	public TaskItem discard(String itemId, String operationId, long expectedRevision, PlatformPrincipal actor) {
+		return discard(itemId, operationId, expectedRevision, null, actor);
+	}
+
 	public TaskItem restore(String itemId, String operationId, long expectedRevision, PlatformPrincipal actor) {
-		requireAdmin(actor);
+		requireAdminOrCollector(actor);
 		TaskItem item = requireCurrent(itemId, expectedRevision);
 		if (item.getStatus() != TaskItemStatus.DISCARDED || item.getDiscardedPreviousStatus() == null) throw stale();
+		if (actor.role() == UserRole.COLLECTOR) {
+			if (!actor.userId().equals(item.getCollectorId())) throw forbidden();
+			if (item.getDiscardedPreviousStatus() != TaskItemStatus.RECORDING_PENDING
+				&& item.getDiscardedPreviousStatus() != TaskItemStatus.REWORK_PENDING) {
+				throw invalid("INVALID_RESTORE_STATE", "采集员只能恢复本人待录制或待返工数据");
+			}
+		}
 		validateEnabled(item, item.getDiscardedPreviousStatus());
 		return items.adminRestoreIfCurrent(mutation(
-			item, item.getDiscardedPreviousStatus(), item.getCollectorId(), item.getAssignmentId(), operationId, actor
+			item, item.getDiscardedPreviousStatus(), item.getCollectorId(), item.getAssignmentId(),
+			operationId, null, actor
 		)).orElseThrow(this::stale);
 	}
 
@@ -89,7 +119,7 @@ public class TaskItemAdministrationService {
 		String operationId, List<BatchItemCommand> commands, PlatformPrincipal actor
 	) {
 		return batch(operationId, commands, actor, (command, itemOperation) ->
-			discard(command.itemId(), itemOperation, command.expectedRevision(), actor)
+			discard(command.itemId(), itemOperation, command.expectedRevision(), null, actor)
 		);
 	}
 
@@ -151,9 +181,16 @@ public class TaskItemAdministrationService {
 		TaskItem item, TaskItemStatus target, String collectorId, String assignmentId,
 		String operationId, PlatformPrincipal actor
 	) {
+		return mutation(item, target, collectorId, assignmentId, operationId, null, actor);
+	}
+
+	private AdminItemTransitionMutation mutation(
+		TaskItem item, TaskItemStatus target, String collectorId, String assignmentId,
+		String operationId, String reason, PlatformPrincipal actor
+	) {
 		return new AdminItemTransitionMutation(
 			item.getId(), actor.userId(), actorName(actor), item.getRevision(), required(operationId),
-			item.getStatus(), target, collectorId, assignmentId, Instant.now(clock)
+			item.getStatus(), target, collectorId, assignmentId, Instant.now(clock), reason, actor.role()
 		);
 	}
 
@@ -169,12 +206,16 @@ public class TaskItemAdministrationService {
 			throw new ApiException(HttpStatus.FORBIDDEN, "ACCESS_DENIED", "没有权限执行此操作");
 		}
 	}
+	private void requireAdminOrCollector(PlatformPrincipal actor) {
+		if (actor == null || actor.role() != UserRole.ADMIN && actor.role() != UserRole.COLLECTOR) throw forbidden();
+	}
 	private String required(String value) {
 		if (value == null || value.isBlank()) throw new ApiException(HttpStatus.BAD_REQUEST, "OPERATION_ID_REQUIRED", "operationId 不能为空");
 		return value.trim();
 	}
-	private String actorName(PlatformPrincipal actor) { return actor.username() == null ? actor.name() : actor.username(); }
+	private String actorName(PlatformPrincipal actor) { return actor.name() == null ? actor.username() : actor.name(); }
 	private String trimToNull(String value) { return value == null || value.isBlank() ? null : value.trim(); }
+	private ApiException forbidden() { return new ApiException(HttpStatus.FORBIDDEN, "ACCESS_DENIED", "没有权限执行此操作"); }
 	private ApiException stale() { return new ApiException(HttpStatus.CONFLICT, "STALE_STATE", "条目状态或修订号已变化"); }
 	private ApiException invalid(String code, String message) { return new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, code, message); }
 }

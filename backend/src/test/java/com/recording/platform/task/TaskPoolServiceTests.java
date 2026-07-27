@@ -300,7 +300,7 @@ class TaskPoolServiceTests {
 			collector
 		);
 		TaskItemActionResult released = service.release(
-			"item-1", "release-1", resubmitted.revision(),
+			"item-1", "release-1", resubmitted.revision(), null,
 			principal("admin-1", "管理员", UserRole.ADMIN, SessionType.WEB)
 		);
 
@@ -311,6 +311,23 @@ class TaskPoolServiceTests {
 		assertThat(saved.getCurrentResult()).isNull();
 		assertThat(saved.getSubmissions()).hasSize(2);
 		assertThat(saved.getOperations()).hasSize(4);
+	}
+
+	@Test
+	void collectorReleaseStoresOptionalTrimmedNote() {
+		TaskItem pending = item("task-1", "item-release-note", TaskItemStatus.RECORDING_PENDING);
+		pending.setCollectorId("collector-1");
+		pending.setAssignmentId("assignment-1");
+		pending.setRevision(2);
+		items.save(pending);
+
+		service.release("item-release-note", "release-note", 2, "  参考内容不清晰  ", collector);
+
+		TaskItem released = items.findById("item-release-note").orElseThrow();
+		assertThat(released.getOperations()).singleElement()
+			.extracting(OperationHistory::getContent)
+			.asString()
+			.contains("参考内容不清晰");
 	}
 
 	private void stubRunningTaskAndGrant(String taskId) {

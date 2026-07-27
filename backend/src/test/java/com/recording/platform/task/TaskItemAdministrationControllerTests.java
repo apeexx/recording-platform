@@ -30,7 +30,7 @@ class TaskItemAdministrationControllerTests {
 			"item-1", TaskItemStatus.SUBMITTED, null, "status-1", 5, admin
 		)).thenReturn(reviewPending);
 		TaskItem discarded = item(TaskItemStatus.DISCARDED, 7);
-		when(service.discard("item-1", "discard-1", 6, admin)).thenReturn(discarded);
+		when(service.discard("item-1", "discard-1", 6, null, admin)).thenReturn(discarded);
 		TaskItem restored = item(TaskItemStatus.SUBMITTED, 8);
 		when(service.restore("item-1", "restore-1", 7, admin)).thenReturn(restored);
 
@@ -45,7 +45,7 @@ class TaskItemAdministrationControllerTests {
 		), admin)).isSameAs(restored);
 
 		verify(service).changeStatus("item-1", TaskItemStatus.SUBMITTED, null, "status-1", 5, admin);
-		verify(service).discard("item-1", "discard-1", 6, admin);
+		verify(service).discard("item-1", "discard-1", 6, null, admin);
 		verify(service).restore("item-1", "restore-1", 7, admin);
 	}
 

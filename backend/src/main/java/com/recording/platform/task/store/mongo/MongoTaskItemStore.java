@@ -383,8 +383,14 @@ public class MongoTaskItemStore implements TaskItemStore {
 	@Override
 	public Optional<TaskItem> adminDiscardIfCurrent(AdminItemTransitionMutation mutation) {
 		Criteria criteria = adminCriteria(mutation).and("status").ne(TaskItemStatus.DISCARDED);
-		Update update = adminUpdate(mutation, "ADMIN_DISCARD", "将该任务调整到废弃数据")
+		String type = mutation.actorRole() == com.recording.platform.identity.model.UserRole.COLLECTOR
+			? "COLLECTOR_DISCARD" : "ADMIN_DISCARD";
+		Update update = adminUpdate(mutation, type, "将该任务调整到废弃数据：" + mutation.reason())
 			.set("discardedPreviousStatus", mutation.sourceStatus())
+			.set("currentDiscard", new com.recording.platform.task.model.CurrentDiscard(
+				mutation.reason(), mutation.actorUserId(), mutation.actorUsername(),
+				mutation.actorRole(), mutation.occurredAt()
+			))
 			.set("status", TaskItemStatus.DISCARDED);
 		return modify(criteria, update);
 	}
@@ -422,9 +428,12 @@ public class MongoTaskItemStore implements TaskItemStore {
 		Criteria criteria = adminCriteria(mutation)
 			.and("status").is(TaskItemStatus.DISCARDED)
 			.and("discardedPreviousStatus").is(mutation.targetStatus());
-		Update update = adminUpdate(mutation, "ADMIN_RESTORE", "恢复废弃数据到" + mutation.targetStatus())
+		String type = mutation.actorRole() == com.recording.platform.identity.model.UserRole.COLLECTOR
+			? "COLLECTOR_RESTORE" : "ADMIN_RESTORE";
+		Update update = adminUpdate(mutation, type, "恢复废弃数据到" + mutation.targetStatus())
 			.set("status", mutation.targetStatus())
-			.unset("discardedPreviousStatus");
+			.unset("discardedPreviousStatus")
+			.unset("currentDiscard");
 		applyOwnership(update, mutation);
 		return modify(criteria, update);
 	}

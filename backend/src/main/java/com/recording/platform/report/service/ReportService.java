@@ -238,7 +238,8 @@ public class ReportService {
 			}
 			for (OperationHistory operation : item.getOperations() == null ? List.<OperationHistory>of() : item.getOperations()) {
 				if ("RELEASE".equals(operation.getType())) releases++;
-				if ("ADMIN_DISCARD".equals(operation.getType())) discards++;
+				if ("ADMIN_DISCARD".equals(operation.getType())
+					|| "COLLECTOR_DISCARD".equals(operation.getType())) discards++;
 			}
 		}
 		return new WorkSummary(submissions, cumulativeDuration, completed, currentDuration, releases, discards);

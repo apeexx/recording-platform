@@ -8,6 +8,7 @@ import { useNotifications } from '../../../composables/useNotifications.js'
 import { operationId } from '../../../lib/apiUtils.js'
 import { reviewApi } from '../../../lib/reviewApi.js'
 import { taskApi } from '../../../lib/taskApi.js'
+import { referenceMediaUrl } from '../../../lib/taskMedia.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -36,6 +37,8 @@ const canDecide = computed(() =>
 const audioUrl = computed(() => item.value?.currentResult?.audio?.mediaId
   ? `/api/media/${encodeURIComponent(item.value.currentResult.audio.mediaId)}`
   : '')
+const referenceAudioUrl = computed(() => referenceMediaUrl(item.value, 'audio'))
+const referenceVideoUrl = computed(() => referenceMediaUrl(item.value, 'video'))
 const reviewQueuePath = computed(() => `/admin/review/tasks/${item.value?.taskId || route.query.taskId || ''}`)
 
 async function load() {
@@ -111,10 +114,21 @@ onMounted(load)
       <div class="review-layout">
         <div class="business-card">
           <h3>参考源</h3>
-          <div v-if="item.referenceText" class="reference-text">{{ item.referenceText }}</div>
-          <audio v-if="item.referenceAudioMediaId" controls :src="`/api/media/${item.referenceAudioMediaId}`" />
-          <video v-if="item.referenceVideoMediaId" controls :src="`/api/media/${item.referenceVideoMediaId}`" />
-          <p v-if="!item.referenceText && !item.referenceAudioMediaId && !item.referenceVideoMediaId" class="business-note">无参考源</p>
+          <section class="reference-source-block">
+            <h4>参考文本</h4>
+            <div v-if="item.referenceText" class="reference-text">{{ item.referenceText }}</div>
+            <p v-else class="business-note">无参考文本</p>
+          </section>
+          <section class="reference-source-block">
+            <h4>参考音频</h4>
+            <audio v-if="referenceAudioUrl" controls :src="referenceAudioUrl" />
+            <p v-else class="business-note">无参考音频</p>
+          </section>
+          <section class="reference-source-block">
+            <h4>参考视频</h4>
+            <video v-if="referenceVideoUrl" controls :src="referenceVideoUrl" />
+            <p v-else class="business-note">无参考视频</p>
+          </section>
         </div>
         <div class="business-card">
           <h3>采集结果</h3>

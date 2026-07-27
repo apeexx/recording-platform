@@ -64,6 +64,21 @@ class TaskItemQueryServiceTests {
 	}
 
 	@Test
+	void discardedKindOnlyReturnsDiscardedItems() {
+		TaskItemStore items = org.mockito.Mockito.mock(TaskItemStore.class);
+		TaskStore tasks = org.mockito.Mockito.mock(TaskStore.class);
+		when(items.findAllByCollectorIdAndStatusIn(
+			org.mockito.ArgumentMatchers.eq("collector-1"),
+			org.mockito.ArgumentMatchers.eq("task-1"),
+			org.mockito.ArgumentMatchers.eq(List.of(TaskItemStatus.DISCARDED)),
+			org.mockito.ArgumentMatchers.any(Pageable.class)
+		)).thenReturn(new PageImpl<>(List.of()));
+		TaskItemQueryService service = new TaskItemQueryService(items, tasks);
+
+		service.mine("task-1", CollectorWorkKind.DISCARDED, 0, 10, principal("collector-1"));
+	}
+
+	@Test
 	void collectorWorkUsesUpdatedTimeDescendingWithSequenceTieBreak() {
 		TaskItemStore items = org.mockito.Mockito.mock(TaskItemStore.class);
 		TaskStore tasks = org.mockito.Mockito.mock(TaskStore.class);

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.recording.platform.api.ApiException;
@@ -18,6 +19,7 @@ import com.recording.platform.task.model.TaskRecord;
 import com.recording.platform.task.service.TaskItemAdministrationService;
 import com.recording.platform.task.store.TaskItemStore;
 import com.recording.platform.task.store.TaskStore;
+import com.recording.platform.task.store.AdminItemTransitionMutation;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -91,13 +93,73 @@ class TaskItemAdministrationServiceTests {
 		when(items.adminRestoreIfCurrent(any())).thenReturn(Optional.of(restored));
 		TaskItemAdministrationService service = new TaskItemAdministrationService(items, tasks, CLOCK);
 
-		TaskItem discardResult = service.discard("item-1", "op-discard", 8, admin());
+		TaskItem discardResult = service.discard("item-1", "op-discard", 8, null, admin());
 		when(items.findById("item-1")).thenReturn(Optional.of(discardResult));
 		TaskItem restoreResult = service.restore("item-1", "op-restore", 9, admin());
 
 		assertThat(discardResult.getCurrentResult().text()).isEqualTo("有效文本");
 		assertThat(discardResult.getCollectorId()).isEqualTo("collector-1");
 		assertThat(restoreResult.getStatus()).isEqualTo(TaskItemStatus.COMPLETED);
+	}
+
+	@Test
+	void collectorCanDiscardOwnPendingItemWithRequiredReason() {
+		TaskItemStore items = mock(TaskItemStore.class);
+		TaskStore tasks = mock(TaskStore.class);
+		TaskItem pending = item(TaskItemStatus.RECORDING_PENDING, 3);
+		pending.setCollectorId("collector-1");
+		when(items.findById("item-1")).thenReturn(Optional.of(pending));
+		TaskItem discarded = item(TaskItemStatus.DISCARDED, 4);
+		when(items.adminDiscardIfCurrent(any())).thenReturn(Optional.of(discarded));
+		TaskItemAdministrationService service = new TaskItemAdministrationService(items, tasks, CLOCK);
+
+		service.discard("item-1", "discard-1", 3, "  原始素材无效  ", collector("collector-1"));
+
+		var captor = org.mockito.ArgumentCaptor.forClass(AdminItemTransitionMutation.class);
+		verify(items).adminDiscardIfCurrent(captor.capture());
+		assertThat(captor.getValue().reason()).isEqualTo("原始素材无效");
+		assertThat(captor.getValue().actorRole()).isEqualTo(UserRole.COLLECTOR);
+	}
+
+	@Test
+	void collectorDiscardRequiresReasonAndOwnedRecordableStatus() {
+		TaskItemStore items = mock(TaskItemStore.class);
+		TaskStore tasks = mock(TaskStore.class);
+		TaskItem pending = item(TaskItemStatus.RECORDING_PENDING, 3);
+		pending.setCollectorId("collector-1");
+		when(items.findById("item-1")).thenReturn(Optional.of(pending));
+		TaskItemAdministrationService service = new TaskItemAdministrationService(items, tasks, CLOCK);
+
+		assertCode(() -> service.discard(
+			"item-1", "discard-empty", 3, " ", collector("collector-1")
+		), "INVALID_DISCARD_REASON");
+		assertCode(() -> service.discard(
+			"item-1", "discard-other", 3, "无效", collector("collector-2")
+		), "ACCESS_DENIED");
+
+		pending.setCollectorId("collector-1");
+		pending.setStatus(TaskItemStatus.SUBMITTED);
+		assertCode(() -> service.discard(
+			"item-1", "discard-submitted", 3, "无效", collector("collector-1")
+		), "INVALID_DISCARD_STATE");
+	}
+
+	@Test
+	void collectorCanRestoreOwnDiscardedRecordingItem() {
+		TaskItemStore items = mock(TaskItemStore.class);
+		TaskStore tasks = mock(TaskStore.class);
+		TaskItem discarded = item(TaskItemStatus.DISCARDED, 6);
+		discarded.setCollectorId("collector-1");
+		discarded.setDiscardedPreviousStatus(TaskItemStatus.REWORK_PENDING);
+		when(items.findById("item-1")).thenReturn(Optional.of(discarded));
+		stubTask(tasks, version(true));
+		TaskItem restored = item(TaskItemStatus.REWORK_PENDING, 7);
+		when(items.adminRestoreIfCurrent(any())).thenReturn(Optional.of(restored));
+		TaskItemAdministrationService service = new TaskItemAdministrationService(items, tasks, CLOCK);
+
+		TaskItem result = service.restore("item-1", "restore-1", 6, collector("collector-1"));
+
+		assertThat(result.getStatus()).isEqualTo(TaskItemStatus.REWORK_PENDING);
 	}
 
 	@Test
@@ -186,6 +248,12 @@ class TaskItemAdministrationServiceTests {
 	private PlatformPrincipal admin() {
 		return new PlatformPrincipal(
 			"session-admin", "admin-1", "admin", "管理员", UserRole.ADMIN, SessionType.WEB, false
+		);
+	}
+
+	private PlatformPrincipal collector(String userId) {
+		return new PlatformPrincipal(
+			"session-" + userId, userId, userId, "采集员", UserRole.COLLECTOR, SessionType.MINIPROGRAM, false
 		);
 	}
 

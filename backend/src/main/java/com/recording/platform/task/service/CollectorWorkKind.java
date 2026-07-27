@@ -6,5 +6,6 @@ public enum CollectorWorkKind {
 	REWORK,
 	PENDING,
 	SUBMITTED,
-	FINISHED
+	FINISHED,
+	DISCARDED
 }

@@ -4,10 +4,10 @@ const clampPage=(page,total)=>Math.min(Math.max(Number(page)||0,0),pageCount(tot
 const canPrevious=page=>(Number(page)||0)>0
 const canNext=(page,total)=>(Number(page)||0)+1<pageCount(total)
 const pageOptions=totalPages=>Array.from({length:totalPages},(_,index)=>`第 ${index+1} 页`)
-const labels={RECORDING_PENDING:'待录制',REWORK_PENDING:'待返修',SUBMITTED:'已提交',REVIEW_PENDING:'待审核',COMPLETED:'已完成'}
+const labels={RECORDING_PENDING:'待录制',REWORK_PENDING:'待返修',SUBMITTED:'已提交',REVIEW_PENDING:'待审核',COMPLETED:'已完成',DISCARDED:'已废弃'}
 
 Page({
-	data:{items:[],kind:'PENDING',page:0,total:0,totalPages:1,pageOptions:['第 1 页'],loading:false,loadError:'',filters:[{value:'PENDING',label:'待处理'},{value:'SUBMITTED',label:'已提交'},{value:'FINISHED',label:'已完成'}]},
+	data:{items:[],kind:'PENDING',page:0,total:0,totalPages:1,pageOptions:['第 1 页'],loading:false,loadError:'',filters:[{value:'PENDING',label:'待处理'},{value:'SUBMITTED',label:'已提交'},{value:'FINISHED',label:'已完成'},{value:'DISCARDED',label:'废弃数据'}]},
   onLoad(options){this.taskId=options.taskId||''},
   async onShow(){const {requireCompleteProfile}=require('../../services/profileGuard.js');if(await requireCompleteProfile(getApp()))this.load(this.data.page)},
 	onPullDownRefresh(){this.load(this.data.page).finally(()=>wx.stopPullDownRefresh())},

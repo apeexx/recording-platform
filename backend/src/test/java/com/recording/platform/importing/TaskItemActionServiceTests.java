@@ -55,7 +55,7 @@ class TaskItemActionServiceTests {
 		TaskItemActionResult result = new TaskItemActionResult(
 			"item-1", TaskItemStatus.AVAILABLE, 2, null, null
 		);
-		when(pool.release("item-1", "release-1", 1, null)).thenReturn(result);
+		when(pool.release("item-1", "release-1", 1, null, null)).thenReturn(result);
 		RecordingRetirement retirement = org.mockito.Mockito.mock(RecordingRetirement.class);
 		when(storage.stageRetirement(audio.relativePath())).thenReturn(retirement);
 		when(retirement.deferCleanup()).thenReturn("temp/backups/release-old.wav");
@@ -96,10 +96,10 @@ class TaskItemActionServiceTests {
 		second.setId("item-2");
 		when(items.findById("item-1")).thenReturn(Optional.of(first));
 		when(items.findById("item-2")).thenReturn(Optional.of(second));
-		when(pool.release("item-1", "batch-release:0", 2, admin())).thenReturn(
+		when(pool.release("item-1", "batch-release:0", 2, null, admin())).thenReturn(
 			new TaskItemActionResult("item-1", TaskItemStatus.AVAILABLE, 3, null, null)
 		);
-		when(pool.release("item-2", "batch-release:1", 4, admin())).thenThrow(
+		when(pool.release("item-2", "batch-release:1", 4, null, admin())).thenThrow(
 			new ApiException(HttpStatus.CONFLICT, "STALE_STATE", "状态已变化")
 		);
 		TaskItemActionService service = new TaskItemActionService(items, pool, storage, cleanup);

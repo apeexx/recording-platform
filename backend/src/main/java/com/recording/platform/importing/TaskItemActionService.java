@@ -42,6 +42,7 @@ public class TaskItemActionService {
 		String itemId,
 		String operationId,
 		long expectedRevision,
+		String note,
 		PlatformPrincipal actor
 	) {
 		cleanup.retry(itemId, operationId);
@@ -51,7 +52,7 @@ public class TaskItemActionService {
 		RecordingRetirement retirement = audio == null ? null : storage.stageRetirement(audio.relativePath());
 		TaskItemActionResult result;
 		try {
-			result = pool.release(itemId, operationId, expectedRevision, actor);
+			result = pool.release(itemId, operationId, expectedRevision, note, actor);
 		} catch (RuntimeException exception) {
 			rollback(retirement, exception);
 			throw exception;
@@ -66,6 +67,12 @@ public class TaskItemActionService {
 			);
 		}
 		return result;
+	}
+
+	public TaskItemActionResult release(
+		String itemId, String operationId, long expectedRevision, PlatformPrincipal actor
+	) {
+		return release(itemId, operationId, expectedRevision, null, actor);
 	}
 
 	public TaskItemActionResult reject(

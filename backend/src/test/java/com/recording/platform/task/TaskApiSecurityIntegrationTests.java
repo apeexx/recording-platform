@@ -454,6 +454,31 @@ class TaskApiSecurityIntegrationTests {
 	}
 
 	@Test
+	void adminDiscardRequiresCsrfWhileCollectorBearerDiscardDoesNot() throws Exception {
+		TaskItem discarded = new TaskItem();
+		discarded.setId("item-1");
+		discarded.setStatus(TaskItemStatus.DISCARDED);
+		when(administrationService.discard(
+			anyString(), anyString(), any(Long.class), any(), any()
+		)).thenReturn(discarded);
+
+		mockMvc.perform(post("/api/task-items/item-1/discard")
+				.with(user("admin").roles("ADMIN"))
+				.contentType("application/json")
+				.content("{\"operationId\":\"discard-1\",\"expectedRevision\":2}"))
+			.andExpect(status().isForbidden());
+
+		PlatformPrincipal collector = principal("collector-1", UserRole.COLLECTOR, SessionType.MINIPROGRAM);
+		mockMvc.perform(post("/api/task-items/item-1/discard")
+				.with(authentication(new TestingAuthenticationToken(collector, null, "ROLE_COLLECTOR")))
+				.header(HttpHeaders.AUTHORIZATION, "Bearer test-miniprogram-token")
+				.contentType("application/json")
+				.content("{\"operationId\":\"discard-1\",\"expectedRevision\":2,\"reason\":\"参考内容无效\"}"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.status").value("DISCARDED"));
+	}
+
+	@Test
 	void taskLifecycleAndAccessApprovalRoutesUseTheRoleSpecificContracts() throws Exception {
 		TaskRecord task = new TaskRecord();
 		task.setId("task-1");

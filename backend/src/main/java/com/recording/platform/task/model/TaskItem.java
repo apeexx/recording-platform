@@ -71,6 +71,7 @@ public class TaskItem {
 	private List<SubmissionHistory> submissions = new ArrayList<>();
 	private List<OperationHistory> operations = new ArrayList<>();
 	private TaskItemStatus discardedPreviousStatus;
+	private CurrentDiscard currentDiscard;
 	private Instant createdAt;
 	private Instant updatedAt;
 }

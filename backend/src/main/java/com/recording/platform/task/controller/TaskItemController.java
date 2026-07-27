@@ -91,7 +91,7 @@ public class TaskItemController {
 		@Valid @RequestBody ItemOperationRequest request,
 		@AuthenticationPrincipal PlatformPrincipal actor
 	) {
-		return actions.release(itemId, request.operationId(), request.expectedRevision(), actor);
+		return actions.release(itemId, request.operationId(), request.expectedRevision(), request.note(), actor);
 	}
 
 	@PostMapping("/{itemId}/reject")
@@ -103,6 +103,10 @@ public class TaskItemController {
 		return actions.reject(itemId, request.operationId(), request.expectedRevision(), request.reason(), actor);
 	}
 
-	public record ItemOperationRequest(@NotNull String operationId, @NotNull Long expectedRevision) { }
+	public record ItemOperationRequest(@NotNull String operationId, @NotNull Long expectedRevision, String note) {
+		public ItemOperationRequest(String operationId, Long expectedRevision) {
+			this(operationId, expectedRevision, null);
+		}
+	}
 	public record RejectRequest(@NotNull String operationId, @NotNull Long expectedRevision, @NotNull String reason) { }
 }

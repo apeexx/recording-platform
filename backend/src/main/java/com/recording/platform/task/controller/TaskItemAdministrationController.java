@@ -66,7 +66,7 @@ public class TaskItemAdministrationController {
 		@AuthenticationPrincipal PlatformPrincipal actor
 	) {
 		return execute("item:discard:" + itemId, request.operationId(), TaskItem.class,
-			() -> administration.discard(itemId, request.operationId(), request.expectedRevision(), actor));
+			() -> administration.discard(itemId, request.operationId(), request.expectedRevision(), request.reason(), actor));
 	}
 
 	@PostMapping("/{itemId}/restore")
@@ -133,7 +133,11 @@ public class TaskItemAdministrationController {
 		).toList();
 	}
 
-	public record ItemOperationRequest(@NotBlank String operationId, @NotNull Long expectedRevision) { }
+	public record ItemOperationRequest(@NotBlank String operationId, @NotNull Long expectedRevision, String reason) {
+		public ItemOperationRequest(String operationId, Long expectedRevision) {
+			this(operationId, expectedRevision, null);
+		}
+	}
 	public record StatusRequest(
 		@NotBlank String operationId,
 		@NotNull Long expectedRevision,

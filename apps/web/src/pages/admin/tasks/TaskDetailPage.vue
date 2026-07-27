@@ -7,9 +7,11 @@ import PaginationControls from '../../../components/admin/PaginationControls.vue
 import BaseSelect from '../../../components/form/BaseSelect.vue'
 import TaskItemEditModal from '../../../components/admin/TaskItemEditModal.vue'
 import { taskApi } from '../../../lib/taskApi.js'
+import { batchOperationApi } from '../../../lib/batchOperationApi.js'
 import { operationId } from '../../../lib/apiUtils.js'
 import { statusLabel } from '../../../lib/statusLabels.js'
 import { useNotifications } from '../../../composables/useNotifications.js'
+import { useBatchSelection } from '../../../composables/useBatchSelection.js'
 
 const notifications = useNotifications()
 const route = useRoute()
@@ -22,7 +24,10 @@ const total = ref(0)
 const loading = ref(false)
 const loadError = ref('')
 const notice = ref('')
-const selected = ref(new Set())
+const selection = useBatchSelection(items, total)
+const batchPreview = ref(null)
+const batchJob = ref(null)
+const batchPollTimer = ref(null)
 const targetStatus = ref('COMPLETED')
 const statusOptions = ref([])
 const importFile = ref(null)
@@ -230,7 +235,7 @@ async function deleteItem(row) {
   try {
     await taskApi.deleteItem(row.id, row.revision, operationId('item-delete'))
     notifications.success('待领取数据已删除')
-    selected.value.delete(row.id)
+    selection.clear()
     await loadItems()
   } catch (exception) {
     notifications.error(exception.message)
@@ -248,23 +253,51 @@ async function itemAction(row, action) {
   }
 }
 
-function toggle(row) {
-  const next = new Set(selected.value)
-  next.has(row.id) ? next.delete(row.id) : next.add(row.id)
-  selected.value = next
+async function changePage(value) { page.value = value; selection.clearPageMode(); await loadItems() }
+async function changePageSize(value) { itemPageSize.value = value; page.value = 0; selection.clear(); await loadItems() }
+
+async function selectAllMatching() {
+  try {
+    batchPreview.value = await batchOperationApi.preview(selection.selectionPayload(route.params.id, 'TASK_DETAIL'))
+    selection.selectAllMatching()
+  } catch (exception) {
+    notifications.error(exception.message)
+  }
 }
 
-async function changePage(value) { page.value = value; selected.value = new Set(); await loadItems() }
-async function changePageSize(value) { itemPageSize.value = value; page.value = 0; selected.value = new Set(); await loadItems() }
+function applicableCount(action) {
+  if (selection.mode.value === 'ALL') {
+    const key = action === 'status' ? 'STATUS' : action.toUpperCase()
+    return Number(batchPreview.value?.applicableCounts?.[key]) || 0
+  }
+  return selection.pageCommands().filter(command => {
+    const row = items.value.find(item => item.id === command.itemId)
+    if (action === 'restore') return row?.status === 'DISCARDED'
+    if (action === 'discard') return row?.status !== 'DISCARDED'
+    if (action === 'release') return row?.status !== 'AVAILABLE' && row?.status !== 'DISCARDED'
+    return row?.status !== 'DISCARDED'
+  }).length
+}
 
 async function batch(action) {
-  if (!selected.value.size || !confirm(`确认批量执行 ${action}，共 ${selected.value.size} 条？`)) return
-  const commands = items.value.filter((row) => selected.value.has(row.id)).map((row) => ({ itemId: row.id, expectedRevision: row.revision }))
+  const count = applicableCount(action)
+  if (!count || !confirm(`确认批量执行 ${action}，共 ${count} 条适用数据？`)) return
   try {
+    if (selection.mode.value === 'ALL') {
+      batchJob.value = await batchOperationApi.create({
+        operationId: operationId(`detail-all-${action}`),
+        action: action.toUpperCase(),
+        selection: selection.selectionPayload(route.params.id, 'TASK_DETAIL'),
+      })
+      notifications.success('跨页批处理已进入队列')
+      scheduleBatchPoll()
+      return
+    }
+    const commands = selection.pageCommands()
     const result = await taskApi.batchAction(action, commands, operationId(`batch-${action}`))
     notice.value = `批量操作完成：成功 ${result.filter((row) => row.success).length}，冲突 ${result.filter((row) => !row.success).length}`
     notifications.success(notice.value)
-    selected.value = new Set()
+    selection.clear()
     await loadItems()
   } catch (exception) {
     notifications.error(exception.message)
@@ -272,21 +305,66 @@ async function batch(action) {
 }
 
 async function changeStatus() {
-  if (!selected.value.size || !confirm(`确认将 ${selected.value.size} 条数据调整为 ${targetStatus.value}？`)) return
-  const commands = items.value.filter((row) => selected.value.has(row.id)).map((row) => ({ itemId: row.id, expectedRevision: row.revision, collectorId: row.collectorId }))
+  const count = applicableCount('status')
+  if (!count || !confirm(`确认将 ${count} 条适用数据调整为 ${targetStatus.value}？`)) return
   try {
+    if (selection.mode.value === 'ALL') {
+      batchJob.value = await batchOperationApi.create({
+        operationId: operationId('detail-all-status'),
+        action: 'STATUS',
+        selection: selection.selectionPayload(route.params.id, 'TASK_DETAIL'),
+        targetStatus: targetStatus.value,
+      })
+      notifications.success('跨页状态调整已进入队列')
+      scheduleBatchPoll()
+      return
+    }
+    const commands = selection.pageCommands()
     const result = await taskApi.batchStatus(targetStatus.value, commands, operationId('batch-status'))
     notice.value = `状态调整完成：成功 ${result.filter((row) => row.success).length}，冲突 ${result.filter((row) => !row.success).length}`
     notifications.success(notice.value)
-    selected.value = new Set()
+    selection.clear()
     await loadItems()
   } catch (exception) {
     notifications.error(exception.message)
   }
 }
 
-onMounted(load)
-onBeforeUnmount(stopImportTracking)
+function clearBatchPoll() {
+  if (batchPollTimer.value) window.clearTimeout(batchPollTimer.value)
+  batchPollTimer.value = null
+}
+function scheduleBatchPoll() {
+  clearBatchPoll()
+  batchPollTimer.value = window.setTimeout(refreshBatchJob, 1000)
+}
+async function refreshBatchJob() {
+  clearBatchPoll()
+  if (!batchJob.value?.id) return
+  try {
+    batchJob.value = await batchOperationApi.get(batchJob.value.id)
+    if (['PENDING', 'PROCESSING'].includes(batchJob.value.status)) return scheduleBatchPoll()
+    notice.value = `批处理完成：成功 ${batchJob.value.succeededCount || 0}，失败 ${batchJob.value.failedCount || 0}，跳过 ${batchJob.value.skippedCount || 0}`
+    notifications.success(notice.value)
+    selection.clear()
+    batchPreview.value = null
+    await loadItems()
+  } catch (exception) {
+    notifications.error(exception.message)
+  }
+}
+async function resumeBatchJob() {
+  try {
+    const recent = await batchOperationApi.recent(route.params.id, 'TASK_DETAIL')
+    batchJob.value = recent.find(value => ['PENDING', 'PROCESSING'].includes(value.status)) || recent[0] || null
+    if (['PENDING', 'PROCESSING'].includes(batchJob.value?.status)) scheduleBatchPoll()
+  } catch (exception) {
+    notifications.error(exception.message)
+  }
+}
+
+onMounted(async () => { await load(); await resumeBatchJob() })
+onBeforeUnmount(() => { stopImportTracking(); clearBatchPoll() })
 </script>
 
 <template>
@@ -337,18 +415,29 @@ onBeforeUnmount(stopImportTracking)
             <h3>数据池（共 {{ total }} 条）</h3>
             <div class="business-actions task-pool-toolbar">
               <BaseSelect v-model="targetStatus" :options="statusOptions" aria-label="目标状态" />
-              <button class="button-secondary" :disabled="!selected.size" @click="changeStatus">调整状态</button>
-              <button class="button-secondary" :disabled="!selected.size" @click="batch('release')">批量释放</button>
-              <button class="button-secondary is-danger" :disabled="!selected.size" @click="batch('discard')">批量废弃</button>
-              <button class="button-secondary" :disabled="!selected.size" @click="batch('restore')">批量恢复</button>
+              <button class="button-secondary" :disabled="!applicableCount('status')" @click="changeStatus">调整状态（{{ applicableCount('status') }}）</button>
+              <button class="button-secondary" :disabled="!applicableCount('release')" @click="batch('release')">批量释放（{{ applicableCount('release') }}）</button>
+              <button class="button-secondary is-danger" :disabled="!applicableCount('discard')" @click="batch('discard')">批量废弃（{{ applicableCount('discard') }}）</button>
+              <button class="button-secondary" :disabled="!applicableCount('restore')" @click="batch('restore')">批量恢复（{{ applicableCount('restore') }}）</button>
             </div>
+          </div>
+          <div v-if="selection.selectedCount.value" class="batch-selection-bar">
+            <span>已选择 {{ selection.selectedCount.value }} 条</span>
+            <button v-if="selection.mode.value === 'PAGE' && total > selection.selectedCount.value" class="button-link" @click="selectAllMatching">选择全部 {{ total }} 条筛选结果</button>
+            <strong v-else-if="selection.mode.value === 'ALL'">已跨页全选</strong>
+            <button class="button-link" @click="selection.clear(); batchPreview = null">清除选择</button>
+          </div>
+          <div v-if="batchJob" class="batch-job-card" aria-live="polite">
+            <strong>{{ ['PENDING', 'PROCESSING'].includes(batchJob.status) ? '批处理中' : '最近批处理' }}</strong>
+            <progress :value="batchJob.processedCount || 0" :max="batchJob.selectedCount || 1"/>
+            <span>总数 {{ batchJob.selectedCount || 0 }} · 成功 {{ batchJob.succeededCount || 0 }} · 失败 {{ batchJob.failedCount || 0 }} · 跳过 {{ batchJob.skippedCount || 0 }}</span>
           </div>
           <AsyncState :loading="false" :error="''" :empty="!items.length">
             <div class="business-table-wrap">
               <table class="business-table">
-                <thead><tr><th>选择</th><th>编号</th><th>状态</th><th>采集员 ID</th><th>采集员姓名</th><th>结果</th><th>操作</th></tr></thead>
+                <thead><tr><th><input type="checkbox" :checked="selection.pageAllSelected.value" aria-label="选择当前页面" @change="selection.togglePage"></th><th>编号</th><th>状态</th><th>采集员 ID</th><th>采集员姓名</th><th>结果</th><th>操作</th></tr></thead>
                 <tbody><tr v-for="row in items" :key="row.id">
-                  <td><label class="business-check colored-checkbox"><input type="checkbox" :checked="selected.has(row.id)" :aria-label="`选择 ${row.itemCode}`" @change="toggle(row)"><span class="visually-hidden">选择</span></label></td>
+                  <td><label class="business-check colored-checkbox"><input type="checkbox" :checked="selection.isSelected(row)" :aria-label="`选择 ${row.itemCode}`" @change="selection.toggle(row)"><span class="visually-hidden">选择</span></label></td>
                   <td>{{ row.itemCode }}</td><td>{{ statusLabel('item', row.status) }}</td><td>{{ row.collectorId || '-' }}</td><td>{{ row.collectorName || '-' }}</td>
                   <td>{{ row.currentResult?.audio?.durationMillis ? `${Math.round(row.currentResult.audio.durationMillis / 1000)}秒` : row.currentResult?.text ? '文本' : '-' }}</td>
                   <td class="table-actions">

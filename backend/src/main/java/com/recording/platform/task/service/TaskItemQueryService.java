@@ -44,6 +44,7 @@ public class TaskItemQueryService {
 			case REWORK -> List.of(TaskItemStatus.REWORK_PENDING);
 			case SUBMITTED -> List.of(TaskItemStatus.SUBMITTED);
 			case FINISHED -> List.of(TaskItemStatus.REVIEW_PENDING, TaskItemStatus.COMPLETED);
+			case DISCARDED -> List.of(TaskItemStatus.DISCARDED);
 		};
 		PageRequest pageable = PageRequest.of(
 			Math.max(page, 0), Math.min(Math.max(size, 1), 100),

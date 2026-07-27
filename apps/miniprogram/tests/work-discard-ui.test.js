@@ -1,0 +1,32 @@
+const test = require('node:test')
+const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const path = require('node:path')
+
+const read = file => fs.readFileSync(path.resolve(file), 'utf8')
+
+test('作业页固定展示三类参考源并区分释放和标记无效图标', () => {
+  const page = read('pages/work/index.wxml')
+  assert.match(page, /参考文本/)
+  assert.match(page, /无参考文本/)
+  assert.match(page, /参考音频/)
+  assert.match(page, /无参考音频/)
+  assert.match(page, /参考视频/)
+  assert.match(page, /无参考视频/)
+  assert.match(page, /recycle\.svg/)
+  assert.match(page, /aria-label="释放回数据池"/)
+  assert.match(page, /trash\.svg/)
+  assert.match(page, /aria-label="标记为无效数据"/)
+})
+
+test('已废弃详情展示原因操作人时间并在底部恢复', () => {
+  const script = read('pages/work/index.js')
+  const page = read('pages/work/index.wxml')
+  assert.match(script, /DISCARDED: '已废弃'/)
+  assert.match(script, /discard\(\)/)
+  assert.match(script, /restore\(\)/)
+  assert.match(page, /item\.currentDiscard\.reason/)
+  assert.match(page, /item\.currentDiscard\.actorName/)
+  assert.match(page, /discardedAtText/)
+  assert.match(page, /bindtap="restore">恢复数据/)
+})

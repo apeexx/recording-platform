@@ -37,3 +37,11 @@ test('任务数据页提供原生页码选择器并在切换页签时回到第�
   assert.match(style, /\.pagination\{[^}]*flex-wrap:wrap/)
   assert.match(style, /\.page-picker\{[^}]*flex:/)
 })
+
+test('任务数据页在已完成右侧提供独立废弃数据页签', () => {
+  const script = read('pages/work-list/index.js')
+  const style = read('pages/work-list/index.wxss')
+  assert.match(script, /\{value:'FINISHED',label:'已完成'\},\{value:'DISCARDED',label:'废弃数据'\}/)
+  assert.match(script, /DISCARDED:'已废弃'/)
+  assert.match(style, /\.tag\.status-DISCARDED/)
+})

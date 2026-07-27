@@ -387,8 +387,8 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 ```text
 请求方法：POST / GET
 请求路径：/api/tasks/{taskId}/items、/api/tasks/{taskId}/items/start、/api/task-items/{itemId}、/api/task-items/mine
-请求参数：单条添加 JSON referenceText/referenceAudioUrl/referenceVideoUrl + Idempotency-Key；start 携带 Idempotency-Key；列表 page、size；mine 支持 taskId、kind=PENDING|SUBMITTED|FINISHED，兼容 ALL|RECORDING|REWORK
-响应结构：TaskItem 或 {items,page,size,total}；TaskItem 可包含 referenceAudioUrl、referenceVideoUrl、collectorName、reviewerName，历史参考 URL 可为空，未分配用户姓名为空
+请求参数：单条添加 JSON referenceText/referenceAudioUrl/referenceVideoUrl + Idempotency-Key；start 携带 Idempotency-Key；列表 page、size；mine 支持 taskId、kind=PENDING|SUBMITTED|FINISHED|DISCARDED，兼容 ALL|RECORDING|REWORK
+响应结构：TaskItem 或 {items,page,size,total}；TaskItem 可包含 referenceAudioUrl、referenceVideoUrl、collectorName、reviewerName、currentDiscard，历史参考 URL 可为空，未分配用户姓名为空
 错误码：404 NO_AVAILABLE_ITEM/TASK_ITEM_NOT_FOUND；409 ITEM_CONFLICT/INVALID_TASK_STATE；422 ITEM_REFERENCE_REQUIRED/REMOTE_URL_INVALID
 权限要求：添加和任务条目列表仅 ADMIN；start 仅 COLLECTOR；详情仅 ADMIN/REVIEWER/当前采集员
 数据一致性要求：DRAFT/RUNNING/PAUSED 可新增，ENDED 返回 INVALID_TASK_STATE；新条目只绑定 taskId，参考音视频只保存通过轻量语法校验的 HTTPS URL；itemCode 任务内递增唯一且不复用；添加和领取均持久化幂等
@@ -409,12 +409,34 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 ```text
 请求方法：POST
 请求路径：/api/task-items/{itemId}/submit、/release、/reject
-请求参数：submit 在包含录音时使用 multipart operationId、assignmentId、expectedRevision、text?、audio、referenceAudioDurationMillis、referenceVideoDurationMillis；纯文本提交在同一路径使用 application/json，字段相同但不含 audio；release/reject JSON operationId、expectedRevision，reject 另含 reason
+请求参数：submit 在包含录音时使用 multipart operationId、assignmentId、expectedRevision、text?、audio、referenceAudioDurationMillis、referenceVideoDurationMillis；纯文本提交在同一路径使用 application/json，字段相同但不含 audio；release JSON operationId、expectedRevision、可选 note（最多 200 字）；reject JSON operationId、expectedRevision、reason
 响应结构：{itemId,status,revision,assignmentId,result}
 错误码：409 STALE_STATE/REFERENCE_DURATION_MISMATCH；413 UPLOAD_TOO_LARGE；422 录音格式/采样率/声道/时长/驳回原因错误，以及 REFERENCE_DURATION_REQUIRED/REFERENCE_DURATION_NOT_APPLICABLE
 权限要求：submit/release 仅当前 COLLECTOR（ADMIN 也可 release）；reject 仅 ADMIN/REVIEWER
-数据一致性要求：operationId 绑定操作者并返回首次结果；每次提交均核对参考音视频时长，不存在的参考源必须为 0，存在的参考源必须为正数；首次提交保存基准值，后续误差不超过 1000 毫秒时沿用基准，超过时拒绝；人工审核任务提交到 SUBMITTED 且领取前可覆盖提交，免审任务直接 COMPLETED；稳定 current 文件原子替换；驳回保留原采集员；释放清当前结果、当前 assignment 的统计锚点与采集员归属，但保留提交/操作历史；提交/释放成功后的旧文件和 metadata 清理持久化并可由 operation 重放/启动恢复重试
+数据一致性要求：operationId 绑定操作者并返回首次结果；每次提交均核对参考音视频时长，不存在的参考源必须为 0，存在的参考源必须为正数；首次提交保存基准值，后续误差不超过 1000 毫秒时沿用基准，超过时拒绝；人工审核任务提交到 SUBMITTED 且领取前可覆盖提交，免审任务直接 COMPLETED；稳定 current 文件原子替换；驳回保留原采集员；释放备注写入操作记录，释放清当前结果、当前 assignment 的统计锚点与采集员归属，但保留提交/操作历史；提交/释放成功后的旧文件和 metadata 清理持久化并可由 operation 重放/启动恢复重试
 前端调用位置：apps/miniprogram/pages/work/*、apps/web/src/pages/admin/review/*
+```
+
+```text
+请求方法：POST
+请求路径：/api/task-items/{itemId}/discard、/api/task-items/{itemId}/restore
+请求参数：JSON operationId、expectedRevision；discard 可选 reason，COLLECTOR 必须填写 1–200 字，ADMIN 省略时使用安全默认原因
+响应结构：TaskItem，废弃时 currentDiscard 含原因、操作人 ID/姓名/角色和时间
+错误码：403 ACCESS_DENIED；409 STALE_STATE；422 INVALID_DISCARD_STATE/INVALID_DISCARD_REASON/INVALID_RESTORE_STATE
+权限要求：ADMIN 可废弃和恢复；COLLECTOR 仅可废弃、恢复本人且废弃前为 RECORDING_PENDING 或 REWORK_PENDING 的条目
+数据一致性要求：废弃、恢复均使用 revision/CAS 与持久化幂等；废弃保留归属、当前结果、参考源和媒体，外部结果继续返回 DISCARDED；恢复回废弃前状态并清除 currentDiscard，操作历史永久保留；历史 currentDiscard 缺失时前端安全占位，不迁移
+前端调用位置：apps/miniprogram/pages/work/*、apps/web/src/pages/admin/tasks/*
+```
+
+```text
+请求方法：POST / GET
+请求路径：/api/batch-operation-jobs/preview、/api/batch-operation-jobs、/api/batch-operation-jobs/{jobId}、/api/batch-operation-jobs?taskId=&source=
+请求参数：预览携带 taskId、source=TASK_DETAIL|TASK_POOL|REVIEW_QUEUE、excludedItemIds；创建另含 operationId、action、可选 targetStatus/reviewerId
+响应结构：预览返回 selectedCount、各动作 applicableCounts；创建返回 HTTP 202 BatchOperationJob；查询返回单个任务或当前用户最近 10 个任务
+错误码：403 ACCESS_DENIED；404 BATCH_JOB_NOT_FOUND；409 BATCH_JOB_CONFLICT；422 INVALID_BATCH_SELECTION/EMPTY_BATCH_SELECTION/TARGET_STATUS_REQUIRED/REVIEWER_REQUIRED
+权限要求：ADMIN 可使用三个来源页面及全部动作；REVIEWER 仅可在 REVIEW_QUEUE 创建 REVIEW_CLAIM
+数据一致性要求：创建时固化 itemId、revision、状态和动作所需结果快照；(actorUserId,operationId) 唯一并幂等重放；后台按条 CAS 执行、每条独立幂等键，状态变化计跳过，其他失败保存有限脱敏摘要；PROCESSING 使用租约、心跳和 nextSequence 检查点，租约过期或服务重启后续跑
+前端调用位置：apps/web/src/lib/batchOperationApi.js、任务详情、独立任务数据池与审核池
 ```
 
 ```text
@@ -658,14 +680,26 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 
 ```text
 集合名称：task_items
-字段名称：taskId、sequence、itemCode、creationOperationId、status、collectorId、reviewerId、assignmentId、reviewAssignmentId、revision、参考字段、referenceAudioDurationMillis、referenceVideoDurationMillis、firstSubmittedAt、latestSubmittedAt、currentResult、currentRejection、submissions（含提交时 collectorId）、operations、discardedPreviousStatus、createdAt、updatedAt
+字段名称：taskId、sequence、itemCode、creationOperationId、status、collectorId、reviewerId、assignmentId、reviewAssignmentId、revision、参考字段、referenceAudioDurationMillis、referenceVideoDurationMillis、firstSubmittedAt、latestSubmittedAt、currentResult、currentRejection、currentDiscard、submissions（含提交时 collectorId）、operations、discardedPreviousStatus、createdAt、updatedAt
 字段类型：字符串、枚举、数值、嵌套文档、数组、UTC Instant
 默认值：新条目 AVAILABLE、revision=0、历史数组为空
 唯一约束：(taskId,itemCode)；creationOperationId 存在时任务内唯一；普通 RECORDING_PENDING 与 REWORK_PENDING 均不设采集员持有数量唯一约束
 索引：上述业务唯一索引；(taskId,status,sequence) 领取索引；(collectorId,status)；普通查询索引 (collectorId,taskId,status)
-数据兼容策略：条目通过 taskId 读取已冻结任务配置；当前结果可替换/清除，提交与操作历史只追加；个人统计只读当前 assignment 字段，不回扫历史 submissions
+数据兼容策略：条目通过 taskId 读取已冻结任务配置；currentDiscard 只表示当前废弃标记，恢复后清除，历史缺失时安全占位；当前结果可替换/清除，提交与操作历史只追加；个人统计只读当前 assignment 字段，不回扫历史 submissions；采集员废弃次数与管理员废弃次数均计入流程统计
 迁移步骤：本轮按已确认方案不兼容旧统计数据，更新后重置数据库；应用启动时仍先确保普通索引 `collector_task_status` 创建成功，再幂等删除旧 `unique_collector_recording_pending` 与 `unique_collector_task_recording_pending`，失败则终止启动
 回滚方式：备份集合与本地媒体；恢复任一旧唯一索引前必须先处理与其口径冲突的多条普通 RECORDING_PENDING，否则索引无法重建；不得只回滚 Mongo 或只回滚文件
+```
+
+```text
+集合名称：batch_operation_jobs、batch_operation_items
+字段名称：job 含 operationId、taskId、source、action、动作参数、操作者、状态、选中/适用/处理/成功/失败/跳过计数、nextSequence、失败摘要、租约和时间；item 含 jobId、sequence、itemId、expectedRevision、状态及动作所需快照
+字段类型：字符串、枚举、数值、数组、UTC Instant
+默认值：任务 PENDING、计数和 nextSequence 为 0、失败摘要为空
+唯一约束：job(actorUserId,operationId)；item(jobId,sequence)
+索引：上述复合唯一索引；job(actorUserId,createdAt)
+数据兼容策略：跨页选择只依赖创建时固化快照，不回写 task_items 冗余批次字段；失败摘要不保存敏感 URL 或异常堆栈
+迁移步骤：无需迁移，首次运行由 Spring Data 建立新集合与索引
+回滚方式：停止新建批处理并等待运行中任务结束；回滚代码后可保留两个集合供审计，不影响 task_items
 ```
 
 ```text
