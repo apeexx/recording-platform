@@ -26,7 +26,7 @@ test('只有数据浏览页开启下拉刷新', () => {
   assert.equal(pageConfig('statistics').enablePullDownRefresh, true)
   assert.equal(pageConfig('submission-records').enablePullDownRefresh, true)
 
-  for (const page of ['login', 'profile', 'profile-settings', 'work']) {
+  for (const page of ['login', 'profile', 'work']) {
     assert.notEqual(pageConfig(page).enablePullDownRefresh, true)
   }
 })

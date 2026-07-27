@@ -285,7 +285,7 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 错误码：503 WECHAT_NOT_CONFIGURED/WECHAT_UNAVAILABLE；401 WECHAT_LOGIN_FAILED/INVALID_CREDENTIALS/TAKEOVER_TOKEN_INVALID；409 ACCOUNT_IN_USE（details.takeoverToken 为短时一次性接管凭证）/USERNAME_EXISTS；413 AVATAR_TOO_LARGE；422 INVALID_NAME/ACCOUNT_PASSWORD_REQUIRED/INVALID_COLLECTOR_ACCOUNT/PASSWORD_TOO_WEAK/INVALID_AVATAR_FILE
 权限要求：两种登录公开；其余仅 COLLECTOR 小程序 Bearer
 数据一致性要求：微信和数字账号登录始终映射同一 `MINI-...` 小程序用户 ID；有效姓名存在即 profileComplete=true；数字账号和密码必须同时提供或同时省略，未设置时可后补一次，设置后用户不可自行修改；数字账号仅在 `miniprogram_users` 内唯一；头像 DELETE 接口保留兼容但小程序无入口
-前端调用位置：apps/miniprogram/services/session.js、services/api.js、pages/login、pages/profile-settings
+前端调用位置：apps/miniprogram/services/session.js、services/api.js、pages/login、pages/profile
 ```
 
 ```text

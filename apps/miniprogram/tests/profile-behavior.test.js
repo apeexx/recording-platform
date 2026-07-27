@@ -4,8 +4,8 @@ const fs=require('node:fs')
 const path=require('node:path')
 const vm=require('node:vm')
 
-function loadPage({api={},profile={profileComplete:true,hasCustomAvatar:false},cachedProfile=null,profilePromise=null,onUpdateProfile=()=>{},onCompleteProfile=()=>{}}={}){
-  const source=fs.readFileSync(path.resolve('pages/profile-settings/index.js'),'utf8')
+function loadPage({api={},profile={profileComplete:true,hasCustomAvatar:false},completedProfile=null,cachedProfile=null,profilePromise=null,onUpdateProfile=()=>{},onCompleteProfile=()=>{}}={}){
+  const source=fs.readFileSync(path.resolve('pages/profile/index.js'),'utf8')
   const toasts=[]
   let definition
   const apiStub={
@@ -23,13 +23,13 @@ function loadPage({api={},profile={profileComplete:true,hasCustomAvatar:false},c
   const session={
     current:()=>cachedProfile?{token:'token',user:cachedProfile}:null,
     refreshProfile:()=>profilePromise||Promise.resolve(profile),
-    completeProfile:async body=>{onCompleteProfile(body);return profile},
+    completeProfile:async body=>{onCompleteProfile(body);return completedProfile||profile},
     setName:async()=>profile,
     updateProfile:value=>{onUpdateProfile(value);return{...(cachedProfile||{}),...value}},
     clear(){},
   }
   const requireStub=()=>({success:title=>wx.showToast({title}),info:title=>wx.showToast({title,icon:'none'}),error:title=>wx.showToast({title,icon:'none'})})
-  vm.runInNewContext(source,{Page:value=>{definition=value},wx,require:requireStub,getApp:()=>({globalData:{api:apiStub,session}})},{filename:'pages/profile-settings/index.js'})
+  vm.runInNewContext(source,{Page:value=>{definition=value},wx,require:requireStub,getApp:()=>({globalData:{api:apiStub,session}})},{filename:'pages/profile/index.js'})
   const page={...definition,data:{...definition.data},setData(patch){Object.assign(this.data,patch)}}
   return {page,toasts,wx}
 }
@@ -89,7 +89,7 @@ test('较慢的资料加载完成时不会产生底部错误状态',async()=>{
   let resolveProfile
   const pendingProfile=new Promise(resolve=>{resolveProfile=resolve})
   // 用延迟完成的 refreshProfile 模拟页面加载与用户操作并发。
-  const source=fs.readFileSync(path.resolve('pages/profile-settings/index.js'),'utf8')
+  const source=fs.readFileSync(path.resolve('pages/profile/index.js'),'utf8')
   let definition
   const wx={showToast(){},showModal(){},reLaunch(){}}
   vm.runInNewContext(source,{Page:value=>{definition=value},wx,require:()=>({success(){},info(){},error(){}}),getApp:()=>({globalData:{api:{avatar:async()=>'/tmp/avatar.png'},session:{refreshProfile:()=>pendingProfile}}})})
@@ -125,7 +125,18 @@ test('后补数字账号时必须同时填写有效账号和一致密码',async(
   assert.equal(toasts.at(-1).title,'登录密码至少需要 8 个字符')
 })
 
-test('资料设置页先展示当前会话缓存',()=>{
+test('资料保存成功后立即更新完成状态且不依赖二次刷新',async()=>{
+  const {page}=loadPage({
+    profile:{profileComplete:false,hasCustomAvatar:false},
+    completedProfile:{profileComplete:true,hasCustomAvatar:false,name:'张三'},
+    profilePromise:Promise.reject(new Error('refresh failed')),
+  })
+  page.setData({profile:{profileComplete:false},name:'张三'})
+  await page.save()
+  assert.equal(page.data.profile.profileComplete,true)
+})
+
+test('我的资料页先展示当前会话缓存',()=>{
   const cached={userId:'MINI-1',name:'缓存姓名',account:'123456',profileComplete:true}
   const {page}=loadPage({cachedProfile:cached,profilePromise:new Promise(()=>{})})
   page.onShow()

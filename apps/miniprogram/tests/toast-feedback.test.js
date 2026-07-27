@@ -7,7 +7,7 @@ const root = path.resolve(__dirname, '..')
 const read = file => fs.readFileSync(path.join(root, file), 'utf8')
 
 test('登录和资料操作错误使用悬浮反馈而非底部错误文字', () => {
-  for (const page of ['login', 'profile-settings']) {
+  for (const page of ['login', 'profile']) {
     assert.match(read(`pages/${page}/index.js`), /feedback\.error/)
     assert.doesNotMatch(read(`pages/${page}/index.wxml`), /wx:if="\{\{error\}\}"/)
   }

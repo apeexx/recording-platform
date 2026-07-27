@@ -15,7 +15,7 @@ function requireGuard() {
       options.success({ confirm: false })
     },
     showToast(options) { toasts.push(options) },
-    navigateTo(options) { navigations.push(options) },
+    switchTab(options) { navigations.push(options) },
   }
   delete require.cache[require.resolve('../services/feedback.js')]
   delete require.cache[require.resolve('../services/profileGuard.js')]
@@ -55,6 +55,20 @@ test('服务器明确返回未完善时才显示资料设置弹窗', async () =>
   assert.equal(await requireGuard()(app), false)
   assert.equal(modals.length, 1)
   assert.equal(toasts.length, 0)
+})
+
+test('确认去设置时直接切换到我的 Tab', async () => {
+  const guard = requireGuard()
+  global.wx.showModal = options => {
+    modals.push(options)
+    options.success({ confirm: true })
+  }
+  const app = { globalData: { session: {
+    current: () => ({ user: { profileComplete: false } }),
+    refreshProfile: async () => ({ profileComplete: false }),
+  } } }
+  assert.equal(await guard(app), false)
+  assert.deepEqual(navigations, [{ url: '/pages/profile/index' }])
 })
 
 test('缓存未知且资料请求返回 401 时保留会话错误', async () => {
