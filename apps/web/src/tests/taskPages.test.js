@@ -137,11 +137,11 @@ describe('任务页面 API', () => {
     assert.match(source, /小程序用户/)
   })
 
-  it('gives all permission lists independent searchable five-or-ten item pagination', () => {
+  it('defaults mini-program users to ten while keeping approvals and grants at five', () => {
     const source = fs.readFileSync(path.resolve('src/pages/admin/tasks/TaskPermissionsPage.vue'), 'utf8')
     const styles = fs.readFileSync(path.resolve('src/styles/business.css'), 'utf8')
 
-    expect(source).toContain('const userSize = ref(5)')
+    expect(source).toContain('const userSize = ref(10)')
     expect(source).toContain('const requestSize = ref(5)')
     expect(source).toContain('const grantSize = ref(5)')
     expect(source).toContain(':page-sizes="[5, 10]"')
@@ -200,9 +200,13 @@ describe('任务页面 API', () => {
     expect(detail).toContain('await loadItems()')
   })
 
-  it('任务详情数据池只保留查看，草稿任务仍展示删除入口', () => {
+  it('任务详情数据池提供查看和状态对应的快捷操作，草稿任务仍展示删除入口', () => {
     const detail = fs.readFileSync(path.resolve('src/pages/admin/tasks/TaskDetailPage.vue'), 'utf8')
-    expect(detail).not.toContain("row.status === 'AVAILABLE'")
+    expect(detail).toContain("row.status === 'AVAILABLE'")
+    expect(detail).toContain("row.status === 'DISCARDED'")
+    expect(detail).toContain("rowAction(row, 'release')")
+    expect(detail).toContain("rowAction(row, 'discard')")
+    expect(detail).toContain("rowAction(row, 'restore')")
     expect(detail).not.toContain('@click="openEdit(row)">编辑')
     expect(detail).not.toContain('@click="deleteItem(row)">删除')
     expect(detail).toContain('>查看</router-link>')

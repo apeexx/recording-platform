@@ -25,6 +25,15 @@ public interface TaskItemStore {
 	default Page<TaskItem> findReviewPoolByTaskId(String taskId, boolean includeAssigned, String reviewerId, Pageable pageable) {
 		return Page.empty(pageable);
 	}
+	default Page<TaskItem> findReviewPoolByTaskId(
+		String taskId,
+		boolean includeAssigned,
+		String reviewerId,
+		com.recording.platform.review.service.ReviewPoolFilter filter,
+		Pageable pageable
+	) {
+		return findReviewPoolByTaskId(taskId, includeAssigned, reviewerId, pageable);
+	}
 	default Optional<TaskItem> releaseReviewIfCurrent(ReviewReleaseMutation mutation) { return Optional.empty(); }
 	default Optional<TaskItem> decideReviewIfCurrent(ReviewDecisionMutation mutation) { return Optional.empty(); }
 	default Page<TaskItem> findReviewPool(Pageable pageable) { return Page.empty(pageable); }

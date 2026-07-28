@@ -16,6 +16,7 @@ export const adminRoutes = {
     { path: 'permissions', component: () => import('../pages/admin/tasks/TaskPermissionsOverviewPage.vue'), meta: { title: '采集权限', roles: ['ADMIN'] } },
 	{ path: 'review', component: () => import('../pages/admin/review/ReviewTaskSelectPage.vue'), meta: { title: '选择审核任务', roles: ['ADMIN', 'REVIEWER'] } },
 	{ path: 'review/tasks/:taskId', component: () => import('../pages/admin/review/ReviewQueuePage.vue'), meta: { title: '任务审核池', roles: ['ADMIN', 'REVIEWER'] } },
+    { path: 'review/tasks/:taskId/ai-settings', component: () => import('../pages/admin/review/ReviewAiSettingsPage.vue'), meta: { title: 'AI 辅助审核设置', roles: ['ADMIN'] } },
     { path: 'review/:itemId', component: () => import('../pages/admin/review/ReviewWorkbenchPage.vue'), meta: { title: '审核工作台', roles: ['ADMIN', 'REVIEWER'] } },
     { path: 'reports/tasks', component: () => import('../pages/admin/reports/TaskStatisticsPage.vue'), meta: { title: '任务统计', roles: ['ADMIN'] } },
     { path: 'reports/collectors', component: () => import('../pages/admin/reports/CollectorStatisticsPage.vue'), meta: { title: '采集员统计', roles: ['ADMIN'] } },

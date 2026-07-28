@@ -13,6 +13,7 @@ public record AdminReviewDecisionMutation(
 	String operationId,
 	TaskItemStatus targetStatus,
 	TaskItemResult result,
+	String reviewFinalAnswer,
 	String conclusion,
 	CurrentRejection currentRejection,
 	String reviewedSubmissionOperationId,

@@ -69,11 +69,33 @@ public class ReviewController {
 		@PathVariable String taskId,
 		@RequestParam(defaultValue = "0") int page,
 		@RequestParam(defaultValue = "20") int size,
+		@RequestParam(name = "itemCode", required = false) java.util.Set<String> itemCodes,
+		@RequestParam(defaultValue = "") String itemCodeQuery,
+		@RequestParam(name = "status", required = false)
+			java.util.Set<com.recording.platform.task.model.TaskItemStatus> statuses,
+		@RequestParam(name = "collectorId", required = false) java.util.Set<String> collectorIds,
+		@RequestParam(name = "reviewerId", required = false) java.util.Set<String> reviewerIds,
+		@RequestParam(defaultValue = "false") boolean includeUnassignedReviewer,
+		@RequestParam(name = "result", required = false)
+			java.util.Set<com.recording.platform.task.service.TaskItemResultKind> results,
 		@AuthenticationPrincipal PlatformPrincipal actor
 	) {
-		return PageResponse.from(reviews.pool(taskId,
+		var filter = new com.recording.platform.review.service.ReviewPoolFilter(
+			itemCodes, itemCodeQuery, statuses, collectorIds, reviewerIds, includeUnassignedReviewer, results
+		);
+		return PageResponse.from(reviews.pool(taskId, filter,
 			PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100)), actor
 		));
+	}
+
+	@GetMapping("/tasks/{taskId}/filter-users")
+	public List<com.recording.platform.review.service.ReviewFilterUserView> filterUsers(
+		@PathVariable String taskId,
+		@RequestParam com.recording.platform.identity.model.UserRole role,
+		@RequestParam(defaultValue = "") String query,
+		@AuthenticationPrincipal PlatformPrincipal actor
+	) {
+		return reviews.filterUsers(taskId, role, query, actor);
 	}
 
 	@PostMapping("/tasks/{taskId}/claim-batch")

@@ -63,6 +63,7 @@ public class TaskItem {
 	private String referenceAudioMediaId;
 	private String referenceVideoMediaId;
 	private TaskItemResult currentResult;
+	private String reviewFinalAnswer;
 	private Instant firstSubmittedAt;
 	private Instant latestSubmittedAt;
 	private Long referenceAudioDurationMillis;

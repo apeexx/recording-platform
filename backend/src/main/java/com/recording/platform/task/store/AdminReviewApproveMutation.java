@@ -10,6 +10,7 @@ public record AdminReviewApproveMutation(
 	long expectedRevision,
 	String operationId,
 	TaskItemResult result,
+	String reviewFinalAnswer,
 	String reviewedSubmissionOperationId,
 	Instant occurredAt
 ) { }

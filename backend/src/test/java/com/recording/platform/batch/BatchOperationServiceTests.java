@@ -118,8 +118,10 @@ class BatchOperationServiceTests {
 	@Test
 	void createSnapshotsOnlyReviewPoolRowsAndPreservesRevision() {
 		TaskItemStore items = mock(TaskItemStore.class);
-		when(items.findAllByTaskId(any(), any(com.recording.platform.task.service.TaskItemFilter.class), any(Pageable.class))).thenReturn(new PageImpl<>(List.of(
-			item("available", TaskItemStatus.AVAILABLE, 1),
+		when(items.findReviewPoolByTaskId(
+			any(), org.mockito.ArgumentMatchers.eq(true), org.mockito.ArgumentMatchers.isNull(),
+			any(com.recording.platform.review.service.ReviewPoolFilter.class), any(Pageable.class)
+		)).thenReturn(new PageImpl<>(List.of(
 			item("submitted", TaskItemStatus.SUBMITTED, 7),
 			item("review", TaskItemStatus.REVIEW_PENDING, 9)
 		)));

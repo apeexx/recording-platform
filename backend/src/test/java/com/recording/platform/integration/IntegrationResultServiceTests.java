@@ -58,12 +58,13 @@ class IntegrationResultServiceTests {
 	@Test
 	void completedItemExposesOnlyCurrentTextAndAudioAvailability() {
 		TaskItem item = item(TaskItemStatus.COMPLETED);
-		item.setCurrentResult(new TaskItemResult(recording("media-current"), "最终文字"));
+		item.setCurrentResult(new TaskItemResult(recording("media-current"), "原始采集文字"));
+		item.setReviewFinalAnswer("审核最终文字");
 		when(items.findById("item-1")).thenReturn(Optional.of(item));
 
 		IntegrationResultView result = service.get("item-1");
 
-		assertThat(result.text()).isEqualTo("最终文字");
+		assertThat(result.text()).isEqualTo("审核最终文字");
 		assertThat(result.audioAvailable()).isTrue();
 	}
 

@@ -563,6 +563,19 @@ class TaskApiSecurityIntegrationTests {
 				.header("Idempotency-Key", "claim-review-2"))
 			.andExpect(status().isForbidden());
 
+		TaskItem released = new TaskItem();
+		released.setId("item-review");
+		released.setStatus(TaskItemStatus.SUBMITTED);
+		when(reviewService.release(eq("item-review"), eq("release-review-1"), eq(2L), any()))
+			.thenReturn(released);
+		mockMvc.perform(post("/api/reviews/item-review/release")
+				.with(user("admin").roles("ADMIN"))
+				.with(csrf())
+				.contentType("application/json")
+				.content("{\"operationId\":\"release-review-1\",\"expectedRevision\":2}"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.status").value("SUBMITTED"));
+
 		when(administrationService.batchDiscard(anyString(), any(), any())).thenReturn(List.of());
 		String batch = """
 			{"operationId":"batch-1","items":[{"itemId":"item-1","expectedRevision":2}]}

@@ -75,12 +75,20 @@ public class BatchOperationController {
 		com.recording.platform.task.service.AdminTaskItemGroup group,
 		Set<@NotBlank String> collectorIds,
 		Boolean includeUnassigned,
-		com.recording.platform.task.service.TaskItemResultKind result
+		com.recording.platform.task.service.TaskItemResultKind result,
+		Set<@NotBlank String> itemCodes,
+		String itemCodeQuery,
+		Set<com.recording.platform.task.service.AdminTaskItemGroup> groups,
+		Set<com.recording.platform.task.model.TaskItemStatus> statuses,
+		Set<@NotBlank String> reviewerIds,
+		Boolean includeUnassignedReviewer,
+		Set<com.recording.platform.task.service.TaskItemResultKind> results
 	) {
 		BatchOperationSelection toSelection() {
 			return new BatchOperationSelection(
 				taskId, source, excludedItemIds, group, collectorIds,
-				Boolean.TRUE.equals(includeUnassigned), result
+				Boolean.TRUE.equals(includeUnassigned), result, itemCodes, groups, results,
+				itemCodeQuery, statuses, reviewerIds, Boolean.TRUE.equals(includeUnassignedReviewer)
 			);
 		}
 	}

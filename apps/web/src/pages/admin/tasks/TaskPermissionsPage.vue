@@ -17,7 +17,7 @@ const loadError = ref('')
 const users = ref([])
 const userQuery = ref('')
 const userPage = ref(0)
-const userSize = ref(5)
+const userSize = ref(10)
 const userTotal = ref(0)
 const userLoading = ref(false)
 

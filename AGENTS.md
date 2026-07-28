@@ -38,7 +38,7 @@ MongoDB 身份、会话与统一 API 错误基础
 本文件 AGENTS.md
 ```
 
-当前已实现身份、会话、后台用户管理、新微信身份邀请码准入、语音生成持久化，以及嵌入式任务配置、授权申请、任务池领取、录音提交/返修/释放、人工审核、动态状态、软废弃恢复、媒体读取和 CSV 导入后端闭环；Web 已实现后台身份、邀请码管理、任务配置、数据池/导入、权限、审核、用户、操作记录与统计页面，小程序已实现首次邀请准入、独立的按任务个人统计、每日分段和倒序提交记录。平台领域已整体移除，仍不实现机器审核执行或真实 AI 转写。
+当前已实现身份、会话、后台用户管理、新微信身份邀请码准入、语音生成持久化，以及嵌入式任务配置、授权申请、任务池领取、录音提交/返修/释放、人工审核、AI 辅助审核、动态状态、软废弃恢复、媒体读取和 CSV 导入后端闭环；Web 已实现后台身份、邀请码管理、任务配置、数据池/导入、权限、审核、用户、操作记录与统计页面，小程序已实现首次邀请准入、独立的按任务个人统计、每日分段和倒序提交记录。AI 只生成候选最终答案，不执行机器审核决定。
 
 Spring Security 已配置为不透明服务端会话，不使用 JWT。除 Web/微信登录与接管接口外，其余 `/api/**` 默认认证；管理员、任务管理、授权管理、导入和语音生成接口按角色保护，采集写接口仅允许 `COLLECTOR` 小程序 Bearer 身份；外部集成仅允许专用 API Key 访问明确列出的四个端点。
 
@@ -194,6 +194,8 @@ WEB_SESSION_IDLE_HOURS（默认 12）
 MINIPROGRAM_SESSION_DAYS（默认 30）
 WEB_SESSION_COOKIE_SECURE（默认 false，生产 HTTPS 应设 true）
 RECORDING_INTEGRATION_API_KEY_SHA256（标注脚本中心机器密钥的 SHA-256；默认空）
+DASHSCOPE_API_KEY（审核辅助 AI 服务端密钥；默认空）
+DASHSCOPE_BASE_URL（默认 https://dashscope.aliyuncs.com/compatible-mode/v1，生产按 Key 地域显式配置）
 ```
 
 `RECORDING_STORAGE_DIR` 为相对路径时必须按仓库根目录解析，默认 `backend/storage/recordings`；不得按 Spring Boot 的 `backend/` 工作目录再次拼接 `backend`。绝对路径保持原值。启动前置检查、录音存储、导入临时文件和就绪检查必须使用同一目录语义。
@@ -224,7 +226,7 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 
 ## 7. 接口说明
 
-当前后端提供身份、会话、后台用户管理、语音生成、任务配置、授权、任务池、人工审核、动态状态、软废弃恢复、录音媒体、导入及外部完成结果读取 API；尚不提供机器审核执行或真实 AI 转写 API。
+当前后端提供身份、会话、后台用户管理、语音生成、任务配置、授权、任务池、人工审核、任务级 AI 辅助转写、动态状态、软废弃恢复、录音媒体、导入及外部完成结果读取 API；不提供机器自动通过或自动驳回。
 当前同时提供操作记录与统计 API：条目操作记录按权限读取，全局操作记录仅 ADMIN/REVIEWER；任务和指定采集员汇总仅 ADMIN，审核员可查看本人统计；采集员按最近提交任务查看当前 assignment 汇总、每日分段及倒序提交明细。
 Web 数据大屏使用仅 ADMIN 可访问的 `GET /api/reports/dashboard`，返回真实任务生命周期数量、条目状态数量、当前采集人数、Asia/Shanghai 当日及最近 7 日首次提交统计和最多 8 个任务排行；最近操作仍复用 `/api/operations`。
 
@@ -463,13 +465,24 @@ Web 数据大屏使用仅 ADMIN 可访问的 `GET /api/reports/dashboard`，返�
 
 ```text
 请求方法：GET / POST
-请求路径：/api/reviews/tasks、/api/reviews/tasks/{taskId}/pool|claim|claim-batch、/api/reviews/{itemId}/claim|release|approve|reject、/api/reviews/assign、/api/reviews/batch/claim|assign|approve
-请求参数：领取头或请求体 operationId/Idempotency-Key；指定领取、释放和决定携带 expectedRevision；单条/批量分配携带 reviewerId；所选条目批量领取与分配携带 operationId 和最多 100 个 itemId/expectedRevision；通过可补改 text；驳回携带 reasons/note
+请求路径：/api/reviews/tasks、/api/reviews/tasks/{taskId}/pool|filter-users|claim|claim-batch、/api/reviews/{itemId}/claim|release|approve|reject、/api/reviews/assign、/api/reviews/batch/claim|assign|approve
+请求参数：审核池支持可重复 itemCode、status=SUBMITTED|REVIEW_PENDING、collectorId、reviewerId、result，以及 itemCodeQuery、includeUnassignedReviewer；filter-users 仅接受 role=COLLECTOR|REVIEWER 和可选 query，并只从当前角色可见条目生成候选；领取头或请求体 operationId/Idempotency-Key；指定领取、释放和决定携带 expectedRevision；单条/批量分配携带 reviewerId；所选条目批量领取与分配携带 operationId 和最多 100 个 itemId/expectedRevision；通过的 text 表示审核最终答案；驳回携带 reasons/note
 响应结构：任务审核摘要、TaskItem、审核池分页或逐条批量结果
 错误码：404 NO_REVIEW_ITEM；409 STALE_STATE；422 INVALID_REVIEWER/INVALID_BATCH_SIZE/审核内容错误
-权限要求：ADMIN/REVIEWER 可查看审核池并领取指定条目；按数量随机批量领取仅 REVIEWER；所选条目批量领取允许 ADMIN/REVIEWER；分配和批量通过仅 ADMIN；决定必须已有审核领取或分配
-数据一致性要求：领取和分配只处理 SUBMITTED 并原子转 REVIEW_PENDING；释放原子回到 SUBMITTED；决定只处理已有 reviewerId 与 reviewAssignmentId 的 REVIEW_PENDING；所选条目批量操作按输入顺序返回逐条成功/失败结果，每条使用独立幂等子键并保持 revision/CAS，状态已变化时该条失败且不影响其他条目
+权限要求：ADMIN/REVIEWER 可查看审核池并领取指定条目；按数量随机批量领取仅 REVIEWER；所选条目批量领取允许 ADMIN/REVIEWER；分配和批量通过仅 ADMIN；ADMIN/REVIEWER 只有作为当前 reviewerId 时才能释放，决定必须已有审核领取或分配
+数据一致性要求：审核筛选始终与角色可见范围 AND 组合，并同步用于跨页预览、快照和执行；领取和分配只处理 SUBMITTED 并原子转 REVIEW_PENDING；释放原子回到 SUBMITTED；审核通过保留 currentResult 并单独写 reviewFinalAnswer，TEXT 为空时回退原采集文本且仍为空返回 REVIEW_FINAL_ANSWER_REQUIRED；所选条目批量操作按输入顺序返回逐条成功/失败结果
 前端调用位置：apps/web/src/lib/reviewApi.js、apps/web/src/pages/admin/review/*
+```
+
+```text
+请求方法：GET / PUT / POST
+请求路径：/api/reviews/tasks/{taskId}/ai-config、/api/reviews/{itemId}/ai-jobs、/api/reviews/ai-jobs/{jobId}
+请求参数：配置含 audio/text 两套 enabled、model、prompt、temperature、topP、maxTokens、timeoutMs，PUT 使用 Idempotency-Key；创建作业含 type=AUDIO_TRANSCRIBE|TEXT_REFINE、expectedRevision、operationId
+响应结构：配置视图；作业仅返回 id、type、status、itemRevision、reviewAssignmentId、resultText、model、requestId、durationMillis 和脱敏失败摘要
+错误码：409 STALE_STATE；413 REVIEW_AI_AUDIO_TOO_LARGE；422 AI_CONFIG_REQUIRED/AI_MODEL_INVALID/AI_PROMPT_INVALID/AI_TEMPERATURE_INVALID/AI_TOP_P_INVALID/AI_MAX_TOKENS_INVALID/AI_TIMEOUT_INVALID/REVIEW_AI_DISABLED/REVIEW_AI_AUDIO_REQUIRED/REVIEW_AI_TEXT_REQUIRED；503 REVIEW_AI_NOT_CONFIGURED
+权限要求：ADMIN/REVIEWER 可读取配置，只有 ADMIN 可修改；只有当前条目的 reviewerId 可创建作业，作业仅创建者或 ADMIN 可读取
+数据一致性要求：review_ai_configs 以 taskId 为主键；temperature 范围为 [0,2)，topP 范围为 (0,1]；review_ai_jobs 按 actorUserId+operationId 唯一并以 expiresAt 24 小时 TTL 清理，保存配置和媒体标识快照但不保存密钥、第三方原始响应或原始文本副本；音频作业上限 20MB；执行前再次校验 revision、reviewAssignmentId 和 reviewerId；并发 2、队列 100，使用唯一租约令牌恢复且不自动重试第三方 429/5xx
+前端调用位置：apps/web/src/lib/reviewApi.js、ReviewAiSettingsPage.vue、ReviewWorkbenchPage.vue
 ```
 
 ```text
@@ -838,11 +851,11 @@ Web 数据大屏使用仅 ADMIN 可访问的 `GET /api/reports/dashboard`，返�
 
 ## 9. 审核流程原则
 
-当前已实现可配置的单层人工审核：先选择有已提交或待审核数据的任务，再进入对应审核池。采集员提交后处于 `SUBMITTED` 并可继续修改；管理员或审核员领取、或管理员分配后才进入 `REVIEW_PENDING` 并锁定采集修改。审核员可在所选任务内单条或批量领取、释放本人占用、补改文本、通过或驳回；管理员可领取指定条目、指定审核员并对已领取/已分配条目作出单条或批量决定，不得直接决定未领取的 `SUBMITTED`。驳回进入原采集员的 `REWORK_PENDING` 返修队列，提交和操作历史永久保留。前端不得向未占用该条目的审核员展示决定按钮；后端服务和 Spring Security 的角色规则必须保持一致。
+当前已实现可配置的单层人工审核：先选择有已提交或待审核数据的任务，再进入对应审核池。采集员提交后处于 `SUBMITTED` 并可继续修改；管理员或审核员领取、或管理员分配后才进入 `REVIEW_PENDING` 并锁定采集修改。审核员和管理员均可释放本人占用；非当前审核人统一返回状态冲突。审核通过将审核最终答案保存到 `reviewFinalAnswer`，不得覆盖只读的 `currentResult`；外部完成结果优先返回最终答案。驳回进入原采集员的 `REWORK_PENDING` 返修队列，提交和操作历史永久保留。
 
 管理员状态管理支持任务配置允许的动态阶段、批量逐条结果、媒体安全释放、软废弃和恢复。普通状态调整不能进入待领取、待审核，也不能绕过人工审核直接进入已完成；返回池必须调用释放，人工审核完成必须走领取或分配后的审核决定。废弃不删除归属、结果或文件，恢复回废弃前状态并重新校验任务配置和 revision。
 
-机器审核、真实 AI 转写及多级一审/二审仍属于后续范围，启用前必须另行确认状态与接口契约。
+AI 辅助审核使用 `review_ai_configs` 和带 24 小时 TTL 的 `review_ai_jobs`，并发固定为 2、队列上限 100。音频只读取当前采集录音，AI 转写单条录音上限为 20MB，超限返回 413 `REVIEW_AI_AUDIO_TOO_LARGE`；文本只处理当前采集文本。配置、作业和返回均不得保存或泄露 API Key、第三方原始响应或参考源。机器自动审核及多级一审/二审仍属于后续范围。
 
 ## 10. 文档同步要求
 

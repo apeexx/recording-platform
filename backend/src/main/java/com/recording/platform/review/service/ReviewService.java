@@ -27,7 +27,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.PageRequest;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -90,10 +93,16 @@ public class ReviewService {
 			.toList();
 	}
 
-	public Page<ReviewPoolItemView> pool(String taskId, Pageable pageable, PlatformPrincipal actor) {
+	public Page<ReviewPoolItemView> pool(
+		String taskId, ReviewPoolFilter filter, Pageable pageable, PlatformPrincipal actor
+	) {
 		requireReviewAccess(actor);
 		Page<TaskItem> pool = items.findReviewPoolByTaskId(
-			taskId, actor.role() == UserRole.ADMIN, actor.role() == UserRole.REVIEWER ? actor.userId() : null, pageable
+			taskId,
+			actor.role() == UserRole.ADMIN,
+			actor.role() == UserRole.REVIEWER ? actor.userId() : null,
+			filter == null ? ReviewPoolFilter.all() : filter,
+			pageable
 		);
 		Map<String, IdentityUser> identities = users == null ? Map.of() : users.findAllByIdIn(
 			pool.getContent().stream()
@@ -103,6 +112,53 @@ public class ReviewService {
 		return pool.map(item -> ReviewPoolItemView.from(
 			item, identities.get(item.getCollectorId()), identities.get(item.getReviewerId())
 		));
+	}
+
+	public Page<ReviewPoolItemView> pool(String taskId, Pageable pageable, PlatformPrincipal actor) {
+		return pool(taskId, ReviewPoolFilter.all(), pageable, actor);
+	}
+
+	public List<ReviewFilterUserView> filterUsers(
+		String taskId, UserRole role, String query, PlatformPrincipal actor
+	) {
+		requireReviewAccess(actor);
+		if (role != UserRole.COLLECTOR && role != UserRole.REVIEWER) {
+			throw new ApiException(
+				HttpStatus.UNPROCESSABLE_ENTITY, "INVALID_REVIEW_FILTER_ROLE",
+				"审核筛选人员角色只能是采集员或审核员"
+			);
+		}
+		if (users == null) return List.of();
+		String normalizedQuery = query == null ? "" : query.trim().toLowerCase(java.util.Locale.ROOT);
+		Map<String, ReviewFilterUserView> matches = new LinkedHashMap<>();
+		int pageNumber = 0;
+		Page<TaskItem> page;
+		do {
+			page = items.findReviewPoolByTaskId(
+				taskId,
+				actor.role() == UserRole.ADMIN,
+				actor.role() == UserRole.REVIEWER ? actor.userId() : null,
+				ReviewPoolFilter.all(),
+				PageRequest.of(pageNumber++, 200)
+			);
+			List<String> ids = page.getContent().stream()
+				.map(item -> role == UserRole.COLLECTOR ? item.getCollectorId() : item.getReviewerId())
+				.filter(java.util.Objects::nonNull)
+				.filter(id -> !matches.containsKey(id))
+				.distinct()
+				.toList();
+			users.findAllByIdIn(ids).stream()
+				.filter(user -> user.role() == role)
+				.filter(user -> matchesQuery(user, normalizedQuery))
+				.map(ReviewFilterUserView::from)
+				.forEach(user -> matches.putIfAbsent(user.id(), user));
+		} while (page.hasNext());
+		return matches.values().stream()
+			.sorted(Comparator.comparing(
+				(ReviewFilterUserView user) -> user.name() == null ? "" : user.name()
+			).thenComparing(ReviewFilterUserView::id))
+			.limit(50)
+			.toList();
 	}
 
 	public Page<TaskItem> pool(Pageable pageable, PlatformPrincipal actor) {
@@ -174,10 +230,11 @@ public class ReviewService {
 					|| item.getReviewerId() == null || item.getReviewAssignmentId() == null
 					|| item.getRevision() != command.expectedRevision()) throw stale();
 				TaskItemResult current = item.getCurrentResult();
-				TaskItemResult result = reviewResult(requireConfiguration(item), current, command.text());
+				String finalAnswer = reviewFinalAnswer(requireConfiguration(item), current, command.text());
 				AdminReviewApproveMutation mutation = new AdminReviewApproveMutation(
 					item.getId(), actor.userId(), actorName(actor), command.expectedRevision(),
-					batchId + ":" + index, result, latestSubmissionOperationId(item), Instant.now(clock)
+					batchId + ":" + index, current, finalAnswer,
+					latestSubmissionOperationId(item), Instant.now(clock)
 				);
 				TaskItem updated = items.adminApproveReviewIfCurrent(mutation).orElseThrow(this::stale);
 				results.add(BatchReviewResult.success(item.getId(), updated.getRevision()));
@@ -266,27 +323,32 @@ public class ReviewService {
 	) {
 		TaskItem item = requireDecisionItem(itemId, expectedRevision, actor);
 		TaskItemResult current = item.getCurrentResult();
-		TaskItemResult result = reviewResult(requireConfiguration(item), current, text);
-		return decide(item, operationId, actor, TaskItemStatus.COMPLETED, result, "审核通过", null);
+		String finalAnswer = reviewFinalAnswer(requireConfiguration(item), current, text);
+		return decide(
+			item, operationId, actor, TaskItemStatus.COMPLETED, current, finalAnswer, "审核通过", null
+		);
 	}
 
-	private TaskItemResult reviewResult(TaskConfiguration configuration, TaskItemResult current, String requestedText) {
+	private String reviewFinalAnswer(
+		TaskConfiguration configuration, TaskItemResult current, String requestedText
+	) {
 		String normalizedText = trimToNull(requestedText);
 		if (configuration.getResultType() == TaskResultType.TEXT) {
 			String finalText = normalizedText == null && current != null ? trimToNull(current.text()) : normalizedText;
-			if (finalText == null && (current == null || current.audio() == null)) {
-				throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "RESULT_REQUIRED", "文本或录音至少保留一项");
+			if (finalText == null) {
+				throw new ApiException(
+					HttpStatus.UNPROCESSABLE_ENTITY,
+					"REVIEW_FINAL_ANSWER_REQUIRED",
+					"文本任务必须填写审核最终答案"
+				);
 			}
-			return new TaskItemResult(current == null ? null : current.audio(), finalText);
+			return finalText;
 		}
 		if (configuration.getResultType() == TaskResultType.AUDIO) {
-			if (normalizedText != null) {
-				throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "TEXT_NOT_ALLOWED", "音频任务不允许提交文字成果");
-			}
 			if (current == null || current.audio() == null) {
 				throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "AUDIO_REQUIRED", "音频成果不能为空");
 			}
-			return new TaskItemResult(current.audio(), null);
+			return normalizedText;
 		}
 		throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "RESULT_TYPE_REQUIRED", "任务未配置最终成果类型");
 	}
@@ -313,24 +375,27 @@ public class ReviewService {
 		CurrentRejection rejection = new CurrentRejection(
 			normalizedReasons, normalizedNote, Instant.now(clock), actor.userId(), actorName(actor)
 		);
-		return decide(item, operationId, actor, TaskItemStatus.REWORK_PENDING, item.getCurrentResult(), conclusion, rejection);
+		return decide(
+			item, operationId, actor, TaskItemStatus.REWORK_PENDING,
+			item.getCurrentResult(), null, conclusion, rejection
+		);
 	}
 
 	private TaskItem decide(
 		TaskItem item, String operationId, PlatformPrincipal actor, TaskItemStatus target,
-		TaskItemResult result, String conclusion, CurrentRejection currentRejection
+		TaskItemResult result, String reviewFinalAnswer, String conclusion, CurrentRejection currentRejection
 	) {
 		if (actor.role() == UserRole.ADMIN) {
 			AdminReviewDecisionMutation mutation = new AdminReviewDecisionMutation(
 				item.getId(), actor.userId(), actorName(actor), item.getRevision(),
-				requiredOperationId(operationId), target, result, conclusion,
+				requiredOperationId(operationId), target, result, reviewFinalAnswer, conclusion,
 				currentRejection, latestSubmissionOperationId(item), Instant.now(clock)
 			);
 			return items.adminDecideReviewIfCurrent(mutation).orElseThrow(this::stale);
 		}
 		ReviewDecisionMutation mutation = new ReviewDecisionMutation(
 			item.getId(), actor.userId(), actorName(actor), item.getReviewAssignmentId(), item.getRevision(),
-			requiredOperationId(operationId), target, result, conclusion, currentRejection,
+			requiredOperationId(operationId), target, result, reviewFinalAnswer, conclusion, currentRejection,
 			latestSubmissionOperationId(item), Instant.now(clock)
 		);
 		return items.decideReviewIfCurrent(mutation).orElseThrow(this::stale);
@@ -376,6 +441,14 @@ public class ReviewService {
 	}
 
 	private String trimToNull(String value) { return value == null || value.isBlank() ? null : value.trim(); }
+
+	private boolean matchesQuery(IdentityUser user, String query) {
+		if (query.isEmpty()) return true;
+		return java.util.stream.Stream.of(user.id(), user.name(), user.loginName())
+			.filter(java.util.Objects::nonNull)
+			.map(value -> value.toLowerCase(java.util.Locale.ROOT))
+			.anyMatch(value -> value.contains(query));
+	}
 
 	private TaskItem requireItem(String itemId) {
 		return items.findById(itemId)

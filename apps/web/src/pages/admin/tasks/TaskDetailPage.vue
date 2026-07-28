@@ -266,6 +266,18 @@ async function batch(action) {
   }
 }
 
+async function rowAction(row, action) {
+  const label = action === 'release' ? '释放' : action === 'discard' ? '废弃' : '恢复'
+  if (!window.confirm(`确认${label}条目 ${row.itemCode}？`)) return
+  try {
+    await taskApi[action](row.id, operationId(`detail-row-${action}`), row.revision)
+    notifications.success(`${label}成功`)
+    await loadItems()
+  } catch (exception) {
+    notifications.error(exception.message)
+  }
+}
+
 async function changeStatus(targetStatus) {
   const count = applicableCount('status')
   if (!count || !confirm(`确认将 ${count} 条适用数据调整为 ${targetStatus}？`)) return
@@ -414,7 +426,15 @@ onBeforeUnmount(() => { stopImportTracking(); clearBatchPoll() })
                   <td><label class="business-check colored-checkbox"><input type="checkbox" :checked="selection.isSelected(row)" :aria-label="`选择 ${row.itemCode}`" @change="selection.toggle(row)"><span class="visually-hidden">选择</span></label></td>
                   <td>{{ row.itemCode }}</td><td>{{ statusLabel('item', row.status) }}</td><td>{{ row.collectorName || '-' }}</td>
                   <td>{{ row.currentResult?.audio?.durationMillis ? `${Math.round(row.currentResult.audio.durationMillis / 1000)}秒` : row.currentResult?.text ? '文本' : '-' }}</td>
-                  <td><router-link class="button-link" :to="`/admin/items/${row.id}`">查看</router-link></td>
+                  <td class="table-row-actions">
+                    <router-link class="button-link" :to="`/admin/items/${row.id}`">查看</router-link>
+                    <button v-if="row.status === 'AVAILABLE'" class="button-link is-danger" @click="rowAction(row, 'discard')">废弃</button>
+                    <button v-else-if="row.status === 'DISCARDED'" class="button-link" @click="rowAction(row, 'restore')">恢复</button>
+                    <template v-else>
+                      <button class="button-link" @click="rowAction(row, 'release')">释放</button>
+                      <button class="button-link is-danger" @click="rowAction(row, 'discard')">废弃</button>
+                    </template>
+                  </td>
                 </tr></tbody>
               </table>
             </div>
@@ -425,3 +445,7 @@ onBeforeUnmount(() => { stopImportTracking(); clearBatchPoll() })
     </AsyncState>
   </section>
 </template>
+
+<style scoped>
+.table-row-actions{display:flex;align-items:center;gap:3px;white-space:nowrap}
+</style>

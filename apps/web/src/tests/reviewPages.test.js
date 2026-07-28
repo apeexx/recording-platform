@@ -63,6 +63,49 @@ describe('审核页面 API', () => {
     expect(queue).not.toContain('collectorUserNo')
   })
 
+  it('审核池将五维筛选编码为可重复查询参数', async () => {
+    httpRequest.mockResolvedValue({ items: [], total: 0 })
+    await reviewApi.pool('task-1', 2, 20, {
+      itemCodes: ['T000001-0000001'],
+      statuses: ['SUBMITTED', 'REVIEW_PENDING'],
+      collectorIds: ['MINI-1'],
+      reviewerIds: ['WEB-1'],
+      includeUnassignedReviewer: true,
+      results: ['TEXT_AND_AUDIO'],
+    })
+    const url = httpRequest.mock.calls[0][0]
+    expect(url).toContain('itemCode=T000001-0000001')
+    expect(url).toContain('status=SUBMITTED')
+    expect(url).toContain('status=REVIEW_PENDING')
+    expect(url).toContain('collectorId=MINI-1')
+    expect(url).toContain('reviewerId=WEB-1')
+    expect(url).toContain('includeUnassignedReviewer=true')
+    expect(url).toContain('result=TEXT_AND_AUDIO')
+  })
+
+  it('审核人员候选使用审核域接口而不是管理员用户搜索', async () => {
+    httpRequest.mockResolvedValue([])
+    await reviewApi.filterUsers('task-1', 'COLLECTOR', '张')
+    expect(httpRequest).toHaveBeenCalledWith(
+      '/api/reviews/tasks/task-1/filter-users?role=COLLECTOR&query=%E5%BC%A0'
+    )
+    const filters = readFileSync(join(process.cwd(), 'src/components/admin/TaskItemFilters.vue'), 'utf8')
+    expect(filters).toContain('await reviewApi.filterUsers(props.taskId, role, userQuery.value)')
+    expect(filters).toContain('await reviewApi.pool(props.taskId, 0, 20')
+  })
+
+  it('工作台只读展示原始结果并独立编辑最终答案和采用 AI 结果', () => {
+    const workbench = readFileSync(join(process.cwd(), 'src/pages/admin/review/ReviewWorkbenchPage.vue'), 'utf8')
+    expect(workbench).toContain('原始采集结果')
+    expect(workbench).toContain('review-original-text')
+    expect(workbench).toContain('v-model="finalAnswer"')
+    expect(workbench).not.toContain('v-model="text"')
+    expect(workbench).toContain('AI 音频转文字')
+    expect(workbench).toContain('AI 文本结果转写')
+    expect(workbench).toContain('采用结果')
+    expect(workbench).toContain('object-fit:contain')
+  })
+
   it('审核池允许混合勾选并按状态启用三个批量操作', () => {
     const queue = readFileSync(join(process.cwd(), 'src/pages/admin/review/ReviewQueuePage.vue'), 'utf8')
     expect(queue).not.toContain(":disabled=\"r.status!=='REVIEW_PENDING'\"")
@@ -72,7 +115,9 @@ describe('审核页面 API', () => {
     expect(queue).toContain('批量分配')
     expect(queue).toContain('批量通过')
     expect(queue).toContain('UserSearchSelect')
-    expect(queue).toContain('<th>采集员 ID</th><th>采集员姓名</th>')
-    expect(queue).toContain('<th>审核员 ID</th><th>审核员姓名</th>')
+    expect(queue).toContain('kind="collector"')
+    expect(queue).toContain('kind="reviewer"')
+    expect(queue).toContain('kind="status"')
+    expect(queue).toContain('kind="result"')
   })
 })

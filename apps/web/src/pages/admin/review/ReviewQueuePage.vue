@@ -5,12 +5,14 @@ import AsyncState from '../../../components/admin/AsyncState.vue'
 import PageActions from '../../../components/admin/PageActions.vue'
 import PaginationControls from '../../../components/admin/PaginationControls.vue'
 import UserSearchSelect from '../../../components/form/UserSearchSelect.vue'
+import TaskItemFilters from '../../../components/admin/TaskItemFilters.vue'
 import { reviewApi } from '../../../lib/reviewApi.js'
 import { batchOperationApi } from '../../../lib/batchOperationApi.js'
 import { operationId } from '../../../lib/apiUtils.js'
 import { useAdminSession } from '../../../composables/useAdminSession.js'
 import { useBatchSelection } from '../../../composables/useBatchSelection.js'
 import { useNotifications } from '../../../composables/useNotifications.js'
+import { defaultReviewFilters, reviewSelectionFilters } from '../../../lib/reviewFilters.js'
 
 const notifications = useNotifications()
 const route = useRoute()
@@ -27,6 +29,7 @@ const reviewerId = ref('')
 const preview = ref(null)
 const batchJob = ref(null)
 const pollTimer = ref(null)
+const filters = ref(defaultReviewFilters())
 const selection = useBatchSelection(rows, total)
 const isAdmin = computed(() => session.user.value?.role === 'ADMIN')
 const isReviewer = computed(() => session.user.value?.role === 'REVIEWER')
@@ -39,7 +42,7 @@ async function load(showToast = false) {
   loading.value = true
   error.value = ''
   try {
-    const result = await reviewApi.pool(route.params.taskId, page.value, 20)
+    const result = await reviewApi.pool(route.params.taskId, page.value, 20, filters.value)
     rows.value = result.items || []
     total.value = result.total || 0
   } catch (exception) {
@@ -83,7 +86,9 @@ function resultNotice(label, result, skipped) {
 }
 async function selectAllMatching() {
   try {
-    preview.value = await batchOperationApi.preview(selection.selectionPayload(route.params.taskId, 'REVIEW_QUEUE'))
+    preview.value = await batchOperationApi.preview(selection.selectionPayload(
+      route.params.taskId, 'REVIEW_QUEUE', reviewSelectionFilters(filters.value),
+    ))
     selection.selectAllMatching()
   } catch (exception) { notifications.error(exception.message) }
 }
@@ -91,7 +96,9 @@ async function runCrossPage(action, extra = {}) {
   batchJob.value = await batchOperationApi.create({
     operationId: operationId(`review-all-${action.toLowerCase()}`),
     action,
-    selection: selection.selectionPayload(route.params.taskId, 'REVIEW_QUEUE'),
+    selection: selection.selectionPayload(
+      route.params.taskId, 'REVIEW_QUEUE', reviewSelectionFilters(filters.value),
+    ),
     ...extra,
   })
   notifications.success('跨页批处理已进入队列')
@@ -145,6 +152,13 @@ async function changePage(value) {
   selection.clearPageMode()
   await load()
 }
+async function changeFilters(value) {
+  filters.value = value
+  page.value = 0
+  selection.clear()
+  preview.value = null
+  await load()
+}
 function clearPoll() {
   if (pollTimer.value) window.clearTimeout(pollTimer.value)
   pollTimer.value = null
@@ -181,6 +195,7 @@ onBeforeUnmount(clearPoll)
   <section class="admin-page">
     <PageActions title="任务审核池" description="已提交数据需先领取或分配，进入待审核后才能作出决定。">
       <router-link class="button-secondary" to="/admin/review">返回选择任务</router-link>
+      <router-link v-if="isAdmin" class="button-secondary" :to="`/admin/review/tasks/${route.params.taskId}/ai-settings`">AI 审核设置</router-link>
       <button class="button-secondary" @click="load(true)">刷新</button>
       <button v-if="isReviewer" class="button-primary" @click="claim">领取一条</button>
     </PageActions>
@@ -214,13 +229,18 @@ onBeforeUnmount(clearPoll)
           <table class="business-table">
             <thead><tr>
               <th><input type="checkbox" :checked="selection.pageAllSelected.value" aria-label="选择当前页面" @change="selection.togglePage"/></th>
-              <th>条目</th><th>采集员 ID</th><th>采集员姓名</th><th>审核员 ID</th><th>审核员姓名</th><th>状态</th><th>文本</th><th>时长</th><th>操作</th>
+              <th><TaskItemFilters review-mode kind="code" :task-id="route.params.taskId" :model-value="filters" @change="changeFilters"/></th>
+              <th>采集员 ID</th><th><TaskItemFilters review-mode kind="collector" :model-value="filters" @change="changeFilters"/></th>
+              <th>审核员 ID</th><th><TaskItemFilters review-mode kind="reviewer" :model-value="filters" @change="changeFilters"/></th>
+              <th><TaskItemFilters review-mode kind="status" :model-value="filters" @change="changeFilters"/></th>
+              <th><TaskItemFilters review-mode kind="result" :model-value="filters" @change="changeFilters"/></th><th>时长</th><th>操作</th>
             </tr></thead>
             <tbody><tr v-for="r in rows" :key="r.id">
               <td><input type="checkbox" :checked="selection.isSelected(r)" :aria-label="`选择 ${r.itemCode}`" @change="selection.toggle(r)"/></td>
               <td>{{ r.itemCode }}</td><td>{{ r.collectorId || '-' }}</td><td>{{ r.collectorName || '-' }}</td>
               <td>{{ r.reviewerId || '-' }}</td><td>{{ r.reviewerName || '-' }}</td>
-              <td>{{ r.status === 'SUBMITTED' ? '已提交' : '待审核' }}</td><td>{{ r.hasText ? '有' : '无' }}</td>
+              <td>{{ r.status === 'SUBMITTED' ? '已提交' : '待审核' }}</td>
+              <td>{{ r.hasText && r.hasAudio ? '文本和音频' : r.hasText ? '仅文本' : r.hasAudio ? '仅音频' : '无结果' }}</td>
               <td>{{ r.audioDurationMillis ? `${Math.round(r.audioDurationMillis / 1000)}秒` : '-' }}</td>
               <td>
                 <button v-if="r.status === 'SUBMITTED'" class="button-link" @click="claimItem(r)">领取审核</button>

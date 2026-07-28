@@ -15,10 +15,12 @@ import com.recording.platform.task.store.ReleaseMutation;
 import com.recording.platform.task.store.RejectMutation;
 import com.recording.platform.task.store.ReviewClaimMutation;
 import com.recording.platform.task.store.ReviewItemClaimMutation;
+import com.recording.platform.task.store.ReviewDecisionMutation;
 import com.recording.platform.task.store.SubmitMutation;
 import com.recording.platform.task.service.AdminTaskItemGroup;
 import com.recording.platform.task.service.TaskItemFilter;
 import com.recording.platform.task.service.TaskItemResultKind;
+import com.recording.platform.review.service.ReviewPoolFilter;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -37,6 +39,64 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 
 class MongoTaskItemStoreTests {
+	@Test
+	void reviewApprovalStoresFinalAnswerWithoutReplacingCollectedResult() {
+		SpringDataTaskItemRepository repository = org.mockito.Mockito.mock(SpringDataTaskItemRepository.class);
+		MongoTemplate template = org.mockito.Mockito.mock(MongoTemplate.class);
+		when(template.findAndModify(any(Query.class), any(Update.class), any(FindAndModifyOptions.class), eq(TaskItem.class)))
+			.thenReturn(new TaskItem());
+		MongoTaskItemStore store = new MongoTaskItemStore(repository, template);
+		TaskItemResult original = new TaskItemResult(null, "原始采集文本");
+
+		store.decideReviewIfCurrent(new ReviewDecisionMutation(
+			"item-1", "reviewer-1", "审核员", "assignment-1", 4, "approve-1",
+			TaskItemStatus.COMPLETED, original, "审核最终答案", "审核通过", null,
+			"submit-1", Instant.parse("2026-07-28T08:00:00Z")
+		));
+
+		ArgumentCaptor<Update> update = ArgumentCaptor.forClass(Update.class);
+		verify(template).findAndModify(
+			any(Query.class), update.capture(), any(FindAndModifyOptions.class), eq(TaskItem.class)
+		);
+		Document set = (Document) update.getValue().getUpdateObject().get("$set");
+		assertThat(set).containsEntry("reviewFinalAnswer", "审核最终答案");
+		assertThat(set).doesNotContainKey("currentResult");
+	}
+
+	@Test
+	void reviewPoolFiltersAreCombinedWithReviewerVisibility() {
+		SpringDataTaskItemRepository repository = org.mockito.Mockito.mock(SpringDataTaskItemRepository.class);
+		MongoTemplate template = org.mockito.Mockito.mock(MongoTemplate.class);
+		when(template.count(any(Query.class), eq(TaskItem.class))).thenReturn(0L);
+		when(template.find(any(Query.class), eq(TaskItem.class))).thenReturn(List.of());
+		MongoTaskItemStore store = new MongoTaskItemStore(repository, template);
+
+		store.findReviewPoolByTaskId(
+			"task-1",
+			false,
+			"reviewer-current",
+			new ReviewPoolFilter(
+				Set.of("T000001-0000001"),
+				"000001",
+				Set.of(TaskItemStatus.SUBMITTED, TaskItemStatus.REVIEW_PENDING),
+				Set.of("collector-1"),
+				Set.of("reviewer-2"),
+				true,
+				Set.of(TaskItemResultKind.TEXT_AND_AUDIO)
+			),
+			PageRequest.of(0, 20)
+		);
+
+		ArgumentCaptor<Query> query = ArgumentCaptor.forClass(Query.class);
+		verify(template).find(query.capture(), eq(TaskItem.class));
+		String queryText = query.getValue().getQueryObject().toString();
+		assertThat(queryText).contains(
+			"task-1", "reviewer-current", "T000001-0000001", "000001",
+			"SUBMITTED", "REVIEW_PENDING", "collector-1", "reviewer-2",
+			"currentResult.text", "currentResult.audio", "$and", "$or"
+		);
+	}
+
 	@Test
 	void adminSearchCombinesMultiValueDimensionsAndCodeQueryInMongo() {
 		SpringDataTaskItemRepository repository = org.mockito.Mockito.mock(SpringDataTaskItemRepository.class);
@@ -220,7 +280,7 @@ class MongoTaskItemStoreTests {
 		assertThat((Document) query.getValue().getQueryObject().get("operations.operationId"))
 			.containsEntry("$ne", "submit-1");
 		assertThat(update.getValue().getUpdateObject().toString())
-			.contains("firstSubmittedAt", "latestSubmittedAt");
+			.contains("firstSubmittedAt", "latestSubmittedAt", "reviewFinalAnswer");
 	}
 
 	@Test
@@ -249,7 +309,7 @@ class MongoTaskItemStoreTests {
 			.extracting("$in")
 			.isEqualTo(List.of(TaskItemStatus.RECORDING_PENDING, TaskItemStatus.REWORK_PENDING));
 		assertThat(update.getValue().getUpdateObject().toString())
-			.contains("firstSubmittedAt", "latestSubmittedAt");
+			.contains("firstSubmittedAt", "latestSubmittedAt", "reviewFinalAnswer");
 	}
 
 	@Test

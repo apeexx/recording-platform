@@ -147,6 +147,17 @@ async function changeStatus(targetStatus) {
     notifications.error(exception.message)
   }
 }
+async function rowAction(row, action) {
+  const label = action === 'release' ? '释放' : action === 'discard' ? '废弃' : '恢复'
+  if (!window.confirm(`确认${label}条目 ${row.itemCode}？`)) return
+  try {
+    await taskApi[action](row.id, operationId(`pool-row-${action}`), row.revision)
+    notifications.success(`${label}成功`)
+    await load()
+  } catch (exception) {
+    notifications.error(exception.message)
+  }
+}
 function schedulePoll() {
   clearPoll()
   pollTimer.value = window.setTimeout(refreshBatchJob, 1000)
@@ -219,7 +230,15 @@ onBeforeUnmount(clearPoll)
               <td>{{ row.itemCode }}</td>
               <td>{{ statusLabel('item', row.status) }}</td><td>{{ row.collectorId || '-' }}</td><td>{{ row.collectorName || '-' }}</td>
               <td>{{ row.reviewerId || '-' }}</td><td>{{ row.reviewerName || '-' }}</td><td>{{ row.currentResult?.audio ? '音频' : row.currentResult?.text ? '文本' : '-' }}</td><td>{{ row.revision }}</td>
-              <td><router-link class="button-link" :to="`/admin/items/${row.id}`">查看</router-link></td>
+              <td class="table-row-actions">
+                <router-link class="button-link" :to="`/admin/items/${row.id}`">查看</router-link>
+                <button v-if="row.status === 'AVAILABLE'" class="button-link is-danger" @click="rowAction(row, 'discard')">废弃</button>
+                <button v-else-if="row.status === 'DISCARDED'" class="button-link" @click="rowAction(row, 'restore')">恢复</button>
+                <template v-else>
+                  <button class="button-link" @click="rowAction(row, 'release')">释放</button>
+                  <button class="button-link is-danger" @click="rowAction(row, 'discard')">废弃</button>
+                </template>
+              </td>
             </tr></tbody>
           </table>
         </div>
@@ -228,3 +247,7 @@ onBeforeUnmount(clearPoll)
     </div>
   </section>
 </template>
+
+<style scoped>
+.table-row-actions{display:flex;align-items:center;gap:3px;white-space:nowrap}
+</style>

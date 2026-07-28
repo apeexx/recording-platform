@@ -75,7 +75,7 @@ public class BatchOperationService {
 
 	public BatchOperationPreview preview(BatchOperationSelection selection, PlatformPrincipal actor) {
 		requireSelectionAccess(selection, actor);
-		List<TaskItem> selected = selectedItems(selection);
+		List<TaskItem> selected = selectedItems(selection, actor);
 		Map<BatchOperationAction, Long> counts = new EnumMap<>(BatchOperationAction.class);
 		for (BatchOperationAction action : BatchOperationAction.values()) {
 			counts.put(action, selected.stream().filter(item -> applicable(action, item.getStatus())).count());
@@ -88,7 +88,7 @@ public class BatchOperationService {
 		String operationId = required(command.operationId());
 		BatchOperationJob existing = jobs.findByActorUserIdAndOperationId(actor.userId(), operationId).orElse(null);
 		if (existing != null) return existing;
-		List<TaskItem> selected = selectedItems(command.selection());
+		List<TaskItem> selected = selectedItems(command.selection(), actor);
 		if (selected.isEmpty()) throw invalid("EMPTY_BATCH_SELECTION", "当前筛选结果没有可处理数据");
 		Instant now = Instant.now(clock);
 		BatchOperationJob job = new BatchOperationJob();
@@ -239,7 +239,7 @@ public class BatchOperationService {
 		}
 	}
 
-	private List<TaskItem> selectedItems(BatchOperationSelection selection) {
+	private List<TaskItem> selectedItems(BatchOperationSelection selection, PlatformPrincipal actor) {
 		if (selection == null || trimToNull(selection.taskId()) == null || selection.source() == null) {
 			throw invalid("INVALID_BATCH_SELECTION", "任务和来源页面不能为空");
 		}
@@ -249,19 +249,30 @@ public class BatchOperationService {
 		int page = 0;
 		Page<TaskItem> result;
 		do {
-				result = items.findAllByTaskId(
+			if (selection.source() == BatchOperationSource.REVIEW_QUEUE) {
+				result = items.findReviewPoolByTaskId(
 					selection.taskId(),
-					new com.recording.platform.task.service.TaskItemFilter(
-						selection.itemCodes(), "", selection.groups(), selection.collectorIds(),
-						selection.includeUnassigned(), selection.results()
+					actor.role() == UserRole.ADMIN,
+					actor.role() == UserRole.REVIEWER ? actor.userId() : null,
+					new com.recording.platform.review.service.ReviewPoolFilter(
+						selection.itemCodes(), selection.itemCodeQuery(), selection.statuses(),
+						selection.collectorIds(), selection.reviewerIds(),
+						selection.includeUnassignedReviewer(), selection.results()
 					),
 					PageRequest.of(page++, SNAPSHOT_PAGE_SIZE)
 				);
+			} else {
+				result = items.findAllByTaskId(
+					selection.taskId(),
+					new com.recording.platform.task.service.TaskItemFilter(
+						selection.itemCodes(), selection.itemCodeQuery(), selection.groups(),
+						selection.collectorIds(), selection.includeUnassigned(), selection.results()
+					),
+					PageRequest.of(page++, SNAPSHOT_PAGE_SIZE)
+				);
+			}
 			result.getContent().stream()
 				.filter(item -> !exclusions.contains(item.getId()))
-				.filter(item -> selection.source() != BatchOperationSource.REVIEW_QUEUE
-					|| item.getStatus() == TaskItemStatus.SUBMITTED
-					|| item.getStatus() == TaskItemStatus.REVIEW_PENDING)
 				.forEach(selected::add);
 		} while (result.hasNext());
 		return selected;

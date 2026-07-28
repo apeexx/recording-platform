@@ -3,6 +3,7 @@ package com.recording.platform.review;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -11,6 +12,7 @@ import com.recording.platform.api.ApiException;
 import com.recording.platform.identity.model.SessionType;
 import com.recording.platform.identity.model.UserRole;
 import com.recording.platform.review.service.ReviewService;
+import com.recording.platform.review.service.ReviewPoolFilter;
 import com.recording.platform.security.PlatformPrincipal;
 import com.recording.platform.task.model.TaskItem;
 import com.recording.platform.task.model.TaskItemResult;
@@ -110,7 +112,7 @@ class ReviewServiceTests {
 	}
 
 	@Test
-	void reviewerApprovesAndMayReplaceTheCollectedText() {
+	void reviewerApprovesWithIndependentFinalAnswerAndKeepsCollectedText() {
 		TaskItemStore items = mock(TaskItemStore.class);
 		TaskStore tasks = mock(TaskStore.class);
 		TaskItem existing = assigned("item-1", 7);
@@ -120,7 +122,8 @@ class ReviewServiceTests {
 		approved.setStatus(TaskItemStatus.COMPLETED);
 		approved.setReviewerId(null);
 		approved.setReviewAssignmentId(null);
-		approved.setCurrentResult(new TaskItemResult(recording(), "审核修订文本"));
+		approved.setCurrentResult(existing.getCurrentResult());
+		approved.setReviewFinalAnswer("审核修订文本");
 		when(items.decideReviewIfCurrent(any())).thenReturn(Optional.of(approved));
 		ReviewService service = new ReviewService(items, tasks, CLOCK);
 
@@ -129,13 +132,14 @@ class ReviewServiceTests {
 		);
 
 		assertThat(result.getStatus()).isEqualTo(TaskItemStatus.COMPLETED);
-		assertThat(result.getCurrentResult().text()).isEqualTo("审核修订文本");
+		assertThat(result.getCurrentResult().text()).isEqualTo("普通话文本");
 		assertThat(result.getCurrentResult().audio()).isNotNull();
+		assertThat(result.getReviewFinalAnswer()).isEqualTo("审核修订文本");
 		verify(items).decideReviewIfCurrent(any(ReviewDecisionMutation.class));
 	}
 
 	@Test
-	void audioResultCannotBeApprovedWithText() {
+	void audioResultMayKeepAnOptionalFinalAnswer() {
 		TaskItemStore items = mock(TaskItemStore.class);
 		TaskStore tasks = mock(TaskStore.class);
 		TaskItem existing = assigned("item-audio", 3);
@@ -149,12 +153,35 @@ class ReviewServiceTests {
 		TaskConfiguration configuration = reviewVersion();
 		configuration.setResultType(TaskResultType.AUDIO);
 		stubTask(tasks, configuration);
+		TaskItem approved = assigned("item-audio", 4);
+		approved.setStatus(TaskItemStatus.COMPLETED);
+		approved.setCurrentResult(existing.getCurrentResult());
+		approved.setReviewFinalAnswer("音频转写文本");
+		when(items.decideReviewIfCurrent(any())).thenReturn(Optional.of(approved));
+		ReviewService service = new ReviewService(items, tasks, CLOCK);
+
+		TaskItem result = service.approve(
+			"item-audio", "approve-audio", 3, "音频转写文本", reviewer()
+		);
+
+		assertThat(result.getCurrentResult()).isSameAs(existing.getCurrentResult());
+		assertThat(result.getReviewFinalAnswer()).isEqualTo("音频转写文本");
+	}
+
+	@Test
+	void textResultRequiresFinalAnswerEvenWhenOriginalOnlyContainsAudio() {
+		TaskItemStore items = mock(TaskItemStore.class);
+		TaskStore tasks = mock(TaskStore.class);
+		TaskItem existing = assigned("item-text", 3);
+		existing.setCurrentResult(new TaskItemResult(recording(), null));
+		when(items.findById("item-text")).thenReturn(Optional.of(existing));
+		stubTask(tasks, reviewVersion());
 		ReviewService service = new ReviewService(items, tasks, CLOCK);
 
 		assertThatThrownBy(() -> service.approve(
-			"item-audio", "approve-audio", 3, "不应出现的文字", reviewer()
+			"item-text", "approve-text", 3, null, reviewer()
 		)).isInstanceOfSatisfying(ApiException.class,
-			(error) -> assertThat(error.getCode()).isEqualTo("TEXT_NOT_ALLOWED"));
+			(error) -> assertThat(error.getCode()).isEqualTo("REVIEW_FINAL_ANSWER_REQUIRED"));
 	}
 
 	@Test
@@ -232,7 +259,9 @@ class ReviewServiceTests {
 		TaskItem own = assigned("item-own", 2);
 		own.setTaskId("task-1");
 		own.setItemCode("T000001-0000001");
-		when(items.findReviewPoolByTaskId("task-1", false, "reviewer-1", page))
+		when(items.findReviewPoolByTaskId(
+			eq("task-1"), eq(false), eq("reviewer-1"), any(ReviewPoolFilter.class), eq(page)
+		))
 			.thenReturn(new PageImpl<>(List.of(own), page, 1));
 		IdentityUser collector = new IdentityUser("collector-1",UserType.MINIPROGRAM,null,"采集员一",UserRole.COLLECTOR,UserStatus.ACTIVE,false,null,null);
 		when(users.findAllByIdIn(any())).thenReturn(List.of(collector));
@@ -243,7 +272,37 @@ class ReviewServiceTests {
 		assertThat(result.getContent()).singleElement().satisfies(view -> {
 			assertThat(view.collectorName()).isEqualTo("采集员一");
 		});
-		verify(items).findReviewPoolByTaskId("task-1", false, "reviewer-1", page);
+		verify(items).findReviewPoolByTaskId(
+			eq("task-1"), eq(false), eq("reviewer-1"), any(ReviewPoolFilter.class), eq(page)
+		);
+	}
+
+	@Test
+	void reviewerFilterUsersAreDerivedOnlyFromRowsVisibleInTheReviewPool() {
+		TaskItemStore items = mock(TaskItemStore.class);
+		IdentityDirectory users = mock(IdentityDirectory.class);
+		PageRequest page = PageRequest.of(0, 200);
+		TaskItem own = assigned("item-own", 2);
+		own.setTaskId("task-1");
+		when(items.findReviewPoolByTaskId(
+			eq("task-1"), eq(false), eq("reviewer-1"), any(ReviewPoolFilter.class), eq(page)
+		)).thenReturn(new PageImpl<>(List.of(own), page, 1));
+		IdentityUser collector = new IdentityUser(
+			"collector-1", UserType.MINIPROGRAM, "collector-account", "采集员一",
+			UserRole.COLLECTOR, UserStatus.ACTIVE, false, null, null
+		);
+		when(users.findAllByIdIn(List.of("collector-1"))).thenReturn(List.of(collector));
+		ReviewService service = new ReviewService(items, users, mock(TaskStore.class), CLOCK);
+
+		var result = service.filterUsers("task-1", UserRole.COLLECTOR, "采集员", reviewer());
+
+		assertThat(result).singleElement().satisfies(user -> {
+			assertThat(user.id()).isEqualTo("collector-1");
+			assertThat(user.loginName()).isEqualTo("collector-account");
+		});
+		verify(items).findReviewPoolByTaskId(
+			eq("task-1"), eq(false), eq("reviewer-1"), any(ReviewPoolFilter.class), eq(page)
+		);
 	}
 
 	@Test
@@ -371,7 +430,9 @@ class ReviewServiceTests {
 		IdentityDirectory users = mock(IdentityDirectory.class);
 		PageRequest page = PageRequest.of(0, 20);
 		TaskItem row = assigned("item-1", 2);
-		when(items.findReviewPoolByTaskId("task-1", true, null, page))
+		when(items.findReviewPoolByTaskId(
+			eq("task-1"), eq(true), eq(null), any(ReviewPoolFilter.class), eq(page)
+		))
 			.thenReturn(new PageImpl<>(List.of(row), page, 1));
 		IdentityUser collector = new IdentityUser(
 			"collector-1", UserType.MINIPROGRAM, null, "采集员一",

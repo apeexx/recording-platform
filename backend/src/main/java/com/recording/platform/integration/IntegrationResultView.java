@@ -24,8 +24,12 @@ public record IntegrationResultView(
 			item.getItemCode(),
 			item.getStatus(),
 			item.getUpdatedAt(),
-			result == null ? null : result.text(),
+			result == null ? null : firstNonBlank(item.getReviewFinalAnswer(), result.text()),
 			result != null && result.audio() != null
 		);
+	}
+
+	private static String firstNonBlank(String preferred, String fallback) {
+		return preferred == null || preferred.isBlank() ? fallback : preferred;
 	}
 }
