@@ -3,10 +3,6 @@
   <view class="brand-mark"><image src="/assets/branding/yanshu-avatar-144.png"/></view>
   <view class="brand-slogan">让声音成为时光的画笔</view>
   <view class="brand-copy">安全、便捷地完成语音数据采集</view>
-  <view class="audience-notice">
-    <view class="audience-notice-title">特定范围使用说明</view>
-    <view class="audience-notice-copy">本小程序仅供重庆砚数科技有限公司内部员工及经项目管理员邀请、授权的录音采集人员使用，不面向公众开放注册或提供服务。首次使用微信快捷登录时，须输入管理员提供的有效邀请码；未获邀请或邀请码无效、已停用、已用尽的人员无法创建账号或进入小程序。已开通数字账号的人员可使用账号密码登录。进入录音任务前，系统仍会校验对应任务授权。</view>
-  </view>
   <view class="login-card">
     <block wx:if="{{mode==='wechat'}}">
       <view class="mode-header"><view class="mode-title">微信快捷登录</view><view class="switch" bindtap="switchMode">切换账号登录 ▸</view></view>
@@ -20,6 +16,10 @@
       <input class="login-input" password placeholder="请输入密码" data-field="password" bindinput="input"/>
       <button class="account-button" loading="{{loading}}" bindtap="accountLogin">登录</button>
     </block>
+  </view>
+  <view class="audience-notice">
+    <view class="audience-notice-title">特定范围使用说明</view>
+    <view class="audience-notice-copy">本小程序仅供重庆砚数科技有限公司内部员工及经项目管理员邀请、授权的录音采集人员使用，不面向公众开放注册或提供服务。首次使用微信快捷登录时，须输入管理员提供的有效邀请码；未获邀请或邀请码无效、已停用、已用尽的人员无法创建账号或进入小程序。已开通数字账号的人员可使用账号密码登录。进入录音任务前，系统仍会校验对应任务授权。</view>
   </view>
   <view wx:if="{{invitationVisible}}" class="invitation-backdrop" bindtap="closeInvitation">
     <view class="invitation-dialog" catchtap="noop">
