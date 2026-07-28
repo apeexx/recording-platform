@@ -88,14 +88,16 @@ public class TaskItemsController {
 		@PathVariable String taskId,
 		@RequestParam(defaultValue = "0") int page,
 		@RequestParam(defaultValue = "20") int size,
-		@RequestParam(defaultValue = "ALL") AdminTaskItemGroup group,
+		@RequestParam(name = "itemCode", required = false) Set<String> itemCodes,
+		@RequestParam(defaultValue = "") String itemCodeQuery,
+		@RequestParam(name = "group", required = false) Set<AdminTaskItemGroup> groups,
 		@RequestParam(name = "collectorId", required = false) Set<String> collectorIds,
 		@RequestParam(defaultValue = "false") boolean includeUnassigned,
-		@RequestParam(name = "result", defaultValue = "ALL") TaskItemResultKind resultKind
+		@RequestParam(name = "result", required = false) Set<TaskItemResultKind> results
 	) {
 		var result = items.findAllByTaskId(
 			taskId,
-			new TaskItemFilter(group, collectorIds, includeUnassigned, resultKind),
+			new TaskItemFilter(itemCodes, itemCodeQuery, groups, collectorIds, includeUnassigned, results),
 			PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100))
 		);
 		Map<String, IdentityUser> identities = users.findAllByIdIn(

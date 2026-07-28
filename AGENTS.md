@@ -387,22 +387,22 @@ Web 数据大屏使用仅 ADMIN 可访问的 `GET /api/reports/dashboard`，返�
 ```text
 请求方法：POST / GET / DELETE
 请求路径：/api/tasks/{taskId}/grants、/grants/{userId}、/access-requests、/access-requests/{requestId}/approve|reject
-请求参数：直接授权 JSON userId；驳回可选 reason；申请、决策、直接授权和撤销均携带 Idempotency-Key；列表 page、size
-响应结构：TaskGrant、TaskAccessRequest 或 {items,page,size,total}
+请求参数：直接授权 JSON userId；驳回可选 reason；申请、决策、直接授权和撤销均携带 Idempotency-Key；授权列表支持 page、size、可选 status 与 query，申请列表支持 page、size、可选 query；query 按姓名或登录账号模糊匹配、按完整用户 ID 精确匹配
+响应结构：TaskGrant、TaskAccessRequest 或 {items,page,size,total}；授权与申请视图均包含 userName、userId、userLoginName
 错误码：404 TASK/USER/ACCESS_REQUEST/GRANT_NOT_FOUND；409 TASK_ALREADY_GRANTED/ACCESS_REQUEST_DECIDED；422 INVALID_COLLECTOR
 权限要求：申请仅 COLLECTOR；查询、直接授权、批准、驳回、撤销仅 ADMIN
-数据一致性要求：同一任务/用户仅一个 PENDING；决策使用 PENDING 条件 CAS；批准幂等创建授权；所有写操作持久化幂等；撤销不影响已领取条目，批准重放不复活 REVOKED
+数据一致性要求：同一任务/用户仅一个 PENDING；决策使用 PENDING 条件 CAS；批准幂等创建授权；所有写操作持久化幂等；撤销不影响已领取条目，批准重放不复活 REVOKED；搜索通过任务授权/申请与 miniprogram_users 关联后统计和分页，搜索后的 total 必须准确，不新增冗余用户字段
 前端调用位置：apps/web/src/pages/admin/tasks/TaskPermissionsPage.vue、apps/miniprogram/pages/tasks/*
 ```
 
 ```text
 请求方法：POST / GET
 请求路径：/api/tasks/{taskId}/items、/api/tasks/{taskId}/items/start、/api/task-items/{itemId}、/api/task-items/mine
-请求参数：单条添加 JSON referenceText/referenceAudioUrl/referenceVideoUrl + Idempotency-Key；start 携带 Idempotency-Key；管理列表支持 page、size、group=ALL|PENDING|SUBMITTED|FINISHED|DISCARDED、可重复 collectorId、includeUnassigned 和 result=ALL|NONE|TEXT_ONLY|AUDIO_ONLY|TEXT_AND_AUDIO；mine 支持 taskId、kind=PENDING|SUBMITTED|FINISHED|DISCARDED，兼容 ALL|RECORDING|REWORK
+请求参数：单条添加 JSON referenceText/referenceAudioUrl/referenceVideoUrl + Idempotency-Key；start 携带 Idempotency-Key；管理列表支持 page、size、可重复 itemCode、itemCodeQuery、可重复 group=ALL|PENDING|SUBMITTED|FINISHED|DISCARDED、可重复 collectorId、includeUnassigned 和可重复 result=ALL|NONE|TEXT_ONLY|AUDIO_ONLY|TEXT_AND_AUDIO；mine 支持 taskId、kind=PENDING|SUBMITTED|FINISHED|DISCARDED，兼容 ALL|RECORDING|REWORK
 响应结构：TaskItem 或 {items,page,size,total}；TaskItem 可包含 referenceAudioUrl、referenceVideoUrl、collectorName、reviewerName、currentDiscard，历史参考 URL 可为空，未分配用户姓名为空
 错误码：404 NO_AVAILABLE_ITEM/TASK_ITEM_NOT_FOUND；409 ITEM_CONFLICT/INVALID_TASK_STATE；422 ITEM_REFERENCE_REQUIRED/REMOTE_URL_INVALID
 权限要求：添加和任务条目列表仅 ADMIN；start 仅 COLLECTOR；详情仅 ADMIN/REVIEWER/当前采集员
-数据一致性要求：DRAFT/RUNNING/PAUSED 可新增，ENDED 返回 INVALID_TASK_STATE；管理列表的 PENDING=RECORDING_PENDING+REWORK_PENDING、FINISHED=REVIEW_PENDING+COMPLETED；多采集员、未分配与结果筛选在服务端分页执行；新条目只绑定 taskId，参考音视频只保存通过轻量语法校验的 HTTPS URL；itemCode 任务内递增唯一且不复用；添加和领取均持久化幂等
+数据一致性要求：DRAFT/RUNNING/PAUSED 可新增，ENDED 返回 INVALID_TASK_STATE；管理列表的 PENDING=RECORDING_PENDING+REWORK_PENDING、FINISHED=REVIEW_PENDING+COMPLETED；编号、状态、采集员、未分配与结果筛选均在服务端分页执行，同维度多值 OR、跨维度 AND，空集合或 ALL 不过滤；新条目只绑定 taskId，参考音视频只保存通过轻量语法校验的 HTTPS URL；itemCode 任务内递增唯一且不复用；添加和领取均持久化幂等
 前端调用位置：apps/web/src/pages/admin/tasks/TaskDetailPage.vue 与 TaskPoolPage.vue、apps/miniprogram/pages/tasks/*、apps/miniprogram/pages/work/*；任务详情使用数字分页并支持每页 5/10/20 条（默认 10），小程序任务数据固定每页 10 条，独立 Web 任务数据池固定每页 20 条
 ```
 
@@ -414,7 +414,7 @@ Web 数据大屏使用仅 ADMIN 可访问的 `GET /api/reports/dashboard`，返�
 错误码：404 TASK_ITEM_NOT_FOUND；409 STALE_STATE；422 ITEM_REFERENCE_REQUIRED/REFERENCE_TYPE_NOT_ENABLED/REMOTE_URL_INVALID
 权限要求：仅 ADMIN
 数据一致性要求：仅 AVAILABLE 可按状态与 revision 原子编辑或删除；编辑使用 URL-only 校验，URL 未变化保留历史媒体 ID，修改或移除后清空媒体 ID并让旧媒体进入 media_cleanup_jobs；删除后的历史参考媒体同样持久化清理；itemCode 与 sequence 不复用
-前端调用位置：apps/web/src/pages/admin/tasks/TaskDetailPage.vue
+前端调用位置：apps/web/src/pages/admin/tasks/TaskItemDetailPage.vue
 ```
 
 ```text
@@ -442,11 +442,11 @@ Web 数据大屏使用仅 ADMIN 可访问的 `GET /api/reports/dashboard`，返�
 ```text
 请求方法：POST / GET
 请求路径：/api/batch-operation-jobs/preview、/api/batch-operation-jobs、/api/batch-operation-jobs/{jobId}、/api/batch-operation-jobs?taskId=&source=
-请求参数：预览携带 taskId、source=TASK_DETAIL|TASK_POOL|REVIEW_QUEUE、excludedItemIds；创建另含 operationId、action、可选 targetStatus/reviewerId
+请求参数：预览携带 taskId、source=TASK_DETAIL|TASK_POOL|REVIEW_QUEUE、excludedItemIds，以及可选 itemCodes、groups、collectorIds、includeUnassigned、results；旧 group、result 单值字段继续兼容；创建另含 operationId、action、可选 targetStatus/reviewerId
 响应结构：预览返回 selectedCount、各动作 applicableCounts；创建返回 HTTP 202 BatchOperationJob；查询返回单个任务或当前用户最近 10 个任务
 错误码：403 ACCESS_DENIED；404 BATCH_JOB_NOT_FOUND；409 BATCH_JOB_CONFLICT；422 INVALID_BATCH_SELECTION/EMPTY_BATCH_SELECTION/TARGET_STATUS_REQUIRED/REVIEWER_REQUIRED
 权限要求：ADMIN 可使用三个来源页面及全部动作；REVIEWER 仅可在 REVIEW_QUEUE 创建 REVIEW_CLAIM
-数据一致性要求：创建时固化 itemId、revision、状态和动作所需结果快照；(actorUserId,operationId) 唯一并幂等重放；后台按条 CAS 执行、每条独立幂等键，状态变化计跳过，其他失败保存有限脱敏摘要；PROCESSING 使用租约、心跳和 nextSequence 检查点，租约过期或服务重启后续跑
+数据一致性要求：预览、快照、执行和重试统一使用编号、状态、采集员、未分配及结果筛选；创建时固化 itemId、revision、状态和动作所需结果快照；(actorUserId,operationId) 唯一并幂等重放；后台按条 CAS 执行、每条独立幂等键，状态变化计跳过，其他失败保存有限脱敏摘要；PROCESSING 使用租约、心跳和 nextSequence 检查点，租约过期或服务重启后续跑
 前端调用位置：apps/web/src/lib/batchOperationApi.js、任务详情、独立任务数据池与审核池
 ```
 

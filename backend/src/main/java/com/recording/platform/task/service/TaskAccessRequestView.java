@@ -5,12 +5,13 @@ import com.recording.platform.task.model.TaskAccessRequest;
 import java.time.Instant;
 
 public record TaskAccessRequestView(
-	String id, String taskId, String userId, String userName,
+	String id, String taskId, String userId, String userName, String userLoginName,
 	AccessRequestStatus status, Instant createdAt
 ) {
 	static TaskAccessRequestView from(TaskAccessRequest request, com.recording.platform.identity.model.IdentityUser user) {
 		return new TaskAccessRequestView(request.getId(), request.getTaskId(), request.getUserId(),
 			user == null ? null : user.name(),
+			user == null ? null : user.loginName(),
 			request.getStatus(), request.getCreatedAt());
 	}
 }

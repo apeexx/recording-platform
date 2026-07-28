@@ -1,25 +1,33 @@
+const clean = (values = []) => [...new Set(values.filter(Boolean))]
+
 export const defaultTaskItemFilters = () => ({
-  group: 'ALL',
+  itemCodes: [],
+  groups: [],
   collectorIds: [],
   includeUnassigned: false,
-  result: 'ALL',
+  results: [],
 })
 
 export function selectionFilters(filters = {}) {
+  const legacyGroups = filters.group && filters.group !== 'ALL' ? [filters.group] : []
+  const legacyResults = filters.result && filters.result !== 'ALL' ? [filters.result] : []
   return {
-    group: filters.group || 'ALL',
-    collectorIds: [...(filters.collectorIds || [])],
+    itemCodes: clean(filters.itemCodes),
+    groups: clean(filters.groups?.length ? filters.groups : legacyGroups),
+    collectorIds: clean(filters.collectorIds),
     includeUnassigned: Boolean(filters.includeUnassigned),
-    result: filters.result || 'ALL',
+    results: clean(filters.results?.length ? filters.results : legacyResults),
   }
 }
 
 export function buildTaskItemQuery(page, size, filters = {}) {
   const query = new URLSearchParams({ page: String(page), size: String(size) })
   const normalized = selectionFilters(filters)
-  if (normalized.group !== 'ALL') query.set('group', normalized.group)
+  normalized.itemCodes.forEach((code) => query.append('itemCode', code))
+  if (filters.itemCodeQuery?.trim()) query.set('itemCodeQuery', filters.itemCodeQuery.trim())
+  normalized.groups.forEach((group) => query.append('group', group))
   normalized.collectorIds.forEach((id) => query.append('collectorId', id))
   if (normalized.includeUnassigned) query.set('includeUnassigned', 'true')
-  if (normalized.result !== 'ALL') query.set('result', normalized.result)
+  normalized.results.forEach((result) => query.append('result', result))
   return `?${query}`
 }

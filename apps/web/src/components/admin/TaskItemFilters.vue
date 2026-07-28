@@ -1,39 +1,75 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import TableFilterPopover from './TableFilterPopover.vue'
+import { taskApi } from '../../lib/taskApi.js'
 import { userApi } from '../../lib/userApi.js'
-import { defaultTaskItemFilters, selectionFilters } from '../../lib/taskItemFilters.js'
+import { selectionFilters } from '../../lib/taskItemFilters.js'
 import { useNotifications } from '../../composables/useNotifications.js'
 
 const props = defineProps({
-  modelValue: { type: Object, default: defaultTaskItemFilters },
-  kind: { type: String, default: 'all' },
+  modelValue: { type: Object, default: () => ({}) },
+  kind: { type: String, required: true },
+  taskId: { type: String, default: '' },
 })
 const emit = defineEmits(['update:modelValue', 'change'])
 const notifications = useNotifications()
 const users = ref([])
 const userQuery = ref('')
-const searching = ref(false)
+const userSearching = ref(false)
+const codeQuery = ref('')
+const codeCandidates = ref([])
+const codeSearching = ref(false)
 const groupOptions = [
-  ['ALL', '全部'], ['PENDING', '待录制'], ['SUBMITTED', '已提交'],
+  ['PENDING', '待录制'], ['SUBMITTED', '已提交'],
   ['FINISHED', '已完成'], ['DISCARDED', '废弃数据'],
 ]
 const resultOptions = [
-  ['ALL', '全部'], ['NONE', '无结果'], ['TEXT_ONLY', '仅文本'],
+  ['NONE', '无结果'], ['TEXT_ONLY', '仅文本'],
   ['AUDIO_ONLY', '仅音频'], ['TEXT_AND_AUDIO', '文本和音频'],
 ]
+const normalized = computed(() => selectionFilters(props.modelValue))
+const selectedCodes = computed(() => normalized.value.itemCodes)
+const visibleCodes = computed(() => {
+  const byCode = new Map()
+  selectedCodes.value.forEach((code) => byCode.set(code, { itemCode: code, selectedOnly: true }))
+  codeCandidates.value.forEach((row) => byCode.set(row.itemCode, row))
+  return [...byCode.values()]
+})
+const active = computed(() => ({
+  code: selectedCodes.value.length > 0,
+  status: normalized.value.groups.length > 0,
+  collector: normalized.value.collectorIds.length > 0 || normalized.value.includeUnassigned,
+  result: normalized.value.results.length > 0,
+})[props.kind])
+const label = computed(() => {
+  const base = { code: '编号', status: '状态', collector: '采集员姓名', result: '结果' }[props.kind] || '筛选'
+  const count = {
+    code: selectedCodes.value.length,
+    status: normalized.value.groups.length,
+    collector: normalized.value.collectorIds.length + (normalized.value.includeUnassigned ? 1 : 0),
+    result: normalized.value.results.length,
+  }[props.kind]
+  return count ? `${base} · ${count}` : base
+})
 
 function update(patch) {
-  const value = { ...selectionFilters(props.modelValue), ...patch }
+  const value = { ...normalized.value, ...patch }
   emit('update:modelValue', value)
   emit('change', value)
 }
-function toggleCollector(id, checked) {
-  const ids = new Set(props.modelValue.collectorIds || [])
-  checked ? ids.add(id) : ids.delete(id)
-  update({ collectorIds: [...ids] })
+function toggleList(key, value, checked) {
+  const values = new Set(normalized.value[key])
+  checked ? values.add(value) : values.delete(value)
+  update({ [key]: [...values] })
+}
+function clearDimension() {
+  if (props.kind === 'code') update({ itemCodes: [] })
+  if (props.kind === 'status') update({ groups: [] })
+  if (props.kind === 'collector') update({ collectorIds: [], includeUnassigned: false })
+  if (props.kind === 'result') update({ results: [] })
 }
 async function searchUsers() {
-  searching.value = true
+  userSearching.value = true
   try {
     const response = await userApi.search({
       query: userQuery.value, role: 'COLLECTOR', userType: 'MINIPROGRAM', page: 0, size: 50,
@@ -42,50 +78,77 @@ async function searchUsers() {
   } catch (error) {
     notifications.error(error.message)
   } finally {
-    searching.value = false
+    userSearching.value = false
+  }
+}
+async function searchCodes() {
+  if (!props.taskId) return
+  codeSearching.value = true
+  try {
+    const response = await taskApi.items(props.taskId, 0, 20, { itemCodeQuery: codeQuery.value })
+    codeCandidates.value = response.items || []
+  } catch (error) {
+    notifications.error(error.message)
+  } finally {
+    codeSearching.value = false
   }
 }
 onMounted(() => {
-  if (['all', 'collector'].includes(props.kind)) searchUsers()
+  if (props.kind === 'collector') searchUsers()
+  if (props.kind === 'code') searchCodes()
 })
 </script>
 
 <template>
-  <span class="task-item-filters">
-    <details v-if="['all', 'status'].includes(kind)" class="table-filter">
-      <summary>状态{{ modelValue.group !== 'ALL' ? ' · 已筛选' : '' }}</summary>
-      <div class="table-filter__menu">
-        <label v-for="[value,label] in groupOptions" :key="value">
-          <input type="radio" :checked="modelValue.group === value" @change="update({ group: value })">{{ label }}
+  <TableFilterPopover :label="label" :active="active" :width="kind === 'collector' ? 340 : 270">
+    <form v-if="kind === 'code'" class="filter-search" novalidate @submit.prevent="searchCodes">
+      <input v-model.trim="codeQuery" placeholder="搜索条目编号">
+      <button class="button-link" :disabled="codeSearching">{{ codeSearching ? '搜索中' : '搜索' }}</button>
+    </form>
+    <form v-if="kind === 'collector'" class="filter-search" novalidate @submit.prevent="searchUsers">
+      <input v-model.trim="userQuery" placeholder="姓名、用户 ID 或账号">
+      <button class="button-link" :disabled="userSearching">{{ userSearching ? '搜索中' : '搜索' }}</button>
+    </form>
+
+    <div class="filter-option-list">
+      <label class="filter-option" :class="{ 'is-selected': !active }">
+        <input type="checkbox" :checked="!active" @change="clearDimension">
+        <span>全部</span>
+      </label>
+      <template v-if="kind === 'code'">
+        <label v-for="row in visibleCodes" :key="row.itemCode" class="filter-option" :class="{ 'is-selected': selectedCodes.includes(row.itemCode) }">
+          <input type="checkbox" :checked="selectedCodes.includes(row.itemCode)" @change="toggleList('itemCodes', row.itemCode, $event.target.checked)">
+          <span>{{ row.itemCode }}</span>
         </label>
-      </div>
-    </details>
-    <details v-if="['all', 'collector'].includes(kind)" class="table-filter table-filter--wide">
-      <summary>采集员姓名{{ modelValue.collectorIds?.length || modelValue.includeUnassigned ? ` · ${modelValue.collectorIds?.length || 0}人` : '' }}</summary>
-      <div class="table-filter__menu">
-        <form class="filter-search" novalidate @submit.prevent="searchUsers">
-          <input v-model.trim="userQuery" placeholder="姓名、用户 ID 或账号">
-          <button class="button-link" :disabled="searching">{{ searching ? '搜索中' : '搜索' }}</button>
-        </form>
-        <label><input type="checkbox" :checked="modelValue.includeUnassigned" @change="update({ includeUnassigned: $event.target.checked })">未分配采集员</label>
-        <label v-for="user in users" :key="user.id">
-          <input type="checkbox" :checked="modelValue.collectorIds?.includes(user.id)" @change="toggleCollector(user.id, $event.target.checked)">
+        <p v-if="!visibleCodes.length && !codeSearching" class="filter-empty">没有匹配的编号</p>
+      </template>
+      <template v-if="kind === 'status'">
+        <label v-for="[value, text] in groupOptions" :key="value" class="filter-option" :class="{ 'is-selected': normalized.groups.includes(value) }">
+          <input type="checkbox" :checked="normalized.groups.includes(value)" @change="toggleList('groups', value, $event.target.checked)">
+          <span>{{ text }}</span>
+        </label>
+      </template>
+      <template v-if="kind === 'collector'">
+        <label class="filter-option" :class="{ 'is-selected': normalized.includeUnassigned }">
+          <input type="checkbox" :checked="normalized.includeUnassigned" @change="update({ includeUnassigned: $event.target.checked })">
+          <span>未分配采集员</span>
+        </label>
+        <label v-for="user in users" :key="user.id" class="filter-option" :class="{ 'is-selected': normalized.collectorIds.includes(user.id) }">
+          <input type="checkbox" :checked="normalized.collectorIds.includes(user.id)" @change="toggleList('collectorIds', user.id, $event.target.checked)">
           <span>{{ user.name || '未设置姓名' }}<small>{{ user.id }}{{ user.loginName ? ` · ${user.loginName}` : '' }}</small></span>
         </label>
-        <button type="button" class="button-link" @click="update({ collectorIds: [], includeUnassigned: false })">清空人员筛选</button>
-      </div>
-    </details>
-    <details v-if="['all', 'result'].includes(kind)" class="table-filter">
-      <summary>结果{{ modelValue.result !== 'ALL' ? ' · 已筛选' : '' }}</summary>
-      <div class="table-filter__menu">
-        <label v-for="[value,label] in resultOptions" :key="value">
-          <input type="radio" :checked="modelValue.result === value" @change="update({ result: value })">{{ label }}
+        <p v-if="!users.length && !userSearching" class="filter-empty">没有匹配的采集员</p>
+      </template>
+      <template v-if="kind === 'result'">
+        <label v-for="[value, text] in resultOptions" :key="value" class="filter-option" :class="{ 'is-selected': normalized.results.includes(value) }">
+          <input type="checkbox" :checked="normalized.results.includes(value)" @change="toggleList('results', value, $event.target.checked)">
+          <span>{{ text }}</span>
         </label>
-      </div>
-    </details>
-  </span>
+      </template>
+    </div>
+  </TableFilterPopover>
 </template>
 
 <style scoped>
-.task-item-filters{display:contents}.table-filter{position:relative}.table-filter summary{list-style:none;color:var(--muted-foreground);font-weight:700;cursor:pointer;white-space:nowrap}.table-filter summary::-webkit-details-marker{display:none}.table-filter summary::after{content:" ▾";color:var(--primary)}.table-filter[open] summary::after{content:" ▴"}.table-filter__menu{position:absolute;z-index:30;top:calc(100% + 10px);left:0;display:grid;gap:9px;width:190px;padding:12px;border:1px solid var(--border);border-radius:calc(var(--radius)*.65);background:var(--card);box-shadow:0 16px 36px color-mix(in srgb,var(--foreground) 14%,transparent)}.table-filter--wide .table-filter__menu{width:330px}.table-filter__menu label{display:flex;align-items:flex-start;gap:8px;color:var(--foreground);font-weight:500}.table-filter__menu small{display:block;margin-top:2px;color:var(--muted-foreground)}.filter-search{display:flex;gap:6px}.filter-search input{min-width:0;width:100%}
+.filter-search{display:flex;gap:7px}.filter-search input{min-width:0;width:100%}.filter-option-list{display:grid;gap:4px}.filter-option{display:flex;align-items:flex-start;gap:10px;min-height:36px;padding:8px 10px;border-radius:12px;color:var(--foreground);font-weight:500;cursor:pointer}.filter-option:hover{background:var(--accent)}.filter-option.is-selected{background:color-mix(in srgb,var(--primary) 9%,var(--accent))}.filter-option:focus-within{outline:2px solid color-mix(in srgb,var(--primary) 38%,transparent);outline-offset:1px}.filter-option input{width:18px;height:18px;margin:1px 0 0;accent-color:var(--primary);flex:0 0 auto}.filter-option small{display:block;margin-top:3px;color:var(--muted-foreground);font-size:12px;font-weight:400;overflow-wrap:anywhere}.filter-empty{margin:5px 8px;color:var(--muted-foreground);font-size:13px}
 </style>

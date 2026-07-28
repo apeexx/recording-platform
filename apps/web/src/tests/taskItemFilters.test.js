@@ -18,15 +18,32 @@ describe('task item filters', () => {
 
   it('copies visible filters into cross-page selection payloads', () => {
     expect(selectionFilters({
-      group: 'FINISHED',
+      itemCodes: ['T000001-0000001'],
+      groups: ['FINISHED', 'SUBMITTED'],
       collectorIds: ['MINI-1'],
       includeUnassigned: false,
-      result: 'TEXT_AND_AUDIO',
+      results: ['TEXT_AND_AUDIO', 'AUDIO_ONLY'],
     })).toEqual({
-      group: 'FINISHED',
+      itemCodes: ['T000001-0000001'],
+      groups: ['FINISHED', 'SUBMITTED'],
       collectorIds: ['MINI-1'],
       includeUnassigned: false,
-      result: 'TEXT_AND_AUDIO',
+      results: ['TEXT_AND_AUDIO', 'AUDIO_ONLY'],
     })
+  })
+
+  it('serializes code search and repeated code group and result values', () => {
+    const query = buildTaskItemQuery(0, 20, {
+      itemCodes: ['T000001-0000001', 'T000001-0000002'],
+      itemCodeQuery: '000001',
+      groups: ['PENDING', 'SUBMITTED'],
+      results: ['TEXT_ONLY', 'AUDIO_ONLY'],
+    })
+    const params = new URLSearchParams(query.slice(1))
+
+    expect(params.getAll('itemCode')).toEqual(['T000001-0000001', 'T000001-0000002'])
+    expect(params.get('itemCodeQuery')).toBe('000001')
+    expect(params.getAll('group')).toEqual(['PENDING', 'SUBMITTED'])
+    expect(params.getAll('result')).toEqual(['TEXT_ONLY', 'AUDIO_ONLY'])
   })
 })

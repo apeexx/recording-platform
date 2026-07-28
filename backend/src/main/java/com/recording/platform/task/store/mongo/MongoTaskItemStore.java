@@ -507,8 +507,18 @@ public class MongoTaskItemStore implements TaskItemStore {
 			filter == null ? com.recording.platform.task.service.TaskItemFilter.all() : filter;
 		List<Criteria> filters = new java.util.ArrayList<>();
 		filters.add(Criteria.where("taskId").is(taskId));
-		if (!normalized.group().statuses().isEmpty()) {
-			filters.add(Criteria.where("status").in(normalized.group().statuses()));
+		if (!normalized.itemCodes().isEmpty()) {
+			filters.add(Criteria.where("itemCode").in(normalized.itemCodes()));
+		}
+		if (!normalized.itemCodeQuery().isBlank()) {
+			filters.add(Criteria.where("itemCode").regex(
+				java.util.regex.Pattern.quote(normalized.itemCodeQuery()), "i"
+			));
+		}
+		if (!normalized.groups().isEmpty()) {
+			filters.add(Criteria.where("status").in(normalized.groups().stream()
+				.flatMap(group -> group.statuses().stream())
+				.collect(java.util.stream.Collectors.toSet())));
 		}
 		if (!normalized.collectorIds().isEmpty() || normalized.includeUnassigned()) {
 			List<Criteria> collectors = new java.util.ArrayList<>();
@@ -523,24 +533,11 @@ public class MongoTaskItemStore implements TaskItemStore {
 			filters.add(collectors.size() == 1 ? collectors.get(0)
 				: new Criteria().orOperator(collectors.toArray(Criteria[]::new)));
 		}
-		if (normalized.result() != com.recording.platform.task.service.TaskItemResultKind.ALL) {
-			Criteria hasText = Criteria.where("currentResult.text").regex(".*\\S.*");
-			Criteria noText = new Criteria().orOperator(
-				Criteria.where("currentResult.text").exists(false),
-				Criteria.where("currentResult.text").is(null),
-				Criteria.where("currentResult.text").regex("^\\s*$")
-			);
-			Criteria hasAudio = Criteria.where("currentResult.audio").ne(null);
-			Criteria noAudio = new Criteria().orOperator(
-				Criteria.where("currentResult.audio").exists(false), Criteria.where("currentResult.audio").is(null)
-			);
-			filters.add(switch (normalized.result()) {
-				case NONE -> new Criteria().andOperator(noText, noAudio);
-				case TEXT_ONLY -> new Criteria().andOperator(hasText, noAudio);
-				case AUDIO_ONLY -> new Criteria().andOperator(noText, hasAudio);
-				case TEXT_AND_AUDIO -> new Criteria().andOperator(hasText, hasAudio);
-				case ALL -> new Criteria();
-			});
+		if (!normalized.results().isEmpty()) {
+			Criteria[] resultCriteria = normalized.results().stream()
+				.map(this::resultCriteria).toArray(Criteria[]::new);
+			filters.add(resultCriteria.length == 1
+				? resultCriteria[0] : new Criteria().orOperator(resultCriteria));
 		}
 		Criteria criteria = new Criteria().andOperator(filters.toArray(Criteria[]::new));
 		Query query = Query.query(criteria).with(pageable);
@@ -548,6 +545,27 @@ public class MongoTaskItemStore implements TaskItemStore {
 		return new org.springframework.data.domain.PageImpl<>(
 			mongoTemplate.find(query, TaskItem.class), pageable, total
 		);
+	}
+
+	private Criteria resultCriteria(com.recording.platform.task.service.TaskItemResultKind result) {
+		Criteria hasText = Criteria.where("currentResult.text").regex(".*\\S.*");
+		Criteria noText = new Criteria().orOperator(
+			Criteria.where("currentResult.text").exists(false),
+			Criteria.where("currentResult.text").is(null),
+			Criteria.where("currentResult.text").regex("^\\s*$")
+		);
+		Criteria hasAudio = Criteria.where("currentResult.audio").ne(null);
+		Criteria noAudio = new Criteria().orOperator(
+			Criteria.where("currentResult.audio").exists(false),
+			Criteria.where("currentResult.audio").is(null)
+		);
+		return switch (result) {
+			case NONE -> new Criteria().andOperator(noText, noAudio);
+			case TEXT_ONLY -> new Criteria().andOperator(hasText, noAudio);
+			case AUDIO_ONLY -> new Criteria().andOperator(noText, hasAudio);
+			case TEXT_AND_AUDIO -> new Criteria().andOperator(hasText, hasAudio);
+			case ALL -> new Criteria();
+		};
 	}
 
 	@Override public void deleteAllByTaskId(String taskId) {

@@ -16,9 +16,13 @@ import com.recording.platform.task.store.RejectMutation;
 import com.recording.platform.task.store.ReviewClaimMutation;
 import com.recording.platform.task.store.ReviewItemClaimMutation;
 import com.recording.platform.task.store.SubmitMutation;
+import com.recording.platform.task.service.AdminTaskItemGroup;
+import com.recording.platform.task.service.TaskItemFilter;
+import com.recording.platform.task.service.TaskItemResultKind;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import org.bson.Document;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -33,6 +37,33 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 
 class MongoTaskItemStoreTests {
+	@Test
+	void adminSearchCombinesMultiValueDimensionsAndCodeQueryInMongo() {
+		SpringDataTaskItemRepository repository = org.mockito.Mockito.mock(SpringDataTaskItemRepository.class);
+		MongoTemplate template = org.mockito.Mockito.mock(MongoTemplate.class);
+		when(template.count(any(Query.class), eq(TaskItem.class))).thenReturn(0L);
+		when(template.find(any(Query.class), eq(TaskItem.class))).thenReturn(List.of());
+		MongoTaskItemStore store = new MongoTaskItemStore(repository, template);
+
+		store.findAllByTaskId("task-1", new TaskItemFilter(
+			Set.of("T000001-0000001", "T000001-0000002"),
+			"000001",
+			Set.of(AdminTaskItemGroup.PENDING, AdminTaskItemGroup.SUBMITTED),
+			Set.of("MINI-1", "MINI-2"),
+			true,
+			Set.of(TaskItemResultKind.TEXT_ONLY, TaskItemResultKind.AUDIO_ONLY)
+		), PageRequest.of(0, 20));
+
+		ArgumentCaptor<Query> query = ArgumentCaptor.forClass(Query.class);
+		verify(template).find(query.capture(), eq(TaskItem.class));
+		String queryText = query.getValue().getQueryObject().toString();
+		assertThat(queryText).contains(
+			"T000001-0000001", "T000001-0000002", "000001",
+			"RECORDING_PENDING", "REWORK_PENDING", "SUBMITTED",
+			"MINI-1", "MINI-2", "currentResult.text", "currentResult.audio", "$or"
+		);
+	}
+
 	@Test
 	void sourceBindingLookupDelegatesTheCompleteTaskScopedIdentity() {
 		SpringDataTaskItemRepository repository = org.mockito.Mockito.mock(SpringDataTaskItemRepository.class);

@@ -49,10 +49,11 @@ public class TaskAccessController {
 	@GetMapping("/access-requests")
 	public PageResponse<TaskAccessRequestView> requests(
 		@PathVariable String taskId,
+		@RequestParam(defaultValue = "") String query,
 		@RequestParam(defaultValue = "0") int page,
 		@RequestParam(defaultValue = "20") int size,
 		@AuthenticationPrincipal PlatformPrincipal actor
-	) { return access.listRequests(taskId, page, size, actor); }
+	) { return access.listRequests(taskId, query, page, size, actor); }
 	@PostMapping("/access-requests/{requestId}/approve")
 	public TaskGrant approve(
 		@PathVariable String taskId,
@@ -91,10 +92,12 @@ public class TaskAccessController {
 	@GetMapping("/grants")
 	public PageResponse<TaskGrantView> grants(
 		@PathVariable String taskId,
+		@RequestParam(required = false) com.recording.platform.task.model.GrantStatus status,
+		@RequestParam(defaultValue = "") String query,
 		@RequestParam(defaultValue = "0") int page,
 		@RequestParam(defaultValue = "20") int size,
 		@AuthenticationPrincipal PlatformPrincipal actor
-	) { return access.listGrants(taskId, page, size, actor); }
+	) { return access.listGrants(taskId, status, query, page, size, actor); }
 	@DeleteMapping("/grants/{userId}")
 	public TaskGrant revoke(
 		@PathVariable String taskId,

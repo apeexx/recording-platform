@@ -4,6 +4,7 @@ import AsyncState from '../../../components/admin/AsyncState.vue'
 import PageActions from '../../../components/admin/PageActions.vue'
 import PaginationControls from '../../../components/admin/PaginationControls.vue'
 import BaseSelect from '../../../components/form/BaseSelect.vue'
+import TaskBatchActionMenu from '../../../components/admin/TaskBatchActionMenu.vue'
 import TaskItemFilters from '../../../components/admin/TaskItemFilters.vue'
 import { taskApi } from '../../../lib/taskApi.js'
 import { batchOperationApi } from '../../../lib/batchOperationApi.js'
@@ -28,6 +29,13 @@ const pollTimer = ref(null)
 const selection = useBatchSelection(rows, total)
 const filters = ref(defaultTaskItemFilters())
 const taskOptions = computed(() => tasks.value.map(task => ({ value: task.id, label: task.name })))
+const selectedTask = computed(() => tasks.value.find(task => task.id === taskId.value))
+const statusOptions = computed(() => [
+  { value: 'RECORDING_PENDING', label: '待录制' },
+  selectedTask.value?.configuration?.humanReviewEnabled
+    ? { value: 'SUBMITTED', label: '已提交' }
+    : { value: 'COMPLETED', label: '已完成' },
+])
 const processing = computed(() => ['PENDING', 'PROCESSING'].includes(batchJob.value?.status))
 const progress = computed(() => batchJob.value?.selectedCount
   ? Math.round((batchJob.value.processedCount || 0) / batchJob.value.selectedCount * 100)
@@ -80,12 +88,16 @@ async function selectAllMatching() {
   }
 }
 function applicableCount(action) {
-  if (selection.mode.value === 'ALL') return Number(preview.value?.applicableCounts?.[action.toUpperCase()]) || 0
+  if (selection.mode.value === 'ALL') {
+    const key = action === 'status' ? 'STATUS' : action.toUpperCase()
+    return Number(preview.value?.applicableCounts?.[key]) || 0
+  }
   return selection.pageCommands().filter(command => {
     const row = rows.value.find(item => item.id === command.itemId)
     if (action === 'restore') return row?.status === 'DISCARDED'
     if (action === 'discard') return row?.status !== 'DISCARDED'
-    return row?.status !== 'AVAILABLE' && row?.status !== 'DISCARDED'
+    if (action === 'release') return row?.status !== 'AVAILABLE' && row?.status !== 'DISCARDED'
+    return row?.status !== 'DISCARDED'
   }).length
 }
 async function batch(action) {
@@ -104,6 +116,30 @@ async function batch(action) {
     }
     const result = await taskApi.batchAction(action, selection.pageCommands(), operationId(`pool-${action}`))
     notice.value = `成功 ${result.filter(row => row.success).length}，冲突 ${result.filter(row => !row.success).length}`
+    notifications.success(notice.value)
+    selection.clear()
+    await load()
+  } catch (exception) {
+    notifications.error(exception.message)
+  }
+}
+async function changeStatus(targetStatus) {
+  const count = applicableCount('status')
+  if (!count || !confirm(`确认将 ${count} 条适用数据调整为 ${targetStatus}？`)) return
+  try {
+    if (selection.mode.value === 'ALL') {
+      batchJob.value = await batchOperationApi.create({
+        operationId: operationId('pool-all-status'),
+        action: 'STATUS',
+        selection: selection.selectionPayload(taskId.value, 'TASK_POOL', selectionFilters(filters.value)),
+        targetStatus,
+      })
+      notifications.success('跨页状态调整已进入队列')
+      schedulePoll()
+      return
+    }
+    const result = await taskApi.batchStatus(targetStatus, selection.pageCommands(), operationId('pool-status'))
+    notice.value = `状态调整完成：成功 ${result.filter(row => row.success).length}，冲突 ${result.filter(row => !row.success).length}`
     notifications.success(notice.value)
     selection.clear()
     await load()
@@ -155,9 +191,9 @@ onBeforeUnmount(clearPoll)
       <div class="business-inline">
         <BaseSelect v-model="taskId" :options="taskOptions" placeholder="请选择任务" aria-label="选择任务" @update:model-value="choose"/>
         <button class="button-secondary" :disabled="!taskId" @click="load">刷新</button>
-        <button class="button-secondary" :disabled="!applicableCount('release') || processing" @click="batch('release')">批量释放（{{ applicableCount('release') }}）</button>
-        <button class="button-secondary is-danger" :disabled="!applicableCount('discard') || processing" @click="batch('discard')">批量废弃（{{ applicableCount('discard') }}）</button>
-        <button class="button-secondary" :disabled="!applicableCount('restore') || processing" @click="batch('restore')">批量恢复（{{ applicableCount('restore') }}）</button>
+        <TaskBatchActionMenu :selected-count="selection.selectedCount.value"
+          :counts="{ status: applicableCount('status'), release: applicableCount('release'), discard: applicableCount('discard'), restore: applicableCount('restore') }"
+          :status-options="statusOptions" :disabled="processing" @status="changeStatus" @release="batch('release')" @discard="batch('discard')" @restore="batch('restore')" />
       </div>
       <div v-if="selection.selectedCount.value" class="batch-selection-bar">
         <span>已选择 {{ selection.selectedCount.value }} 条</span>
@@ -176,11 +212,11 @@ onBeforeUnmount(clearPoll)
           <table class="business-table">
             <thead><tr>
               <th><input type="checkbox" :checked="selection.pageAllSelected.value" aria-label="选择当前页面" @change="selection.togglePage"/></th>
-              <th>条目编号</th><th><TaskItemFilters kind="status" :model-value="filters" @change="changeFilters"/></th><th>采集员 ID</th><th><TaskItemFilters kind="collector" :model-value="filters" @change="changeFilters"/></th><th>审核员 ID</th><th>审核员姓名</th><th><TaskItemFilters kind="result" :model-value="filters" @change="changeFilters"/></th><th>修订</th><th>操作</th>
+              <th><TaskItemFilters kind="code" :task-id="taskId" :model-value="filters" @change="changeFilters"/></th><th><TaskItemFilters kind="status" :model-value="filters" @change="changeFilters"/></th><th>采集员 ID</th><th><TaskItemFilters kind="collector" :model-value="filters" @change="changeFilters"/></th><th>审核员 ID</th><th>审核员姓名</th><th><TaskItemFilters kind="result" :model-value="filters" @change="changeFilters"/></th><th>修订</th><th>操作</th>
             </tr></thead>
             <tbody><tr v-for="row in rows" :key="row.id">
               <td><input type="checkbox" :checked="selection.isSelected(row)" :aria-label="`选择 ${row.itemCode}`" @change="selection.toggle(row)"/></td>
-              <td><router-link :to="`/admin/items/${row.id}/operations`">{{ row.itemCode }}</router-link></td>
+              <td>{{ row.itemCode }}</td>
               <td>{{ statusLabel('item', row.status) }}</td><td>{{ row.collectorId || '-' }}</td><td>{{ row.collectorName || '-' }}</td>
               <td>{{ row.reviewerId || '-' }}</td><td>{{ row.reviewerName || '-' }}</td><td>{{ row.currentResult?.audio ? '音频' : row.currentResult?.text ? '文本' : '-' }}</td><td>{{ row.revision }}</td>
               <td><router-link class="button-link" :to="`/admin/items/${row.id}`">查看</router-link></td>

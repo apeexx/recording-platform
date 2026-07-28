@@ -40,13 +40,14 @@ class TaskAccessServiceTests {
 	private TaskAccessService service;
 	private InMemoryGrantStore grants;
 	private InMemoryAccessRequestStore requests;
+	private IdentityDirectory users;
 	private PlatformPrincipal collector;
 	private PlatformPrincipal admin;
 
 	@BeforeEach
 	void setUp() {
 		TaskStore tasks = org.mockito.Mockito.mock(TaskStore.class);
-		IdentityDirectory users = org.mockito.Mockito.mock(IdentityDirectory.class);
+		users = org.mockito.Mockito.mock(IdentityDirectory.class);
 		MiniProgramUserStore miniUsers = org.mockito.Mockito.mock(MiniProgramUserStore.class);
 		TaskRecord task = new TaskRecord();
 		task.setId("task-1");
@@ -111,12 +112,48 @@ class TaskAccessServiceTests {
 			});
 	}
 
+	@Test
+	void permissionListsForwardSearchAndExposeLoginNames() {
+		TaskGrant grant = new TaskGrant();
+		grant.setTaskId("task-1");
+		grant.setUserId("collector-1");
+		grant.setStatus(GrantStatus.ACTIVE);
+		grants.save(grant);
+		TaskAccessRequest request = new TaskAccessRequest();
+		request.setTaskId("task-1");
+		request.setUserId("collector-1");
+		request.setStatus(AccessRequestStatus.PENDING);
+		requests.save(request);
+		IdentityUser user = new IdentityUser(
+			"collector-1", UserType.MINIPROGRAM, "3052638964", "傅成林",
+			UserRole.COLLECTOR, UserStatus.ACTIVE, false, null, null
+		);
+		when(users.findAllByIdIn(org.mockito.ArgumentMatchers.any())).thenReturn(java.util.List.of(user));
+
+		var grantPage = service.listGrants(
+			"task-1", GrantStatus.ACTIVE, "傅", 0, 5, admin
+		);
+		var requestPage = service.listRequests("task-1", "3052638964", 0, 5, admin);
+
+		assertThat(grants.lastStatus).isEqualTo(GrantStatus.ACTIVE);
+		assertThat(grants.lastQuery).isEqualTo("傅");
+		assertThat(requests.lastQuery).isEqualTo("3052638964");
+		assertThat(grantPage.items()).singleElement()
+			.extracting(com.recording.platform.task.service.TaskGrantView::userLoginName)
+			.isEqualTo("3052638964");
+		assertThat(requestPage.items()).singleElement()
+			.extracting(com.recording.platform.task.service.TaskAccessRequestView::userLoginName)
+			.isEqualTo("3052638964");
+	}
+
 	private PlatformPrincipal principal(String id, String username, UserRole role, SessionType type) {
 		return new PlatformPrincipal("session-" + id, id, username, username, role, type, false);
 	}
 
 	private static final class InMemoryGrantStore implements TaskGrantStore {
 		private final Map<String, TaskGrant> data = new HashMap<>();
+		private GrantStatus lastStatus;
+		private String lastQuery;
 		@Override public TaskGrant save(TaskGrant grant) {
 			if (grant.getId() == null) grant.setId(UUID.randomUUID().toString());
 			data.put(key(grant.getTaskId(), grant.getUserId()), grant);
@@ -131,11 +168,21 @@ class TaskAccessServiceTests {
 		@Override public Page<TaskGrant> findAllByTaskId(String taskId, Pageable pageable) {
 			return new PageImpl<>(data.values().stream().filter((grant) -> taskId.equals(grant.getTaskId())).toList(), pageable, data.size());
 		}
+		@Override public Page<TaskGrant> search(
+			String taskId, GrantStatus status, String query, Pageable pageable
+		) {
+			lastStatus = status;
+			lastQuery = query;
+			var content = data.values().stream().filter(grant -> taskId.equals(grant.getTaskId()))
+				.filter(grant -> status == null || grant.getStatus() == status).toList();
+			return new PageImpl<>(content, pageable, content.size());
+		}
 		private String key(String taskId, String userId) { return taskId + ":" + userId; }
 	}
 
 	private static final class InMemoryAccessRequestStore implements TaskAccessRequestStore {
 		private final Map<String, TaskAccessRequest> data = new HashMap<>();
+		private String lastQuery;
 		@Override public TaskAccessRequest save(TaskAccessRequest request) {
 			if (request.getId() == null) request.setId(UUID.randomUUID().toString());
 			data.put(request.getId(), request);
@@ -163,6 +210,14 @@ class TaskAccessServiceTests {
 		}
 		@Override public Page<TaskAccessRequest> findAllByTaskId(String taskId, Pageable pageable) {
 			return new PageImpl<>(data.values().stream().filter((request) -> taskId.equals(request.getTaskId())).toList(), pageable, data.size());
+		}
+		@Override public Page<TaskAccessRequest> searchPending(
+			String taskId, String query, Pageable pageable
+		) {
+			lastQuery = query;
+			var content = data.values().stream().filter(request -> taskId.equals(request.getTaskId()))
+				.filter(request -> request.getStatus() == AccessRequestStatus.PENDING).toList();
+			return new PageImpl<>(content, pageable, content.size());
 		}
 	}
 }

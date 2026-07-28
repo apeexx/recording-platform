@@ -91,6 +91,31 @@ class BatchOperationServiceTests {
 	}
 
 	@Test
+	void previewUsesMultiValueFiltersAndKeepsLegacySingleValuesCompatible() {
+		TaskItemStore items = mock(TaskItemStore.class);
+		when(items.findAllByTaskId(
+			org.mockito.ArgumentMatchers.eq("task-1"),
+			org.mockito.ArgumentMatchers.argThat(filter ->
+				filter.itemCodes().equals(Set.of("T000001-0000001", "T000001-0000002"))
+					&& filter.groups().equals(Set.of(AdminTaskItemGroup.PENDING, AdminTaskItemGroup.SUBMITTED))
+					&& filter.results().equals(Set.of(TaskItemResultKind.TEXT_ONLY, TaskItemResultKind.AUDIO_ONLY))),
+			any(Pageable.class)
+		)).thenReturn(new PageImpl<>(List.of(item("pending", TaskItemStatus.RECORDING_PENDING, 3))));
+		BatchOperationService service = service(items, mock(BatchOperationJobStore.class),
+			mock(BatchOperationSnapshotStore.class));
+
+		var preview = service.preview(new BatchOperationSelection(
+			"task-1", BatchOperationSource.TASK_POOL, Set.of(),
+			AdminTaskItemGroup.PENDING, Set.of(), false, TaskItemResultKind.TEXT_ONLY,
+			Set.of("T000001-0000001", "T000001-0000002"),
+			Set.of(AdminTaskItemGroup.SUBMITTED),
+			Set.of(TaskItemResultKind.AUDIO_ONLY)
+		), admin());
+
+		assertThat(preview.selectedCount()).isEqualTo(1);
+	}
+
+	@Test
 	void createSnapshotsOnlyReviewPoolRowsAndPreservesRevision() {
 		TaskItemStore items = mock(TaskItemStore.class);
 		when(items.findAllByTaskId(any(), any(com.recording.platform.task.service.TaskItemFilter.class), any(Pageable.class))).thenReturn(new PageImpl<>(List.of(

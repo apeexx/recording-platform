@@ -107,8 +107,14 @@ public class TaskAccessService {
 	}
 
 	public PageResponse<TaskGrantView> listGrants(String taskId, int page, int size, PlatformPrincipal actor) {
+		return listGrants(taskId, null, "", page, size, actor);
+	}
+
+	public PageResponse<TaskGrantView> listGrants(
+		String taskId, GrantStatus status, String query, int page, int size, PlatformPrincipal actor
+	) {
 		requireRole(actor, UserRole.ADMIN);
-		var result = grants.findAllByTaskId(taskId, page(page, size));
+		var result = grants.search(taskId, status, query, page(page, size));
 		var userMap = users.findAllByIdIn(result.getContent().stream().map(TaskGrant::getUserId).toList())
 			.stream().collect(java.util.stream.Collectors.toMap(IdentityUser::id, java.util.function.Function.identity()));
 		return new PageResponse<>(result.getContent().stream().map(grant -> TaskGrantView.from(grant, userMap.get(grant.getUserId()))).toList(),
@@ -116,8 +122,14 @@ public class TaskAccessService {
 	}
 
 	public PageResponse<TaskAccessRequestView> listRequests(String taskId, int page, int size, PlatformPrincipal actor) {
+		return listRequests(taskId, "", page, size, actor);
+	}
+
+	public PageResponse<TaskAccessRequestView> listRequests(
+		String taskId, String query, int page, int size, PlatformPrincipal actor
+	) {
 		requireRole(actor, UserRole.ADMIN);
-		var result = requests.findAllByTaskIdAndStatus(taskId, AccessRequestStatus.PENDING, page(page, size));
+		var result = requests.searchPending(taskId, query, page(page, size));
 		var userMap = users.findAllByIdIn(result.getContent().stream().map(TaskAccessRequest::getUserId).toList())
 			.stream().collect(java.util.stream.Collectors.toMap(IdentityUser::id, java.util.function.Function.identity()));
 		return new PageResponse<>(result.getContent().stream().map(request -> TaskAccessRequestView.from(request, userMap.get(request.getUserId()))).toList(),

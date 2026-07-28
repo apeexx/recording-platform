@@ -4,8 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import AsyncState from '../../../components/admin/AsyncState.vue'
 import PageActions from '../../../components/admin/PageActions.vue'
 import PaginationControls from '../../../components/admin/PaginationControls.vue'
-import BaseSelect from '../../../components/form/BaseSelect.vue'
-import TaskItemEditModal from '../../../components/admin/TaskItemEditModal.vue'
+import TaskBatchActionMenu from '../../../components/admin/TaskBatchActionMenu.vue'
 import TaskItemFilters from '../../../components/admin/TaskItemFilters.vue'
 import { taskApi } from '../../../lib/taskApi.js'
 import { batchOperationApi } from '../../../lib/batchOperationApi.js'
@@ -30,7 +29,6 @@ const selection = useBatchSelection(items, total)
 const batchPreview = ref(null)
 const batchJob = ref(null)
 const batchPollTimer = ref(null)
-const targetStatus = ref('COMPLETED')
 const statusOptions = ref([])
 const importFile = ref(null)
 const fileInput = ref(null)
@@ -39,8 +37,6 @@ const dragging = ref(false)
 const job = ref(null)
 const activeImportJobId = ref(null)
 const pollTimer = ref(null)
-const editingItem = ref(null)
-const editBusy = ref(false)
 const filters = ref(defaultTaskItemFilters())
 const itemForm = reactive({ referenceText: '', referenceAudioUrl: '', referenceVideoUrl: '' })
 const processedRows = computed(() => (Number(job.value?.successRows) || 0) + (Number(job.value?.failureRows) || 0))
@@ -212,50 +208,6 @@ async function deleteTask() {
   }
 }
 
-function openEdit(row) {
-  editingItem.value = row
-}
-
-async function saveEdit(values) {
-  editBusy.value = true
-  try {
-    await taskApi.updateItem(editingItem.value.id, {
-      expectedRevision: editingItem.value.revision,
-      ...values,
-    }, operationId('item-edit'))
-    notifications.success('待领取数据已更新')
-    editingItem.value = null
-    await loadItems()
-  } catch (exception) {
-    notifications.error(exception.message)
-  } finally {
-    editBusy.value = false
-  }
-}
-
-async function deleteItem(row) {
-  if (!confirm(`确认永久删除待领取条目 ${row.itemCode}？条目编号不会复用。`)) return
-  try {
-    await taskApi.deleteItem(row.id, row.revision, operationId('item-delete'))
-    notifications.success('待领取数据已删除')
-    selection.clear()
-    await loadItems()
-  } catch (exception) {
-    notifications.error(exception.message)
-  }
-}
-
-async function itemAction(row, action) {
-  if (!confirm(`确认${action === 'discard' ? '废弃' : '恢复'}条目 ${row.itemCode}？`)) return
-  try {
-    await taskApi[action](row.id, operationId(`item-${action}`), row.revision)
-    notifications.success(action === 'discard' ? '条目已废弃' : '条目已恢复')
-    await loadItems()
-  } catch (exception) {
-    notifications.error(exception.message)
-  }
-}
-
 async function changePage(value) { page.value = value; selection.clearPageMode(); await loadItems() }
 async function changePageSize(value) { itemPageSize.value = value; page.value = 0; selection.clear(); await loadItems() }
 async function changeFilters(value) {
@@ -314,23 +266,23 @@ async function batch(action) {
   }
 }
 
-async function changeStatus() {
+async function changeStatus(targetStatus) {
   const count = applicableCount('status')
-  if (!count || !confirm(`确认将 ${count} 条适用数据调整为 ${targetStatus.value}？`)) return
+  if (!count || !confirm(`确认将 ${count} 条适用数据调整为 ${targetStatus}？`)) return
   try {
     if (selection.mode.value === 'ALL') {
       batchJob.value = await batchOperationApi.create({
         operationId: operationId('detail-all-status'),
         action: 'STATUS',
         selection: selection.selectionPayload(route.params.id, 'TASK_DETAIL', selectionFilters(filters.value)),
-        targetStatus: targetStatus.value,
+        targetStatus,
       })
       notifications.success('跨页状态调整已进入队列')
       scheduleBatchPoll()
       return
     }
     const commands = selection.pageCommands()
-    const result = await taskApi.batchStatus(targetStatus.value, commands, operationId('batch-status'))
+    const result = await taskApi.batchStatus(targetStatus, commands, operationId('batch-status'))
     notice.value = `状态调整完成：成功 ${result.filter((row) => row.success).length}，冲突 ${result.filter((row) => !row.success).length}`
     notifications.success(notice.value)
     selection.clear()
@@ -438,11 +390,9 @@ onBeforeUnmount(() => { stopImportTracking(); clearBatchPoll() })
           <div class="business-heading task-pool-heading">
             <h3>数据池（共 {{ total }} 条）</h3>
             <div class="business-actions task-pool-toolbar">
-              <BaseSelect v-model="targetStatus" :options="statusOptions" aria-label="目标状态" />
-              <button class="button-secondary" :disabled="!applicableCount('status')" @click="changeStatus">调整状态（{{ applicableCount('status') }}）</button>
-              <button class="button-secondary" :disabled="!applicableCount('release')" @click="batch('release')">批量释放（{{ applicableCount('release') }}）</button>
-              <button class="button-secondary is-danger" :disabled="!applicableCount('discard')" @click="batch('discard')">批量废弃（{{ applicableCount('discard') }}）</button>
-              <button class="button-secondary" :disabled="!applicableCount('restore')" @click="batch('restore')">批量恢复（{{ applicableCount('restore') }}）</button>
+              <TaskBatchActionMenu :selected-count="selection.selectedCount.value"
+                :counts="{ status: applicableCount('status'), release: applicableCount('release'), discard: applicableCount('discard'), restore: applicableCount('restore') }"
+                :status-options="statusOptions" @status="changeStatus" @release="batch('release')" @discard="batch('discard')" @restore="batch('restore')" />
             </div>
           </div>
           <div v-if="selection.selectedCount.value" class="batch-selection-bar">
@@ -459,21 +409,12 @@ onBeforeUnmount(() => { stopImportTracking(); clearBatchPoll() })
           <AsyncState :loading="false" :error="''" :empty="!items.length">
             <div class="business-table-wrap">
               <table class="business-table">
-                <thead><tr><th><input type="checkbox" :checked="selection.pageAllSelected.value" aria-label="选择当前页面" @change="selection.togglePage"></th><th>编号</th><th><TaskItemFilters kind="status" :model-value="filters" @change="changeFilters"/></th><th>采集员 ID</th><th><TaskItemFilters kind="collector" :model-value="filters" @change="changeFilters"/></th><th><TaskItemFilters kind="result" :model-value="filters" @change="changeFilters"/></th><th>操作</th></tr></thead>
+                <thead><tr><th><input type="checkbox" :checked="selection.pageAllSelected.value" aria-label="选择当前页面" @change="selection.togglePage"></th><th><TaskItemFilters kind="code" :task-id="route.params.id" :model-value="filters" @change="changeFilters"/></th><th><TaskItemFilters kind="status" :model-value="filters" @change="changeFilters"/></th><th><TaskItemFilters kind="collector" :model-value="filters" @change="changeFilters"/></th><th><TaskItemFilters kind="result" :model-value="filters" @change="changeFilters"/></th><th>操作</th></tr></thead>
                 <tbody><tr v-for="row in items" :key="row.id">
                   <td><label class="business-check colored-checkbox"><input type="checkbox" :checked="selection.isSelected(row)" :aria-label="`选择 ${row.itemCode}`" @change="selection.toggle(row)"><span class="visually-hidden">选择</span></label></td>
-                  <td>{{ row.itemCode }}</td><td>{{ statusLabel('item', row.status) }}</td><td>{{ row.collectorId || '-' }}</td><td>{{ row.collectorName || '-' }}</td>
+                  <td>{{ row.itemCode }}</td><td>{{ statusLabel('item', row.status) }}</td><td>{{ row.collectorName || '-' }}</td>
                   <td>{{ row.currentResult?.audio?.durationMillis ? `${Math.round(row.currentResult.audio.durationMillis / 1000)}秒` : row.currentResult?.text ? '文本' : '-' }}</td>
-                  <td class="table-actions">
-                    <router-link class="button-link" :to="`/admin/items/${row.id}`">查看</router-link>
-                    <template v-if="row.status === 'AVAILABLE'">
-                      <button class="button-link" @click="openEdit(row)">编辑</button>
-                      <button class="button-link is-danger" @click="deleteItem(row)">删除</button>
-                    </template>
-                    <button v-else-if="row.status !== 'DISCARDED'" class="button-link is-danger" @click="itemAction(row, 'discard')">废弃</button>
-                    <button v-else class="button-link" @click="itemAction(row, 'restore')">恢复</button>
-                    <router-link class="button-link" :to="`/admin/items/${row.id}/operations`">记录</router-link>
-                  </td>
+                  <td><router-link class="button-link" :to="`/admin/items/${row.id}`">查看</router-link></td>
                 </tr></tbody>
               </table>
             </div>
@@ -482,7 +423,5 @@ onBeforeUnmount(() => { stopImportTracking(); clearBatchPoll() })
         </div>
       </div>
     </AsyncState>
-    <TaskItemEditModal :open="Boolean(editingItem)" :item="editingItem" :reference-types="task?.configuration?.referenceTypes || []"
-      :busy="editBusy" @close="editingItem = null" @save="saveEdit" />
   </section>
 </template>

@@ -23,4 +23,7 @@ public interface TaskAccessRequestStore {
 	default Page<TaskAccessRequest> findAllByTaskIdAndStatus(
 		String taskId, AccessRequestStatus status, Pageable pageable
 	) { return Page.empty(pageable); }
+	default Page<TaskAccessRequest> searchPending(
+		String taskId, String query, Pageable pageable
+	) { return findAllByTaskIdAndStatus(taskId, AccessRequestStatus.PENDING, pageable); }
 }

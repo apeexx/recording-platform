@@ -90,11 +90,66 @@ describe('任务页面 API', () => {
     assert.match(routes, /TaskItemDetailPage/)
   })
 
+  it('uses teleported multi-select table filters and one batch action menu', () => {
+    const filters = fs.readFileSync(path.resolve('src/components/admin/TaskItemFilters.vue'), 'utf8')
+    const popover = fs.readFileSync(path.resolve('src/components/admin/TableFilterPopover.vue'), 'utf8')
+    const batchMenu = fs.readFileSync(path.resolve('src/components/admin/TaskBatchActionMenu.vue'), 'utf8')
+    const detail = fs.readFileSync(path.resolve('src/pages/admin/tasks/TaskDetailPage.vue'), 'utf8')
+    const pool = fs.readFileSync(path.resolve('src/pages/admin/tasks/TaskPoolPage.vue'), 'utf8')
+
+    expect(popover).toContain('<Teleport to="body">')
+    expect(popover).toContain('position: fixed')
+    expect(popover).toContain('z-index: 2400')
+    expect(popover).toContain("window.addEventListener('scroll'")
+    expect(filters).toContain("kind === 'code'")
+    expect(filters).toContain('type="checkbox"')
+    expect(filters).not.toContain('type="radio"')
+    expect(batchMenu).toContain('批量释放')
+    expect(batchMenu).toContain('批量废弃')
+    expect(batchMenu).toContain('批量恢复')
+    expect(detail).toContain('TaskBatchActionMenu')
+    expect(pool).toContain('TaskBatchActionMenu')
+    expect(detail).not.toContain('采集员 ID</th>')
+    expect(detail).not.toContain('@click="openEdit(row)">编辑')
+    expect(detail).not.toContain('@click="deleteItem(row)">删除')
+  })
+
+  it('edits references inline and shows three recent operations plus an all-record modal', () => {
+    const source = fs.readFileSync(path.resolve('src/pages/admin/tasks/TaskItemDetailPage.vue'), 'utf8')
+
+    expect(source).not.toContain('TaskItemEditModal')
+    expect(source).toContain('最近操作记录')
+    expect(source).toContain('size: 3')
+    expect(source).toContain('operationsOpen')
+    expect(source).toContain('loadAllOperations')
+    expect(source).toContain('referenceAudioUrl')
+    expect(source).toContain('editForm.referenceAudioUrl')
+    expect(source).toContain('editForm.referenceVideoUrl')
+    expect(source).toContain('<textarea')
+    expect(source).toContain('采集结果')
+    expect(source).toContain('<Teleport to="body">')
+  })
+
   it('preloads paginated mini-program users on the permission page', () => {
     const source = fs.readFileSync(path.resolve('src/pages/admin/tasks/TaskPermissionsPage.vue'), 'utf8')
     assert.match(source, /userType:\s*'MINIPROGRAM'/)
     assert.match(source, /PaginationControls/)
     assert.match(source, /小程序用户/)
+  })
+
+  it('gives all permission lists independent searchable five-or-ten item pagination', () => {
+    const source = fs.readFileSync(path.resolve('src/pages/admin/tasks/TaskPermissionsPage.vue'), 'utf8')
+    const styles = fs.readFileSync(path.resolve('src/styles/business.css'), 'utf8')
+
+    expect(source).toContain('const userSize = ref(5)')
+    expect(source).toContain('const requestSize = ref(5)')
+    expect(source).toContain('const grantSize = ref(5)')
+    expect(source).toContain(':page-sizes="[5, 10]"')
+    expect(source).toContain('requestQuery')
+    expect(source).toContain('grantQuery')
+    expect(source).toContain('row.userLoginName')
+    expect(source).toContain("status: 'ACTIVE'")
+    expect(styles).toMatch(/\.permission-layout\{[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/)
   })
   it('任务状态和数据池请求使用后端真实路径', async () => {
     httpRequest.mockResolvedValue({})
@@ -145,11 +200,12 @@ describe('任务页面 API', () => {
     expect(detail).toContain('await loadItems()')
   })
 
-  it('仅待领取数据展示编辑和删除，草稿任务展示删除入口', () => {
+  it('任务详情数据池只保留查看，草稿任务仍展示删除入口', () => {
     const detail = fs.readFileSync(path.resolve('src/pages/admin/tasks/TaskDetailPage.vue'), 'utf8')
-    expect(detail).toContain("row.status === 'AVAILABLE'")
-    expect(detail).toContain('@click="openEdit(row)">编辑')
-    expect(detail).toContain('@click="deleteItem(row)">删除')
+    expect(detail).not.toContain("row.status === 'AVAILABLE'")
+    expect(detail).not.toContain('@click="openEdit(row)">编辑')
+    expect(detail).not.toContain('@click="deleteItem(row)">删除')
+    expect(detail).toContain('>查看</router-link>')
     expect(detail).toContain("task?.lifecycle === 'DRAFT'")
     expect(detail).toContain('@click="deleteTask">删除任务')
     expect(detail).toContain('colored-checkbox')

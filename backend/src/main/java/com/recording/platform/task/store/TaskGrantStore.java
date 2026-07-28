@@ -12,6 +12,9 @@ public interface TaskGrantStore {
 	Optional<TaskGrant> findByTaskIdAndUserId(String taskId, String userId);
 	Optional<TaskGrant> findActive(String taskId, String userId);
 	Page<TaskGrant> findAllByTaskId(String taskId, Pageable pageable);
+	default Page<TaskGrant> search(
+		String taskId, GrantStatus status, String query, Pageable pageable
+	) { return findAllByTaskId(taskId, pageable); }
 	default void deleteAllByTaskId(String taskId) { }
 	default Page<TaskGrant> findAllActiveByUserId(String userId, Pageable pageable) { return Page.empty(pageable); }
 

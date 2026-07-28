@@ -46,6 +46,27 @@ class TaskItemFilterTests {
 		assertThat(withUnassigned.matchesCollector(itemWithCollector(null))).isTrue();
 	}
 
+	@Test
+	void normalizesMultipleCodesGroupsAndResultsWithoutAllSentinels() {
+		TaskItemFilter filter = new TaskItemFilter(
+			Set.of("T000001-0000001", "T000001-0000002"),
+			"000000",
+			Set.of(AdminTaskItemGroup.ALL, AdminTaskItemGroup.PENDING, AdminTaskItemGroup.SUBMITTED),
+			Set.of("collector-1"),
+			false,
+			Set.of(TaskItemResultKind.ALL, TaskItemResultKind.TEXT_ONLY, TaskItemResultKind.AUDIO_ONLY)
+		);
+
+		assertThat(filter.itemCodes()).containsExactlyInAnyOrder("T000001-0000001", "T000001-0000002");
+		assertThat(filter.itemCodeQuery()).isEqualTo("000000");
+		assertThat(filter.groups()).containsExactlyInAnyOrder(
+			AdminTaskItemGroup.PENDING, AdminTaskItemGroup.SUBMITTED
+		);
+		assertThat(filter.results()).containsExactlyInAnyOrder(
+			TaskItemResultKind.TEXT_ONLY, TaskItemResultKind.AUDIO_ONLY
+		);
+	}
+
 	private TaskItem item(String text, String mediaId) {
 		TaskItem item = new TaskItem();
 		item.setCurrentResult(text == null && mediaId == null ? null :
