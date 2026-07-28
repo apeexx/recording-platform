@@ -112,7 +112,7 @@ onMounted(load)
     </PageActions>
     <AsyncState :loading="loading" :error="loadError" :empty="!item" @retry="backToQueue">
       <div class="review-layout">
-        <div class="business-card">
+        <div class="business-card review-source-column">
           <h3>参考源</h3>
           <section class="reference-source-block">
             <h4>参考文本</h4>
@@ -130,7 +130,8 @@ onMounted(load)
             <p v-else class="business-note">无参考视频</p>
           </section>
         </div>
-        <div class="business-card">
+        <div class="review-decision-column">
+          <div class="business-card">
           <h3>采集结果</h3>
           <audio v-if="audioUrl" controls :src="audioUrl" />
           <p v-else class="business-note">本条未提交音频</p>
@@ -138,8 +139,8 @@ onMounted(load)
             文本结果
             <textarea v-model="text" rows="8" placeholder="可由审核员补充或修正" />
           </label>
-        </div>
-        <div class="business-card">
+          </div>
+          <div class="business-card">
           <h3>审核结论</h3>
           <div class="business-check-list">
             <label v-for="reason in version?.rejectionReasons || []" :key="reason">
@@ -152,6 +153,7 @@ onMounted(load)
             <button class="button-primary" @click="approve">审核通过</button>
           </div>
           <p v-else class="business-note">请先从审核池领取该条目后再处理。</p>
+          </div>
         </div>
       </div>
     </AsyncState>

@@ -50,6 +50,10 @@ describe('adminSidebar', () => {
     assert.equal(adminSidebarConfig.findAdminSidebarGroupKeyByPath('/admin/dashboard'), null)
   })
 
+  it('uses the real-data dashboard label', () => {
+    assert.equal(adminSidebar.find((item) => item.key === 'dashboard')?.title, '数据大屏')
+  })
+
   it('maps every top-level entry to a semantic local Iconfont SVG', () => {
     const icons = Object.fromEntries(adminSidebar.map((item) => [item.key, item.icon]))
 

@@ -71,10 +71,17 @@ public class BatchOperationController {
 	public record SelectionRequest(
 		@NotBlank String taskId,
 		@NotNull BatchOperationSource source,
-		Set<@NotBlank String> excludedItemIds
+		Set<@NotBlank String> excludedItemIds,
+		com.recording.platform.task.service.AdminTaskItemGroup group,
+		Set<@NotBlank String> collectorIds,
+		Boolean includeUnassigned,
+		com.recording.platform.task.service.TaskItemResultKind result
 	) {
 		BatchOperationSelection toSelection() {
-			return new BatchOperationSelection(taskId, source, excludedItemIds);
+			return new BatchOperationSelection(
+				taskId, source, excludedItemIds, group, collectorIds,
+				Boolean.TRUE.equals(includeUnassigned), result
+			);
 		}
 	}
 	public record CreateRequest(

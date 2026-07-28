@@ -249,7 +249,14 @@ public class BatchOperationService {
 		int page = 0;
 		Page<TaskItem> result;
 		do {
-			result = items.findAllByTaskId(selection.taskId(), PageRequest.of(page++, SNAPSHOT_PAGE_SIZE));
+				result = items.findAllByTaskId(
+					selection.taskId(),
+					new com.recording.platform.task.service.TaskItemFilter(
+						selection.group(), selection.collectorIds(),
+						selection.includeUnassigned(), selection.result()
+					),
+					PageRequest.of(page++, SNAPSHOT_PAGE_SIZE)
+				);
 			result.getContent().stream()
 				.filter(item -> !exclusions.contains(item.getId()))
 				.filter(item -> selection.source() != BatchOperationSource.REVIEW_QUEUE

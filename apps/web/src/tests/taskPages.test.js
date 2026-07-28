@@ -61,7 +61,7 @@ describe('任务页面 API', () => {
     const detail = fs.readFileSync(path.resolve('src/pages/admin/tasks/TaskDetailPage.vue'), 'utf8')
     expect(detail).toContain("import PaginationControls from '../../../components/admin/PaginationControls.vue'")
     expect(detail).toContain('const itemPageSize = ref(10)')
-    expect(detail).toContain('taskApi.items(route.params.id, page.value, itemPageSize.value)')
+    expect(detail).toContain('taskApi.items(route.params.id, page.value, itemPageSize.value, filters.value)')
     expect(detail).toContain('function changePage(value)')
     expect(detail).toContain('async function changePageSize(value)')
     expect(detail).toContain('itemPageSize.value = value')
@@ -77,6 +77,25 @@ describe('任务页面 API', () => {
     expect(paginationStyles).toContain('.pagination-size .base-select-menu')
     expect(paginationStyles).toMatch(/bottom:\s*calc\(100% \+ 8px\)/)
   })
+
+  it('adds filtered item inspection and collector multi-selection', () => {
+    const detail = fs.readFileSync(path.resolve('src/pages/admin/tasks/TaskDetailPage.vue'), 'utf8')
+    const pool = fs.readFileSync(path.resolve('src/pages/admin/tasks/TaskPoolPage.vue'), 'utf8')
+    const routes = fs.readFileSync(path.resolve('src/router/adminRoutes.js'), 'utf8')
+    assert.match(detail, /TaskItemFilters/)
+    assert.match(pool, /TaskItemFilters/)
+    assert.match(detail, /查看/)
+    assert.match(pool, /查看/)
+    assert.match(routes, /items\/:itemId/)
+    assert.match(routes, /TaskItemDetailPage/)
+  })
+
+  it('preloads paginated mini-program users on the permission page', () => {
+    const source = fs.readFileSync(path.resolve('src/pages/admin/tasks/TaskPermissionsPage.vue'), 'utf8')
+    assert.match(source, /userType:\s*'MINIPROGRAM'/)
+    assert.match(source, /PaginationControls/)
+    assert.match(source, /小程序用户/)
+  })
   it('任务状态和数据池请求使用后端真实路径', async () => {
     httpRequest.mockResolvedValue({})
     await taskApi.transition('t1', 'publish', 'op-2')
@@ -87,14 +106,13 @@ describe('任务页面 API', () => {
   })
 	it('采集权限只展示带前缀的用户 ID，不使用旧用户编号字段',()=>{
 	  const source=fs.readFileSync(path.resolve('src/pages/admin/tasks/TaskPermissionsPage.vue'),'utf8')
-	  expect(source).toContain('u.id')
-	  expect(source).toContain('r.userId')
-	  expect(source).toContain('g.userId')
+   expect(source).toContain('user.id')
+   expect(source).toContain('row.userId')
 	  expect(source).not.toContain('internalUserNo')
 	  expect(source).not.toContain('userNo')
-	  expect(source).toContain('permission-overview-grid')
+   expect(source).toContain('permission-layout')
 	  const styles=fs.readFileSync(path.resolve('src/styles/business.css'),'utf8')
-	  expect(styles).toContain('.permission-overview-grid')
+   expect(styles).toContain('.permission-layout')
 	  expect(styles).toContain('align-items:stretch')
 	})
 

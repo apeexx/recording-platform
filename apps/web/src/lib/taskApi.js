@@ -1,5 +1,6 @@
 import { httpRequest } from './httpClient.js'
 import { queryString } from './apiUtils.js'
+import { buildTaskItemQuery } from './taskItemFilters.js'
 
 const encoded = (value) => encodeURIComponent(value)
 export const taskApi = {
@@ -9,7 +10,7 @@ export const taskApi = {
   update(id, data, key) { return httpRequest(`/api/tasks/${encoded(id)}`, { method: 'PUT', json: data, idempotencyKey: key }) },
   deleteTask(id, key) { return httpRequest(`/api/tasks/${encoded(id)}`, { method: 'DELETE', idempotencyKey: key }) },
   transition(id, action, key) { return httpRequest(`/api/tasks/${encoded(id)}/${action}`, { method: 'POST', idempotencyKey: key }) },
-  items(id, page = 0, size = 20) { return httpRequest(`/api/tasks/${encoded(id)}/items${queryString({ page, size })}`) },
+  items(id, page = 0, size = 20, filters = {}) { return httpRequest(`/api/tasks/${encoded(id)}/items${buildTaskItemQuery(page, size, filters)}`) },
   item(itemId) { return httpRequest(`/api/task-items/${encoded(itemId)}`) },
   addItem(id, data, key) { return httpRequest(`/api/tasks/${encoded(id)}/items`, { method: 'POST', json: data, idempotencyKey: key }) },
   updateItem(itemId, data, key) { return httpRequest(`/api/task-items/${encoded(itemId)}`, { method: 'PUT', json: data, idempotencyKey: key }) },
@@ -25,6 +26,7 @@ export const taskApi = {
   setStatus(itemId, data) { return httpRequest(`/api/task-items/${encoded(itemId)}/status`, { method: 'POST', json: data }) },
   discard(itemId, operationId, expectedRevision) { return httpRequest(`/api/task-items/${encoded(itemId)}/discard`, { method: 'POST', json: { operationId, expectedRevision } }) },
   restore(itemId, operationId, expectedRevision) { return httpRequest(`/api/task-items/${encoded(itemId)}/restore`, { method: 'POST', json: { operationId, expectedRevision } }) },
+  release(itemId, operationId, expectedRevision) { return httpRequest(`/api/task-items/${encoded(itemId)}/release`, { method: 'POST', json: { operationId, expectedRevision } }) },
   batchAction(action, items, operationId) { return httpRequest(`/api/task-items/batch/${action}`, { method: 'POST', json: { operationId, items } }) },
   batchStatus(status, items, operationId) { return httpRequest('/api/task-items/batch/status', { method: 'POST', json: { operationId, status, items } }) }
 }

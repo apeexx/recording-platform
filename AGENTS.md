@@ -226,6 +226,7 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 
 当前后端提供身份、会话、后台用户管理、语音生成、任务配置、授权、任务池、人工审核、动态状态、软废弃恢复、录音媒体、导入及外部完成结果读取 API；尚不提供机器审核执行或真实 AI 转写 API。
 当前同时提供操作记录与统计 API：条目操作记录按权限读取，全局操作记录仅 ADMIN/REVIEWER；任务和指定采集员汇总仅 ADMIN，审核员可查看本人统计；采集员按最近提交任务查看当前 assignment 汇总、每日分段及倒序提交明细。
+Web 数据大屏使用仅 ADMIN 可访问的 `GET /api/reports/dashboard`，返回真实任务生命周期数量、条目状态数量、当前采集人数、Asia/Shanghai 当日及最近 7 日首次提交统计和最多 8 个任务排行；最近操作仍复用 `/api/operations`。
 
 所有 API 响应必须带 `X-Request-Id`；错误响应统一为 `{ code, message, requestId, details? }`。未预期异常只能返回脱敏摘要，不得返回堆栈、数据库内部消息、密钥或完整第三方 payload。统一状态至少覆盖 400、401、403、404、409、413、415、422、429、500 和 503。
 
@@ -387,11 +388,11 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 ```text
 请求方法：POST / GET
 请求路径：/api/tasks/{taskId}/items、/api/tasks/{taskId}/items/start、/api/task-items/{itemId}、/api/task-items/mine
-请求参数：单条添加 JSON referenceText/referenceAudioUrl/referenceVideoUrl + Idempotency-Key；start 携带 Idempotency-Key；列表 page、size；mine 支持 taskId、kind=PENDING|SUBMITTED|FINISHED|DISCARDED，兼容 ALL|RECORDING|REWORK
+请求参数：单条添加 JSON referenceText/referenceAudioUrl/referenceVideoUrl + Idempotency-Key；start 携带 Idempotency-Key；管理列表支持 page、size、group=ALL|PENDING|SUBMITTED|FINISHED|DISCARDED、可重复 collectorId、includeUnassigned 和 result=ALL|NONE|TEXT_ONLY|AUDIO_ONLY|TEXT_AND_AUDIO；mine 支持 taskId、kind=PENDING|SUBMITTED|FINISHED|DISCARDED，兼容 ALL|RECORDING|REWORK
 响应结构：TaskItem 或 {items,page,size,total}；TaskItem 可包含 referenceAudioUrl、referenceVideoUrl、collectorName、reviewerName、currentDiscard，历史参考 URL 可为空，未分配用户姓名为空
 错误码：404 NO_AVAILABLE_ITEM/TASK_ITEM_NOT_FOUND；409 ITEM_CONFLICT/INVALID_TASK_STATE；422 ITEM_REFERENCE_REQUIRED/REMOTE_URL_INVALID
 权限要求：添加和任务条目列表仅 ADMIN；start 仅 COLLECTOR；详情仅 ADMIN/REVIEWER/当前采集员
-数据一致性要求：DRAFT/RUNNING/PAUSED 可新增，ENDED 返回 INVALID_TASK_STATE；新条目只绑定 taskId，参考音视频只保存通过轻量语法校验的 HTTPS URL；itemCode 任务内递增唯一且不复用；添加和领取均持久化幂等
+数据一致性要求：DRAFT/RUNNING/PAUSED 可新增，ENDED 返回 INVALID_TASK_STATE；管理列表的 PENDING=RECORDING_PENDING+REWORK_PENDING、FINISHED=REVIEW_PENDING+COMPLETED；多采集员、未分配与结果筛选在服务端分页执行；新条目只绑定 taskId，参考音视频只保存通过轻量语法校验的 HTTPS URL；itemCode 任务内递增唯一且不复用；添加和领取均持久化幂等
 前端调用位置：apps/web/src/pages/admin/tasks/TaskDetailPage.vue 与 TaskPoolPage.vue、apps/miniprogram/pages/tasks/*、apps/miniprogram/pages/work/*；任务详情使用数字分页并支持每页 5/10/20 条（默认 10），小程序任务数据固定每页 10 条，独立 Web 任务数据池固定每页 20 条
 ```
 

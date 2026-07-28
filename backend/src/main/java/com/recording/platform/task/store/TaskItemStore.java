@@ -45,6 +45,11 @@ public interface TaskItemStore {
 	Optional<TaskItem> rejectIfCurrent(RejectMutation mutation);
 	Optional<TaskItem> releaseIfCurrent(ReleaseMutation mutation);
 	Page<TaskItem> findAllByTaskId(String taskId, Pageable pageable);
+	default Page<TaskItem> findAllByTaskId(
+		String taskId, com.recording.platform.task.service.TaskItemFilter filter, Pageable pageable
+	) {
+		return findAllByTaskId(taskId, pageable);
+	}
 	default Page<TaskItem> findAllByCollectorIdAndStatusIn(
 		String collectorId, String taskId,
 		Collection<com.recording.platform.task.model.TaskItemStatus> statuses, Pageable pageable

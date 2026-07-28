@@ -69,11 +69,12 @@ export function useBatchSelection(rows, total) {
     }))
   }
 
-  function selectionPayload(taskId, source) {
+  function selectionPayload(taskId, source, filters = {}) {
     return {
       taskId,
       source,
       excludedItemIds: [...excludedIds.value],
+      ...filters,
     }
   }
 

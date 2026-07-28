@@ -9,6 +9,11 @@ import com.recording.platform.report.dto.CollectorTaskReport;
 import com.recording.platform.report.dto.CollectorTaskReportItem;
 import com.recording.platform.report.dto.CollectorTaskReportSummary;
 import com.recording.platform.report.dto.CollectorRankingRow;
+import com.recording.platform.report.dto.DashboardItemCounts;
+import com.recording.platform.report.dto.DashboardReport;
+import com.recording.platform.report.dto.DashboardTaskCounts;
+import com.recording.platform.report.dto.DashboardTaskRanking;
+import com.recording.platform.report.dto.DashboardTrendPoint;
 import com.recording.platform.task.model.TaskItemStatus;
 import com.mongodb.client.MongoCollection;
 import java.time.Instant;
@@ -18,6 +23,10 @@ import java.util.List;
 import java.util.ArrayDeque;
 import java.time.Duration;
 import java.time.LocalDate;
+import java.time.ZoneId;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
 import java.util.Optional;
 import org.bson.Document;
 import org.bson.types.ObjectId;
@@ -35,6 +44,103 @@ public class MongoReportQueryStore implements ReportQueryStore {
 	public MongoReportQueryStore(MongoTemplate mongoTemplate) {
 		this.items = mongoTemplate.getCollection("task_items");
 		this.tasks = mongoTemplate.getCollection("tasks");
+	}
+
+	@Override
+	public DashboardReport dashboard(LocalDate fromDate, LocalDate today) {
+		Map<String, Long> taskStates = new HashMap<>();
+		Map<String, Document> taskById = new HashMap<>();
+		for (Document task : tasks.find().projection(new Document(
+			"taskCode", 1
+		).append("name", 1).append("lifecycle", 1))) {
+			String lifecycle = task.getString("lifecycle");
+			taskStates.merge(lifecycle == null ? "" : lifecycle, 1L, Long::sum);
+			taskById.put(id(task.get("_id")), task);
+		}
+
+		Map<String, Long> itemStates = new HashMap<>();
+		Map<LocalDate, long[]> daily = new HashMap<>();
+		Map<String, long[]> ranking = new HashMap<>();
+		HashSet<String> collectors = new HashSet<>();
+		ZoneId zone = ZoneId.of("Asia/Shanghai");
+		long todayCount = 0;
+		for (Document item : items.find().projection(new Document(
+			"taskId", 1
+		).append("status", 1).append("collectorId", 1).append("firstSubmittedAt", 1)
+			.append("currentResult.audio.durationMillis", 1))) {
+			String status = item.getString("status");
+			itemStates.merge(status == null ? "" : status, 1L, Long::sum);
+			String collectorId = item.getString("collectorId");
+			if (collectorId != null && !collectorId.isBlank()) collectors.add(collectorId);
+			Document result = item.get("currentResult", Document.class);
+			Document audio = result == null ? null : result.get("audio", Document.class);
+			long duration = audio == null ? 0 : number(audio.get("durationMillis"));
+			Object firstValue = item.get("firstSubmittedAt");
+			if (firstValue instanceof Date first) {
+				LocalDate date = first.toInstant().atZone(zone).toLocalDate();
+				if (!date.isBefore(fromDate) && !date.isAfter(today)) {
+					long[] point = daily.computeIfAbsent(date, ignored -> new long[2]);
+					point[0]++;
+					point[1] += duration;
+					if (date.equals(today)) todayCount++;
+				}
+			}
+			if (collectorId != null && !"AVAILABLE".equals(status) && !"DISCARDED".equals(status)) {
+				long[] values = ranking.computeIfAbsent(item.getString("taskId"), ignored -> new long[3]);
+				values[0]++;
+				if ("COMPLETED".equals(status)) values[1]++;
+				values[2] += duration;
+			}
+		}
+		List<DashboardTrendPoint> trend = new ArrayList<>();
+		for (LocalDate date = fromDate; !date.isAfter(today); date = date.plusDays(1)) {
+			long[] values = daily.getOrDefault(date, new long[2]);
+			trend.add(new DashboardTrendPoint(date, values[0], values[1]));
+		}
+		List<DashboardTaskRanking> taskRanking = ranking.entrySet().stream()
+			.map(entry -> {
+				Document task = taskById.get(entry.getKey());
+				long[] values = entry.getValue();
+				return new DashboardTaskRanking(
+					entry.getKey(),
+					task == null ? entry.getKey() : task.getString("taskCode"),
+					task == null ? "未知任务" : task.getString("name"),
+					values[0], values[1], values[2]
+				);
+			})
+			.sorted(java.util.Comparator.comparingLong(DashboardTaskRanking::completedCount).reversed()
+				.thenComparing(java.util.Comparator.comparingLong(
+					DashboardTaskRanking::submissionCount
+				).reversed()))
+			.limit(8)
+			.toList();
+		long taskTotal = taskStates.values().stream().mapToLong(Long::longValue).sum();
+		long itemTotal = itemStates.values().stream().mapToLong(Long::longValue).sum();
+		return new DashboardReport(
+			new DashboardTaskCounts(
+				taskTotal, count(taskStates, "DRAFT"), count(taskStates, "RUNNING"),
+				count(taskStates, "PAUSED"), count(taskStates, "ENDED")
+			),
+			new DashboardItemCounts(
+				itemTotal, count(itemStates, "AVAILABLE"), count(itemStates, "RECORDING_PENDING"),
+				count(itemStates, "REWORK_PENDING"), count(itemStates, "SUBMITTED"),
+				count(itemStates, "REVIEW_PENDING"), count(itemStates, "COMPLETED"),
+				count(itemStates, "DISCARDED")
+			),
+			collectors.size(), todayCount, trend, taskRanking
+		);
+	}
+
+	private long count(Map<String, Long> values, String key) {
+		return values.getOrDefault(key, 0L);
+	}
+
+	private long number(Object value) {
+		return value instanceof Number number ? number.longValue() : 0;
+	}
+
+	private String id(Object value) {
+		return value instanceof ObjectId objectId ? objectId.toHexString() : String.valueOf(value);
 	}
 
 	@Override

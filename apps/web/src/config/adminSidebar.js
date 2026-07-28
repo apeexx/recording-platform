@@ -1,5 +1,5 @@
 export const adminSidebar = [
-  { key: 'dashboard', title: '工作台', path: '/admin/dashboard', icon: 'dashboard', roles: ['ADMIN'] },
+  { key: 'dashboard', title: '数据大屏', path: '/admin/dashboard', icon: 'dashboard', roles: ['ADMIN'] },
   {
     key: 'tasks', title: '任务管理', icon: 'task', roles: ['ADMIN'], children: [
 	  { key: 'tasks', title: '任务管理', path: '/admin/tasks' },

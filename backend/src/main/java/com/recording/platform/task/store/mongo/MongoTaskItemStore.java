@@ -499,6 +499,57 @@ public class MongoTaskItemStore implements TaskItemStore {
 		return repository.findAllByTaskId(taskId, pageable);
 	}
 
+	@Override
+	public Page<TaskItem> findAllByTaskId(
+		String taskId, com.recording.platform.task.service.TaskItemFilter filter, Pageable pageable
+	) {
+		com.recording.platform.task.service.TaskItemFilter normalized =
+			filter == null ? com.recording.platform.task.service.TaskItemFilter.all() : filter;
+		List<Criteria> filters = new java.util.ArrayList<>();
+		filters.add(Criteria.where("taskId").is(taskId));
+		if (!normalized.group().statuses().isEmpty()) {
+			filters.add(Criteria.where("status").in(normalized.group().statuses()));
+		}
+		if (!normalized.collectorIds().isEmpty() || normalized.includeUnassigned()) {
+			List<Criteria> collectors = new java.util.ArrayList<>();
+			if (!normalized.collectorIds().isEmpty()) {
+				collectors.add(Criteria.where("collectorId").in(normalized.collectorIds()));
+			}
+			if (normalized.includeUnassigned()) {
+				collectors.add(new Criteria().orOperator(
+					Criteria.where("collectorId").exists(false), Criteria.where("collectorId").is(null)
+				));
+			}
+			filters.add(collectors.size() == 1 ? collectors.get(0)
+				: new Criteria().orOperator(collectors.toArray(Criteria[]::new)));
+		}
+		if (normalized.result() != com.recording.platform.task.service.TaskItemResultKind.ALL) {
+			Criteria hasText = Criteria.where("currentResult.text").regex(".*\\S.*");
+			Criteria noText = new Criteria().orOperator(
+				Criteria.where("currentResult.text").exists(false),
+				Criteria.where("currentResult.text").is(null),
+				Criteria.where("currentResult.text").regex("^\\s*$")
+			);
+			Criteria hasAudio = Criteria.where("currentResult.audio").ne(null);
+			Criteria noAudio = new Criteria().orOperator(
+				Criteria.where("currentResult.audio").exists(false), Criteria.where("currentResult.audio").is(null)
+			);
+			filters.add(switch (normalized.result()) {
+				case NONE -> new Criteria().andOperator(noText, noAudio);
+				case TEXT_ONLY -> new Criteria().andOperator(hasText, noAudio);
+				case AUDIO_ONLY -> new Criteria().andOperator(noText, hasAudio);
+				case TEXT_AND_AUDIO -> new Criteria().andOperator(hasText, hasAudio);
+				case ALL -> new Criteria();
+			});
+		}
+		Criteria criteria = new Criteria().andOperator(filters.toArray(Criteria[]::new));
+		Query query = Query.query(criteria).with(pageable);
+		long total = mongoTemplate.count(Query.query(criteria), TaskItem.class);
+		return new org.springframework.data.domain.PageImpl<>(
+			mongoTemplate.find(query, TaskItem.class), pageable, total
+		);
+	}
+
 	@Override public void deleteAllByTaskId(String taskId) {
 		repository.deleteAllByTaskId(taskId);
 	}

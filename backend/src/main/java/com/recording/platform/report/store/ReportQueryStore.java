@@ -30,4 +30,5 @@ public interface ReportQueryStore {
 	Page<CollectorRankingRow> findCollectorRankings(
 		String taskId, Instant fromInclusive, Instant toExclusive, String sortField, Pageable pageable
 	);
+	com.recording.platform.report.dto.DashboardReport dashboard(LocalDate fromDate, LocalDate today);
 }

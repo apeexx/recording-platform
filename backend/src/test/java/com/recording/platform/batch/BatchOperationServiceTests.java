@@ -24,6 +24,8 @@ import com.recording.platform.review.service.ReviewService;
 import com.recording.platform.security.PlatformPrincipal;
 import com.recording.platform.task.model.TaskItem;
 import com.recording.platform.task.model.TaskItemStatus;
+import com.recording.platform.task.service.AdminTaskItemGroup;
+import com.recording.platform.task.service.TaskItemResultKind;
 import com.recording.platform.task.service.TaskItemAdministrationService;
 import com.recording.platform.task.store.TaskItemStore;
 import java.time.Clock;
@@ -45,7 +47,7 @@ class BatchOperationServiceTests {
 	@Test
 	void previewCountsAllSelectedRowsAndActionApplicableStatuses() {
 		TaskItemStore items = mock(TaskItemStore.class);
-		when(items.findAllByTaskId(any(), any(Pageable.class))).thenReturn(new PageImpl<>(List.of(
+		when(items.findAllByTaskId(any(), any(com.recording.platform.task.service.TaskItemFilter.class), any(Pageable.class))).thenReturn(new PageImpl<>(List.of(
 			item("available", TaskItemStatus.AVAILABLE, 1),
 			item("submitted", TaskItemStatus.SUBMITTED, 2),
 			item("discarded", TaskItemStatus.DISCARDED, 3)
@@ -65,9 +67,33 @@ class BatchOperationServiceTests {
 	}
 
 	@Test
+	void previewUsesTheSameFiltersAsTheVisibleTaskPool() {
+		TaskItemStore items = mock(TaskItemStore.class);
+		when(items.findAllByTaskId(
+			org.mockito.ArgumentMatchers.eq("task-1"),
+			org.mockito.ArgumentMatchers.argThat(filter ->
+				filter.group() == AdminTaskItemGroup.PENDING
+					&& filter.collectorIds().equals(Set.of("collector-1", "collector-2"))
+					&& filter.includeUnassigned()
+					&& filter.result() == TaskItemResultKind.AUDIO_ONLY),
+			any(Pageable.class)
+		)).thenReturn(new PageImpl<>(List.of(item("pending", TaskItemStatus.RECORDING_PENDING, 3))));
+		BatchOperationService service = service(items, mock(BatchOperationJobStore.class),
+			mock(BatchOperationSnapshotStore.class));
+
+		var preview = service.preview(new BatchOperationSelection(
+			"task-1", BatchOperationSource.TASK_POOL, Set.of(),
+			AdminTaskItemGroup.PENDING, Set.of("collector-1", "collector-2"), true,
+			TaskItemResultKind.AUDIO_ONLY
+		), admin());
+
+		assertThat(preview.selectedCount()).isEqualTo(1);
+	}
+
+	@Test
 	void createSnapshotsOnlyReviewPoolRowsAndPreservesRevision() {
 		TaskItemStore items = mock(TaskItemStore.class);
-		when(items.findAllByTaskId(any(), any(Pageable.class))).thenReturn(new PageImpl<>(List.of(
+		when(items.findAllByTaskId(any(), any(com.recording.platform.task.service.TaskItemFilter.class), any(Pageable.class))).thenReturn(new PageImpl<>(List.of(
 			item("available", TaskItemStatus.AVAILABLE, 1),
 			item("submitted", TaskItemStatus.SUBMITTED, 7),
 			item("review", TaskItemStatus.REVIEW_PENDING, 9)

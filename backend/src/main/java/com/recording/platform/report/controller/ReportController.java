@@ -23,6 +23,13 @@ public class ReportController {
 
 	public ReportController(ReportService reports) { this.reports = reports; }
 
+	@GetMapping("/dashboard")
+	public com.recording.platform.report.dto.DashboardReport dashboard(
+		@AuthenticationPrincipal PlatformPrincipal actor
+	) {
+		return reports.dashboard(actor);
+	}
+
 	@GetMapping("/tasks")
 	public WorkSummary task(
 		@RequestParam String taskId,

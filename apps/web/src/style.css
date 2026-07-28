@@ -81,3 +81,9 @@ button {
 .confirm-modal { width: min(440px, 100%); padding: 26px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); box-shadow: 0 24px 70px rgba(15,23,42,.22); }
 .confirm-modal h2 { margin: 0 0 10px; }.confirm-modal p { color: var(--muted-foreground); line-height: 1.7; }.confirm-modal > div { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; }
 .operation-back { margin: 24px 32px 0; }
+
+@media (max-width: 1100px) {
+  .review-layout {
+    grid-template-columns: 1fr;
+  }
+}

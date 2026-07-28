@@ -28,6 +28,10 @@ import com.recording.platform.identity.model.IdentityUser;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.Set;
+import com.recording.platform.task.service.AdminTaskItemGroup;
+import com.recording.platform.task.service.TaskItemFilter;
+import com.recording.platform.task.service.TaskItemResultKind;
 
 @RestController
 @RequestMapping("/api/tasks/{taskId}/items")
@@ -83,10 +87,15 @@ public class TaskItemsController {
 	public PageResponse<TaskItem> list(
 		@PathVariable String taskId,
 		@RequestParam(defaultValue = "0") int page,
-		@RequestParam(defaultValue = "20") int size
+		@RequestParam(defaultValue = "20") int size,
+		@RequestParam(defaultValue = "ALL") AdminTaskItemGroup group,
+		@RequestParam(name = "collectorId", required = false) Set<String> collectorIds,
+		@RequestParam(defaultValue = "false") boolean includeUnassigned,
+		@RequestParam(name = "result", defaultValue = "ALL") TaskItemResultKind resultKind
 	) {
 		var result = items.findAllByTaskId(
 			taskId,
+			new TaskItemFilter(group, collectorIds, includeUnassigned, resultKind),
 			PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100))
 		);
 		Map<String, IdentityUser> identities = users.findAllByIdIn(

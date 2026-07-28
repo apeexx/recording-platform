@@ -33,24 +33,38 @@ import com.recording.platform.identity.model.IdentityUser;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.time.Clock;
+import java.time.ZoneId;
 
 @Service
 public class ReportService {
 	private final TaskItemStore items;
 	private final ReportQueryStore queries;
 	private final IdentityDirectory users;
+	private final Clock clock;
 
-	public ReportService(TaskItemStore items) { this(items, null, null); }
+	public ReportService(TaskItemStore items) { this(items, null, null, Clock.system(ZoneId.of("Asia/Shanghai"))); }
 
 	public ReportService(TaskItemStore items, ReportQueryStore queries) {
-		this(items, queries, null);
+		this(items, queries, null, Clock.system(ZoneId.of("Asia/Shanghai")));
 	}
 
 	@Autowired
 	public ReportService(TaskItemStore items, ReportQueryStore queries, IdentityDirectory users) {
+		this(items, queries, users, Clock.system(ZoneId.of("Asia/Shanghai")));
+	}
+
+	public ReportService(TaskItemStore items, ReportQueryStore queries, IdentityDirectory users, Clock clock) {
 		this.items = items;
 		this.queries = queries;
 		this.users = users;
+		this.clock = clock;
+	}
+
+	public com.recording.platform.report.dto.DashboardReport dashboard(PlatformPrincipal actor) {
+		requireAdmin(actor);
+		LocalDate today = LocalDate.now(clock.withZone(ZoneId.of("Asia/Shanghai")));
+		return queries.dashboard(today.minusDays(6), today);
 	}
 
 	public WorkSummary collector(String collectorId, PlatformPrincipal actor) {

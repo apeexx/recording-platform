@@ -4,12 +4,14 @@ import AsyncState from '../../../components/admin/AsyncState.vue'
 import PageActions from '../../../components/admin/PageActions.vue'
 import PaginationControls from '../../../components/admin/PaginationControls.vue'
 import BaseSelect from '../../../components/form/BaseSelect.vue'
+import TaskItemFilters from '../../../components/admin/TaskItemFilters.vue'
 import { taskApi } from '../../../lib/taskApi.js'
 import { batchOperationApi } from '../../../lib/batchOperationApi.js'
 import { operationId } from '../../../lib/apiUtils.js'
 import { statusLabel } from '../../../lib/statusLabels.js'
 import { useBatchSelection } from '../../../composables/useBatchSelection.js'
 import { useNotifications } from '../../../composables/useNotifications.js'
+import { defaultTaskItemFilters, selectionFilters } from '../../../lib/taskItemFilters.js'
 
 const notifications = useNotifications()
 const tasks = ref([])
@@ -24,6 +26,7 @@ const preview = ref(null)
 const batchJob = ref(null)
 const pollTimer = ref(null)
 const selection = useBatchSelection(rows, total)
+const filters = ref(defaultTaskItemFilters())
 const taskOptions = computed(() => tasks.value.map(task => ({ value: task.id, label: task.name })))
 const processing = computed(() => ['PENDING', 'PROCESSING'].includes(batchJob.value?.status))
 const progress = computed(() => batchJob.value?.selectedCount
@@ -38,7 +41,7 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    const result = await taskApi.items(taskId.value, page.value, 20)
+    const result = await taskApi.items(taskId.value, page.value, 20, filters.value)
     rows.value = result.items || []
     total.value = result.total || 0
   } catch (exception) {
@@ -61,9 +64,16 @@ async function changePage(value) {
   selection.clearPageMode()
   await load()
 }
+async function changeFilters(value) {
+  filters.value = value
+  page.value = 0
+  selection.clear()
+  preview.value = null
+  await load()
+}
 async function selectAllMatching() {
   try {
-    preview.value = await batchOperationApi.preview(selection.selectionPayload(taskId.value, 'TASK_POOL'))
+    preview.value = await batchOperationApi.preview(selection.selectionPayload(taskId.value, 'TASK_POOL', selectionFilters(filters.value)))
     selection.selectAllMatching()
   } catch (exception) {
     notifications.error(exception.message)
@@ -86,7 +96,7 @@ async function batch(action) {
       batchJob.value = await batchOperationApi.create({
         operationId: operationId(`pool-all-${action}`),
         action: action.toUpperCase(),
-        selection: selection.selectionPayload(taskId.value, 'TASK_POOL'),
+        selection: selection.selectionPayload(taskId.value, 'TASK_POOL', selectionFilters(filters.value)),
       })
       notifications.success('跨页批处理已进入队列')
       schedulePoll()
@@ -166,13 +176,14 @@ onBeforeUnmount(clearPoll)
           <table class="business-table">
             <thead><tr>
               <th><input type="checkbox" :checked="selection.pageAllSelected.value" aria-label="选择当前页面" @change="selection.togglePage"/></th>
-              <th>条目编号</th><th>状态</th><th>采集员 ID</th><th>采集员姓名</th><th>审核员 ID</th><th>审核员姓名</th><th>修订</th>
+              <th>条目编号</th><th><TaskItemFilters kind="status" :model-value="filters" @change="changeFilters"/></th><th>采集员 ID</th><th><TaskItemFilters kind="collector" :model-value="filters" @change="changeFilters"/></th><th>审核员 ID</th><th>审核员姓名</th><th><TaskItemFilters kind="result" :model-value="filters" @change="changeFilters"/></th><th>修订</th><th>操作</th>
             </tr></thead>
             <tbody><tr v-for="row in rows" :key="row.id">
               <td><input type="checkbox" :checked="selection.isSelected(row)" :aria-label="`选择 ${row.itemCode}`" @change="selection.toggle(row)"/></td>
               <td><router-link :to="`/admin/items/${row.id}/operations`">{{ row.itemCode }}</router-link></td>
               <td>{{ statusLabel('item', row.status) }}</td><td>{{ row.collectorId || '-' }}</td><td>{{ row.collectorName || '-' }}</td>
-              <td>{{ row.reviewerId || '-' }}</td><td>{{ row.reviewerName || '-' }}</td><td>{{ row.revision }}</td>
+              <td>{{ row.reviewerId || '-' }}</td><td>{{ row.reviewerName || '-' }}</td><td>{{ row.currentResult?.audio ? '音频' : row.currentResult?.text ? '文本' : '-' }}</td><td>{{ row.revision }}</td>
+              <td><router-link class="button-link" :to="`/admin/items/${row.id}`">查看</router-link></td>
             </tr></tbody>
           </table>
         </div>

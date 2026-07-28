@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import com.recording.platform.identity.store.IdentityDirectory;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
@@ -24,13 +25,19 @@ public class TaskItemQueryService {
 	private final TaskItemStore items;
 	private final TaskStore tasks;
 	private final CollectorProfileGuard profileGuard;
+	private final IdentityDirectory identityDirectory;
 	@org.springframework.beans.factory.annotation.Autowired
-	public TaskItemQueryService(TaskItemStore items, TaskStore tasks, MiniProgramUserStore users) {
+	public TaskItemQueryService(
+		TaskItemStore items, TaskStore tasks, MiniProgramUserStore users, IdentityDirectory identityDirectory
+	) {
 		this.items = items;
 		this.tasks = tasks;
 		this.profileGuard = new CollectorProfileGuard(users);
+		this.identityDirectory = identityDirectory;
 	}
-	public TaskItemQueryService(TaskItemStore items, TaskStore tasks) { this.items=items; this.tasks=tasks; this.profileGuard=null; }
+	public TaskItemQueryService(TaskItemStore items, TaskStore tasks) {
+		this.items=items; this.tasks=tasks; this.profileGuard=null; this.identityDirectory=null;
+	}
 
 	public PageResponse<CollectorTaskItemView> mine(
 		String taskId, CollectorWorkKind kind, int page, int size, PlatformPrincipal actor
@@ -65,9 +72,24 @@ public class TaskItemQueryService {
 		TaskItem item = items.findById(itemId)
 			.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "TASK_ITEM_NOT_FOUND", "任务条目不存在"));
 		if (actor == null) throw forbidden();
-		if (actor.role() == UserRole.ADMIN || actor.role() == UserRole.REVIEWER) return item;
+		if (actor.role() == UserRole.ADMIN || actor.role() == UserRole.REVIEWER) {
+			hydrateNames(item);
+			return item;
+		}
 		if (actor.role() == UserRole.COLLECTOR && actor.userId().equals(item.getCollectorId())) { requireProfile(actor); return item; }
 		throw forbidden();
+	}
+
+	private void hydrateNames(TaskItem item) {
+		if (identityDirectory == null) return;
+		List<String> ids = java.util.stream.Stream.of(item.getCollectorId(), item.getReviewerId())
+			.filter(java.util.Objects::nonNull).distinct().toList();
+		Map<String, com.recording.platform.identity.model.IdentityUser> values =
+			identityDirectory.findAllByIdIn(ids).stream().collect(Collectors.toMap(
+				com.recording.platform.identity.model.IdentityUser::id, Function.identity()
+			));
+		if (values.containsKey(item.getCollectorId())) item.setCollectorName(values.get(item.getCollectorId()).name());
+		if (values.containsKey(item.getReviewerId())) item.setReviewerName(values.get(item.getReviewerId()).name());
 	}
 
 	private ApiException forbidden() {

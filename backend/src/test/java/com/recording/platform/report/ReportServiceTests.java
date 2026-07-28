@@ -24,9 +24,37 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import java.time.Clock;
+import java.time.ZoneId;
 import org.junit.jupiter.api.Test;
 
 class ReportServiceTests {
+	@Test
+	void dashboardUsesShanghaiTodayAndRejectsNonAdmins() {
+		TaskItemStore items = mock(TaskItemStore.class);
+		ReportQueryStore queries = mock(ReportQueryStore.class);
+		Clock clock = Clock.fixed(
+			Instant.parse("2026-07-28T02:00:00Z"), ZoneId.of("Asia/Shanghai")
+		);
+		var expected = new com.recording.platform.report.dto.DashboardReport(
+			new com.recording.platform.report.dto.DashboardTaskCounts(4, 1, 1, 1, 1),
+			new com.recording.platform.report.dto.DashboardItemCounts(12, 2, 2, 1, 1, 1, 4, 1),
+			3, 2,
+			List.of(new com.recording.platform.report.dto.DashboardTrendPoint(
+				LocalDate.of(2026, 7, 28), 2, 8_000
+			)),
+			List.of()
+		);
+		when(queries.dashboard(
+			LocalDate.of(2026, 7, 22), LocalDate.of(2026, 7, 28)
+		)).thenReturn(expected);
+		ReportService service = new ReportService(items, queries, null, clock);
+
+		assertThat(service.dashboard(admin())).isEqualTo(expected);
+		assertThatThrownBy(() -> service.dashboard(collector()))
+			.isInstanceOfSatisfying(com.recording.platform.api.ApiException.class,
+				error -> assertThat(error.getCode()).isEqualTo("ACCESS_DENIED"));
+	}
 	@Test
 	void taskSummaryPassesInclusiveShanghaiDateRangeToMongoQuery() {
 		TaskItemStore items = mock(TaskItemStore.class);

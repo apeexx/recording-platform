@@ -6,12 +6,14 @@ import PageActions from '../../../components/admin/PageActions.vue'
 import PaginationControls from '../../../components/admin/PaginationControls.vue'
 import BaseSelect from '../../../components/form/BaseSelect.vue'
 import TaskItemEditModal from '../../../components/admin/TaskItemEditModal.vue'
+import TaskItemFilters from '../../../components/admin/TaskItemFilters.vue'
 import { taskApi } from '../../../lib/taskApi.js'
 import { batchOperationApi } from '../../../lib/batchOperationApi.js'
 import { operationId } from '../../../lib/apiUtils.js'
 import { statusLabel } from '../../../lib/statusLabels.js'
 import { useNotifications } from '../../../composables/useNotifications.js'
 import { useBatchSelection } from '../../../composables/useBatchSelection.js'
+import { defaultTaskItemFilters, selectionFilters } from '../../../lib/taskItemFilters.js'
 
 const notifications = useNotifications()
 const route = useRoute()
@@ -39,6 +41,7 @@ const activeImportJobId = ref(null)
 const pollTimer = ref(null)
 const editingItem = ref(null)
 const editBusy = ref(false)
+const filters = ref(defaultTaskItemFilters())
 const itemForm = reactive({ referenceText: '', referenceAudioUrl: '', referenceVideoUrl: '' })
 const processedRows = computed(() => (Number(job.value?.successRows) || 0) + (Number(job.value?.failureRows) || 0))
 const importProgress = computed(() => {
@@ -48,7 +51,7 @@ const importProgress = computed(() => {
 const jobErrorMessage = computed(() => job.value?.rowErrors?.[0]?.message || '')
 
 async function loadItems() {
-  const result = await taskApi.items(route.params.id, page.value, itemPageSize.value)
+  const result = await taskApi.items(route.params.id, page.value, itemPageSize.value, filters.value)
   const nextTotal = Number(result.total) || 0
   const lastPage = Math.max(Math.ceil(nextTotal / itemPageSize.value) - 1, 0)
   if (page.value > lastPage) {
@@ -255,10 +258,17 @@ async function itemAction(row, action) {
 
 async function changePage(value) { page.value = value; selection.clearPageMode(); await loadItems() }
 async function changePageSize(value) { itemPageSize.value = value; page.value = 0; selection.clear(); await loadItems() }
+async function changeFilters(value) {
+  filters.value = value
+  page.value = 0
+  selection.clear()
+  batchPreview.value = null
+  await loadItems()
+}
 
 async function selectAllMatching() {
   try {
-    batchPreview.value = await batchOperationApi.preview(selection.selectionPayload(route.params.id, 'TASK_DETAIL'))
+    batchPreview.value = await batchOperationApi.preview(selection.selectionPayload(route.params.id, 'TASK_DETAIL', selectionFilters(filters.value)))
     selection.selectAllMatching()
   } catch (exception) {
     notifications.error(exception.message)
@@ -287,7 +297,7 @@ async function batch(action) {
       batchJob.value = await batchOperationApi.create({
         operationId: operationId(`detail-all-${action}`),
         action: action.toUpperCase(),
-        selection: selection.selectionPayload(route.params.id, 'TASK_DETAIL'),
+        selection: selection.selectionPayload(route.params.id, 'TASK_DETAIL', selectionFilters(filters.value)),
       })
       notifications.success('跨页批处理已进入队列')
       scheduleBatchPoll()
@@ -312,7 +322,7 @@ async function changeStatus() {
       batchJob.value = await batchOperationApi.create({
         operationId: operationId('detail-all-status'),
         action: 'STATUS',
-        selection: selection.selectionPayload(route.params.id, 'TASK_DETAIL'),
+        selection: selection.selectionPayload(route.params.id, 'TASK_DETAIL', selectionFilters(filters.value)),
         targetStatus: targetStatus.value,
       })
       notifications.success('跨页状态调整已进入队列')
@@ -363,6 +373,16 @@ async function resumeBatchJob() {
   }
 }
 
+async function transition(action) {
+  if (action === 'end' && !confirm(`确认结束任务“${task.value?.name}”？`)) return
+  try {
+    task.value = await taskApi.transition(route.params.id, action, operationId(`task-${action}`))
+    notifications.success({ publish: '任务已发布', pause: '任务已暂停', resume: '任务已恢复', end: '任务已结束' }[action])
+  } catch (exception) {
+    notifications.error(exception.message)
+  }
+}
+
 onMounted(async () => { await load(); await resumeBatchJob() })
 onBeforeUnmount(() => { stopImportTracking(); clearBatchPoll() })
 </script>
@@ -371,6 +391,10 @@ onBeforeUnmount(() => { stopImportTracking(); clearBatchPoll() })
   <section class="admin-page">
     <PageActions :title="task?.name || '任务详情'" :description="task ? `${task.taskCode} · ${statusLabel('task', task.lifecycle)}` : ''">
       <router-link v-if="task?.lifecycle === 'DRAFT'" class="button-secondary" :to="`/admin/tasks/${route.params.id}/edit`">编辑草稿</router-link>
+      <button v-if="task?.lifecycle === 'DRAFT'" class="button-primary" @click="transition('publish')">发布任务</button>
+      <button v-if="task?.lifecycle === 'RUNNING'" class="button-secondary" @click="transition('pause')">暂停任务</button>
+      <button v-if="task?.lifecycle === 'PAUSED'" class="button-secondary" @click="transition('resume')">恢复任务</button>
+      <button v-if="task?.lifecycle === 'PAUSED'" class="button-secondary is-danger" @click="transition('end')">结束任务</button>
       <button v-if="task?.lifecycle === 'DRAFT'" class="button-secondary is-danger" @click="deleteTask">删除任务</button>
       <router-link class="button-primary" :to="`/admin/tasks/${route.params.id}/permissions`">采集权限</router-link>
     </PageActions>
@@ -435,12 +459,13 @@ onBeforeUnmount(() => { stopImportTracking(); clearBatchPoll() })
           <AsyncState :loading="false" :error="''" :empty="!items.length">
             <div class="business-table-wrap">
               <table class="business-table">
-                <thead><tr><th><input type="checkbox" :checked="selection.pageAllSelected.value" aria-label="选择当前页面" @change="selection.togglePage"></th><th>编号</th><th>状态</th><th>采集员 ID</th><th>采集员姓名</th><th>结果</th><th>操作</th></tr></thead>
+                <thead><tr><th><input type="checkbox" :checked="selection.pageAllSelected.value" aria-label="选择当前页面" @change="selection.togglePage"></th><th>编号</th><th><TaskItemFilters kind="status" :model-value="filters" @change="changeFilters"/></th><th>采集员 ID</th><th><TaskItemFilters kind="collector" :model-value="filters" @change="changeFilters"/></th><th><TaskItemFilters kind="result" :model-value="filters" @change="changeFilters"/></th><th>操作</th></tr></thead>
                 <tbody><tr v-for="row in items" :key="row.id">
                   <td><label class="business-check colored-checkbox"><input type="checkbox" :checked="selection.isSelected(row)" :aria-label="`选择 ${row.itemCode}`" @change="selection.toggle(row)"><span class="visually-hidden">选择</span></label></td>
                   <td>{{ row.itemCode }}</td><td>{{ statusLabel('item', row.status) }}</td><td>{{ row.collectorId || '-' }}</td><td>{{ row.collectorName || '-' }}</td>
                   <td>{{ row.currentResult?.audio?.durationMillis ? `${Math.round(row.currentResult.audio.durationMillis / 1000)}秒` : row.currentResult?.text ? '文本' : '-' }}</td>
                   <td class="table-actions">
+                    <router-link class="button-link" :to="`/admin/items/${row.id}`">查看</router-link>
                     <template v-if="row.status === 'AVAILABLE'">
                       <button class="button-link" @click="openEdit(row)">编辑</button>
                       <button class="button-link is-danger" @click="deleteItem(row)">删除</button>

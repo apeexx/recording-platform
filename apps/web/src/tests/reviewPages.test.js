@@ -41,6 +41,8 @@ describe('审核页面 API', () => {
   it('按后台角色区分审核池与工作台操作，管理员不会再看到审核员专属按钮', () => {
     const queue = readFileSync(join(process.cwd(), 'src/pages/admin/review/ReviewQueuePage.vue'), 'utf8')
     const workbench = readFileSync(join(process.cwd(), 'src/pages/admin/review/ReviewWorkbenchPage.vue'), 'utf8')
+    expect(workbench).toContain('review-source-column')
+    expect(workbench).toContain('review-decision-column')
 
     expect(queue).toContain("const isAdmin = computed(() => session.user.value?.role === 'ADMIN')")
 	expect(queue).toContain("const isReviewer = computed(() => session.user.value?.role === 'REVIEWER')")
