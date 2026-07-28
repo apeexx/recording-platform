@@ -34,6 +34,32 @@ test('微信登录只向后端发送临时 code 并保存不透明 token', async
   assert.equal(user.userId, 'u1')
 })
 
+test('邀请码重试会重新获取微信临时 code 并只向后端增加邀请码字段', async () => {
+  const stored = {}
+  let wxLoginCalls = 0
+  const wx = {
+    login: ({ success }) => {
+      wxLoginCalls += 1
+      success({ code: `temporary-code-${wxLoginCalls}` })
+    },
+    setStorageSync: (key, value) => { stored[key] = value },
+    getStorageSync: key => stored[key],
+    removeStorageSync: key => { delete stored[key] }
+  }
+  const calls = []
+  const api = { login: async body => {
+    calls.push(body)
+    return { token: 'opaque-token', userId: 'MINI-1' }
+  } }
+  const session = createSessionService({ wx, api })
+
+  await session.login('ABCD-EFGH-JKMN')
+
+  assert.equal(wxLoginCalls, 1)
+  assert.deepEqual(calls, [{ code: 'temporary-code-1', invitationCode: 'ABCD-EFGH-JKMN' }])
+  assert.equal('openId' in calls[0], false)
+})
+
 test('设置姓名后更新本地实名摘要', async () => {
   const stored = { recSession: { token: 't', user: { userId: 'u1' } } }
   const wx = { getStorageSync: k => stored[k], setStorageSync: (k,v) => stored[k]=v, removeStorageSync:k=>delete stored[k] }
@@ -101,6 +127,35 @@ function loadLoginPage({session,modalResult={confirm:false}}){
 }
 
 function accountInUse(){return {code:'ACCOUNT_IN_USE',details:{takeoverToken:'one-time-token'},message:'账号已在其他设备登录'}}
+
+test('新微信身份需要邀请码时打开输入层并停留在登录页',async()=>{
+  const required={code:'INVITATION_REQUIRED',message:'当前微信尚未加入使用范围，请输入邀请码'}
+  const {page,switchTabs,toasts}=loadLoginPage({session:{login:async()=>{throw required}}})
+
+  await page.wechatLogin()
+
+  assert.equal(page.data.invitationVisible,true)
+  assert.equal(page.data.invitationCode,'')
+  assert.equal(switchTabs.length,0)
+  assert.equal(toasts.length,0)
+})
+
+test('邀请码验证失败保留弹层和输入，成功后进入任务页',async()=>{
+  const calls=[]
+  const invalid={code:'INVITATION_CODE_INVALID',message:'邀请码无效或已失效，请联系管理员'}
+  const session={login:async code=>{calls.push(code);if(calls.length===1)throw invalid}}
+  const {page,switchTabs,toasts}=loadLoginPage({session})
+  page.setData({invitationVisible:true,invitationCode:'ABCD-EFGH-JKMN'})
+
+  await page.submitInvitation()
+
+  assert.equal(page.data.invitationVisible,true)
+  assert.equal(page.data.invitationCode,'ABCD-EFGH-JKMN')
+  assert.equal(toasts.at(-1).title,'邀请码无效或已失效，请联系管理员')
+  await page.submitInvitation()
+  assert.deepEqual(calls,['ABCD-EFGH-JKMN','ABCD-EFGH-JKMN'])
+  assert.equal(switchTabs.length,1)
+})
 
 test('微信登录确认接管后只调用一次 takeover 并进入任务页',async()=>{
   let takeoverCalls=0

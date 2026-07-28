@@ -37,7 +37,7 @@ public class MiniProgramAuthenticationController {
 
 	@PostMapping("/login")
 	public MiniProgramSessionResponse login(@Valid @RequestBody WeChatLoginRequest request) {
-		return MiniProgramSessionResponse.from(authentication.login(request.code()));
+		return MiniProgramSessionResponse.from(authentication.login(request.code(), request.invitationCode()));
 	}
 
 	@PostMapping("/account-login")

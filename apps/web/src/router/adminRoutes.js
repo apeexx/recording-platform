@@ -24,6 +24,7 @@ export const adminRoutes = {
     { path: 'voice-generation/config', component: () => import('../pages/admin/voice-generation/VoiceConfigPage.vue'), meta: { title: '声音配置', roles: ['ADMIN'] } },
     { path: 'voice-generation/records', component: () => import('../pages/admin/voice-generation/VoiceGenerationRecordsPage.vue'), meta: { title: '生成记录', roles: ['ADMIN'] } },
     { path: 'system/users', component: () => import('../pages/admin/system/UsersPage.vue'), meta: { title: '用户管理', roles: ['ADMIN'] } },
+    { path: 'system/invitations', component: () => import('../pages/admin/system/InvitationCodesPage.vue'), meta: { title: '邀请码管理', roles: ['ADMIN'] } },
     { path: 'system/logs', component: () => import('../pages/admin/system/OperationLogsPage.vue'), meta: { title: '操作记录', roles: ['ADMIN'] } },
     { path: 'items/:itemId', component: () => import('../pages/admin/tasks/TaskItemDetailPage.vue'), meta: { title: '条目详情', roles: ['ADMIN', 'REVIEWER'] } },
     { path: 'items/:itemId/operations', redirect: (to) => ({ path: `/admin/items/${to.params.itemId}`, hash: '#operations' }), meta: { title: '条目操作记录', roles: ['ADMIN', 'REVIEWER'] } },

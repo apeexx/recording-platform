@@ -29,6 +29,7 @@ export const adminSidebar = [
   {
     key: 'system', title: '系统管理', icon: 'system', roles: ['ADMIN'], children: [
       { key: 'users', title: '用户管理', path: '/admin/system/users' },
+      { key: 'invitations', title: '邀请码管理', path: '/admin/system/invitations' },
       { key: 'operation-logs', title: '操作记录', path: '/admin/system/logs' }
     ]
   },

@@ -6,6 +6,7 @@ import com.recording.platform.identity.model.UserStatus;
 import com.recording.platform.identity.store.MiniProgramUserStore;
 import com.recording.platform.identity.wechat.WeChatClient;
 import com.recording.platform.identity.wechat.WeChatIdentity;
+import com.recording.platform.identity.invitation.MiniProgramInvitationService;
 import java.time.Clock;
 import java.time.Instant;
 import org.springframework.http.HttpStatus;
@@ -19,23 +20,31 @@ public class WeChatAuthenticationService {
 	private final MiniProgramUserStore users;
 	private final SessionService sessions;
 	private final WeChatClient weChatClient;
+	private final MiniProgramInvitationService invitations;
 	private final Clock clock;
 
 	public WeChatAuthenticationService(
 		MiniProgramUserStore users,
 		SessionService sessions,
 		WeChatClient weChatClient,
+		MiniProgramInvitationService invitations,
 		Clock clock
 	) {
 		this.users = users;
 		this.sessions = sessions;
 		this.weChatClient = weChatClient;
+		this.invitations = invitations;
 		this.clock = clock;
 	}
 
-	public MiniProgramLoginResult login(String code) {
+	public MiniProgramLoginResult login(String code, String invitationCode) {
 		WeChatIdentity identity = weChatClient.exchange(code);
-		MiniProgramUser user = findOrCreateCollector(identity);
+		MiniProgramUser user = users.findByWechatIdentity(identity.appId(), identity.openId()).orElse(null);
+		if (user == null) {
+			invitations.authorizeFirstLogin(invitationCode, identity.appId(), identity.openId());
+			user = findOrCreateCollector(identity);
+			invitations.completeRedemption(identity.appId(), identity.openId(), user.getId());
+		}
 		if (user.getStatus() != UserStatus.ACTIVE) {
 			throw new ApiException(HttpStatus.UNAUTHORIZED, "ACCOUNT_DISABLED", "账号已停用");
 		}

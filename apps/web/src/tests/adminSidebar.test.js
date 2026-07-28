@@ -30,6 +30,7 @@ describe('adminSidebar', () => {
       '/admin/voice-generation/config',
       '/admin/voice-generation/records',
       '/admin/system/users',
+      '/admin/system/invitations',
       '/admin/system/logs',
       '/admin/account'
     ])
@@ -66,7 +67,6 @@ describe('adminSidebar', () => {
       system: 'system',
       account: 'account'
     })
-
     for (const icon of new Set(Object.values(icons))) {
       assert.equal(
         fs.existsSync(path.resolve(`public/assets/icons/admin-sidebar/${icon}.svg`)),

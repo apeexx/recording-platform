@@ -23,6 +23,10 @@ import com.recording.platform.identity.service.MiniProgramLoginResult;
 import com.recording.platform.identity.model.MiniProgramUser;
 import com.recording.platform.identity.model.UserStatus;
 import com.recording.platform.identity.service.WeChatAuthenticationService;
+import com.recording.platform.identity.invitation.MiniProgramInvitationCreated;
+import com.recording.platform.identity.invitation.MiniProgramInvitationService;
+import com.recording.platform.identity.invitation.MiniProgramInvitationView;
+import com.recording.platform.identity.invitation.model.InvitationEffectiveStatus;
 import com.recording.platform.identity.service.WebAuthenticationService;
 import jakarta.servlet.http.Cookie;
 import java.util.List;
@@ -73,6 +77,9 @@ class SecurityAuthorizationTests {
 
 	@MockitoBean
 	private CollectorIdentityService collectorIdentityService;
+
+	@MockitoBean
+	private MiniProgramInvitationService miniProgramInvitationService;
 
 	@Test
 	void miniProgramTakeoverIsPublicAndCsrfExempt() throws Exception {
@@ -125,6 +132,51 @@ class SecurityAuthorizationTests {
 				.content("{\"code\":\"temporary-code\",\"openId\":\"forged-open-id\"}"))
 			.andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+	}
+
+	@Test
+	void miniprogramLoginAcceptsOptionalInvitationCodeWithoutTrustingClientIdentity() throws Exception {
+		MiniProgramUser user = new MiniProgramUser();
+		user.setId("MINI-0123456789abcdef01234567");
+		user.setStatus(UserStatus.ACTIVE);
+		when(weChatAuthenticationService.login("temporary-code", "ABCD-EFGH-JKMN"))
+			.thenReturn(new MiniProgramLoginResult("opaque-token", "session-1", user));
+
+		mockMvc.perform(post("/api/auth/miniprogram/login")
+				.contentType("application/json")
+				.content("{\"code\":\"temporary-code\",\"invitationCode\":\"ABCD-EFGH-JKMN\"}"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.token").value("opaque-token"));
+	}
+
+	@Test
+	void invitationAdministrationRequiresAdminAndCsrfAndNeverListsPlainCode() throws Exception {
+		MiniProgramInvitationView view = new MiniProgramInvitationView(
+			"invite-1", "审核体验", "提审使用", "JKMN", 5, 0, 5,
+			InvitationEffectiveStatus.ACTIVE,
+			"WEB-0123456789abcdef01234567", "管理员",
+			java.time.Instant.parse("2026-07-28T08:00:00Z"),
+			null, null, null
+		);
+		when(miniProgramInvitationService.create(
+			org.mockito.ArgumentMatchers.eq("审核体验"),
+			org.mockito.ArgumentMatchers.eq("提审使用"),
+			org.mockito.ArgumentMatchers.eq(5),
+			org.mockito.ArgumentMatchers.any()
+		)).thenReturn(new MiniProgramInvitationCreated(view, "ABCD-EFGH-JKMN"));
+
+		mockMvc.perform(post("/api/admin/miniprogram-invitations")
+				.with(user("reviewer").roles("REVIEWER"))
+				.with(csrf())
+				.contentType("application/json")
+				.content("{\"name\":\"审核体验\",\"note\":\"提审使用\",\"maxUses\":5}"))
+			.andExpect(status().isForbidden());
+		mockMvc.perform(post("/api/admin/miniprogram-invitations")
+				.with(user("admin").roles("ADMIN"))
+				.contentType("application/json")
+				.content("{\"name\":\"审核体验\",\"note\":\"提审使用\",\"maxUses\":5}"))
+			.andExpect(status().isForbidden())
+			.andExpect(jsonPath("$.code").value("CSRF_TOKEN_INVALID"));
 	}
 
 	@Test

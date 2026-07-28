@@ -16,6 +16,7 @@ import com.recording.platform.identity.model.UserStatus;
 import com.recording.platform.identity.service.IssuedSession;
 import com.recording.platform.identity.service.SessionService;
 import com.recording.platform.identity.service.WeChatAuthenticationService;
+import com.recording.platform.identity.invitation.MiniProgramInvitationService;
 import com.recording.platform.identity.store.MiniProgramUserStore;
 import com.recording.platform.identity.wechat.WeChatClient;
 import com.recording.platform.identity.wechat.WeChatIdentity;
@@ -30,23 +31,50 @@ class WeChatAuthenticationServiceTests {
 	@Test
 	void createsMiniProgramUserWithPrefixedIdAndNoRoleField() {
 		MiniProgramUserStore users=mock(MiniProgramUserStore.class);SessionService sessions=mock(SessionService.class);WeChatClient client=mock(WeChatClient.class);
+		MiniProgramInvitationService invitations=mock(MiniProgramInvitationService.class);
 		when(client.exchange("code")).thenReturn(new WeChatIdentity("app", "openid")); when(users.findByWechatIdentity("app","openid")).thenReturn(Optional.empty());
 		when(users.save(any())).thenAnswer(invocation -> invocation.getArgument(0)); when(sessions.active(any(), org.mockito.ArgumentMatchers.eq(SessionType.MINIPROGRAM))).thenReturn(Optional.empty());
 		when(sessions.issueMiniProgram(any())).thenAnswer(invocation -> { SessionRecord record=new SessionRecord();record.setId("session");record.setUserId(invocation.getArgument(0));return new IssuedSession("token",record); });
-		var result=new WeChatAuthenticationService(users,sessions,client,Clock.fixed(Instant.parse("2026-07-20T02:00:00Z"),ZoneOffset.UTC)).login("code");
+		var result=new WeChatAuthenticationService(users,sessions,client,invitations,Clock.fixed(Instant.parse("2026-07-20T02:00:00Z"),ZoneOffset.UTC)).login("code","ABCD-EFGH-JKMN");
 		assertThat(result.user().getId()).matches("MINI-[0-9a-f]{24}"); assertThat(result.user().getStatus()).isEqualTo(UserStatus.ACTIVE);
 		assertThat(java.util.Arrays.stream(MiniProgramUser.class.getDeclaredFields()).map(java.lang.reflect.Field::getName)).doesNotContain("role");
+		verify(invitations).authorizeFirstLogin("ABCD-EFGH-JKMN","app","openid");
+		verify(invitations).completeRedemption("app","openid",result.user().getId());
 	}
 
 	@Test void existingWechatIdentityIsReusedWithoutCreatingAnotherUser(){MiniProgramUserStore users=mock(MiniProgramUserStore.class);SessionService sessions=mock(SessionService.class);WeChatClient client=mock(WeChatClient.class);MiniProgramUser user=new MiniProgramUser();user.setId("MINI-0123456789abcdef01234567");user.setStatus(UserStatus.ACTIVE);
+		MiniProgramInvitationService invitations=mock(MiniProgramInvitationService.class);
 		when(client.exchange("code")).thenReturn(new WeChatIdentity("app","openid"));when(users.findByWechatIdentity("app","openid")).thenReturn(Optional.of(user));when(sessions.active(user.getId(),SessionType.MINIPROGRAM)).thenReturn(Optional.empty());SessionRecord record=new SessionRecord();record.setId("session");record.setUserId(user.getId());when(sessions.issueMiniProgram(user.getId())).thenReturn(new IssuedSession("token",record));
-		assertThat(new WeChatAuthenticationService(users,sessions,client,Clock.systemUTC()).login("code").user().getId()).isEqualTo(user.getId());verify(users,never()).save(any());}
+		assertThat(new WeChatAuthenticationService(users,sessions,client,invitations,Clock.systemUTC()).login("code",null).user().getId()).isEqualTo(user.getId());verify(users,never()).save(any());verify(invitations,never()).authorizeFirstLogin(any(),any(),any());}
+
+	@Test
+	void disabledExistingWechatIdentityRemainsBlockedWithoutConsumingInvitation() {
+		MiniProgramUserStore users = mock(MiniProgramUserStore.class);
+		SessionService sessions = mock(SessionService.class);
+		WeChatClient client = mock(WeChatClient.class);
+		MiniProgramInvitationService invitations = mock(MiniProgramInvitationService.class);
+		MiniProgramUser user = new MiniProgramUser();
+		user.setId("MINI-0123456789abcdef01234567");
+		user.setStatus(UserStatus.DISABLED);
+		when(client.exchange("code")).thenReturn(new WeChatIdentity("app", "openid"));
+		when(users.findByWechatIdentity("app", "openid")).thenReturn(Optional.of(user));
+
+		assertThatThrownBy(() -> new WeChatAuthenticationService(
+			users, sessions, client, invitations, Clock.systemUTC()
+		).login("code", null)).isInstanceOfSatisfying(ApiException.class, exception ->
+			assertThat(exception.getCode()).isEqualTo("ACCOUNT_DISABLED")
+		);
+
+		verify(invitations, never()).authorizeFirstLogin(any(), any(), any());
+		verify(sessions, never()).issueMiniProgram(any());
+	}
 
 	@Test
 	void concurrentFirstLoginReusesWinnerAndReturnsMiniProgramTakeover() {
 		MiniProgramUserStore users = mock(MiniProgramUserStore.class);
 		SessionService sessions = mock(SessionService.class);
 		WeChatClient client = mock(WeChatClient.class);
+		MiniProgramInvitationService invitations = mock(MiniProgramInvitationService.class);
 		MiniProgramUser winner = new MiniProgramUser();
 		winner.setId("MINI-0123456789abcdef01234567");
 		winner.setStatus(UserStatus.ACTIVE);
@@ -62,7 +90,7 @@ class WeChatAuthenticationServiceTests {
 		when(sessions.issueMiniProgramTakeover(winner.getId(), active.getId()))
 			.thenReturn(new IssuedSession("takeover-token", takeover));
 
-		assertThatThrownBy(() -> new WeChatAuthenticationService(users, sessions, client, Clock.systemUTC()).login("code"))
+		assertThatThrownBy(() -> new WeChatAuthenticationService(users, sessions, client, invitations, Clock.systemUTC()).login("code", "ABCD-EFGH-JKMN"))
 			.isInstanceOfSatisfying(ApiException.class, exception -> {
 				assertThat(exception.getCode()).isEqualTo("ACCOUNT_IN_USE");
 				assertThat(exception.getDetails()).containsEntry("takeoverToken", "takeover-token");

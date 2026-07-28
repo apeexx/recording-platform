@@ -3,21 +3,33 @@
   <view class="brand-mark"><image src="/assets/branding/yanshu-avatar-144.png"/></view>
   <view class="brand-slogan">让声音成为时光的画笔</view>
   <view class="brand-copy">安全、便捷地完成语音数据采集</view>
+  <view class="audience-notice">
+    <view class="audience-notice-title">特定范围使用说明</view>
+    <view class="audience-notice-copy">本小程序仅供重庆砚数科技有限公司内部员工及经项目管理员邀请、授权的录音采集人员使用，不面向公众开放注册或提供服务。首次使用微信快捷登录时，须输入管理员提供的有效邀请码；未获邀请或邀请码无效、已停用、已用尽的人员无法创建账号或进入小程序。已开通数字账号的人员可使用账号密码登录。进入录音任务前，系统仍会校验对应任务授权。</view>
+  </view>
   <view class="login-card">
     <block wx:if="{{mode==='wechat'}}">
-      <view class="mode-title">微信快捷登录</view><view class="mode-copy">内部及授权人员可使用当前微信身份登录</view>
+      <view class="mode-header"><view class="mode-title">微信快捷登录</view><view class="switch" bindtap="switchMode">切换账号登录 ▸</view></view>
+      <view class="mode-copy">已获邀请人员首次使用微信登录时需验证邀请码</view>
       <button class="wechat-button" loading="{{loading}}" bindtap="wechatLogin"><image src="/assets/icons/wechat.svg"/>微信快捷登录</button>
     </block>
     <block wx:else>
-      <view class="mode-title">账号密码登录</view><view class="mode-copy">内部及授权人员使用已设置的数字账号跨设备登录</view>
+      <view class="mode-header"><view class="mode-title">账号密码登录</view><view class="switch" bindtap="switchMode">切换微信登录 ▸</view></view>
+      <view class="mode-copy">已开通数字账号的内部及授权人员可登录</view>
       <input class="login-input" type="number" maxlength="12" placeholder="6–12 位数字账号" data-field="account" bindinput="input"/>
       <input class="login-input" password placeholder="请输入密码" data-field="password" bindinput="input"/>
       <button class="account-button" loading="{{loading}}" bindtap="accountLogin">登录</button>
     </block>
-    <view class="switch" bindtap="switchMode">{{mode==='wechat'?'切换账号登录':'切换微信登录'}} ›</view>
   </view>
-  <view class="audience-notice">
-    <view class="audience-notice-title">账号使用与鉴权说明</view>
-    <view class="audience-notice-copy">本小程序为重庆砚数科技有限公司内部业务工具，不面向公众开放注册，仅限本公司内部员工及经项目管理员邀请、授权的录音采集人员使用。登录时系统将核验微信身份或数字账号，进入录音任务前还会核验对应任务授权；未通过身份或任务授权核验的人员无法领取、录制或提交任务。未获邀请或授权的人员请勿登录或提交个人信息。</view>
+  <view wx:if="{{invitationVisible}}" class="invitation-backdrop" bindtap="closeInvitation">
+    <view class="invitation-dialog" catchtap="noop">
+      <view class="invitation-title">验证邀请码</view>
+      <view class="invitation-copy">当前微信尚未加入使用范围，请输入管理员提供的邀请码。</view>
+      <input class="login-input invitation-input" maxlength="32" placeholder="请输入邀请码" value="{{invitationCode}}" focus="{{invitationFocus}}" data-field="invitationCode" bindinput="input"/>
+      <view class="invitation-actions">
+        <button class="invitation-cancel" disabled="{{loading}}" bindtap="closeInvitation">取消</button>
+        <button class="invitation-submit" loading="{{loading}}" bindtap="submitInvitation">验证并登录</button>
+      </view>
+    </view>
   </view>
 </view>

@@ -22,6 +22,7 @@ import com.recording.platform.identity.service.MiniProgramLoginResult;
 import com.recording.platform.identity.service.SessionService;
 import com.recording.platform.identity.service.WebAuthenticationService;
 import com.recording.platform.identity.service.WeChatAuthenticationService;
+import com.recording.platform.identity.invitation.MiniProgramInvitationService;
 import com.recording.platform.identity.store.MiniProgramUserStore;
 import com.recording.platform.identity.store.WebUserStore;
 import com.recording.platform.identity.wechat.WeChatClient;
@@ -75,10 +76,11 @@ class SplitAuthenticationServiceTests {
 		CollectorIdentityService collectors = new CollectorIdentityService(miniUsers, sessions, passwords, CLOCK);
 		WeChatClient weChat = mock(WeChatClient.class);
 		when(weChat.exchange("code")).thenReturn(new WeChatIdentity("wx-app", "openid"));
-		WeChatAuthenticationService weChatAuthentication = new WeChatAuthenticationService(miniUsers, sessions, weChat, CLOCK);
+		MiniProgramInvitationService invitations = mock(MiniProgramInvitationService.class);
+		WeChatAuthenticationService weChatAuthentication = new WeChatAuthenticationService(miniUsers, sessions, weChat, invitations, CLOCK);
 
 		assertConflict(() -> collectors.login("682913", "Password-1"));
-		assertConflict(() -> weChatAuthentication.login("code"));
+		assertConflict(() -> weChatAuthentication.login("code", null));
 		verify(sessions, org.mockito.Mockito.times(2)).issueMiniProgramTakeover(mini.getId(), active.getId());
 	}
 

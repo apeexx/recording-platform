@@ -10,9 +10,17 @@ function createSessionService({ wx, api }) {
     save(state.token,user)
     return user
   }
-  function login() {
+  function login(invitationCode='') {
     return new Promise((resolve, reject) => wx.login({
-      success: async ({ code }) => { try { const result=await api.login({code});save(result.token,result);resolve(result) } catch(e){reject(e)} },
+      success: async ({ code }) => {
+        try {
+          const body={code}
+          if(invitationCode)body.invitationCode=invitationCode
+          const result=await api.login(body)
+          save(result.token,result)
+          resolve(result)
+        } catch(e){reject(e)}
+      },
       fail: reject
     }))
   }

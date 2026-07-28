@@ -38,7 +38,7 @@ MongoDB 身份、会话与统一 API 错误基础
 本文件 AGENTS.md
 ```
 
-当前已实现身份、会话、后台用户管理、微信登录边界、语音生成持久化，以及嵌入式任务配置、授权申请、任务池领取、录音提交/返修/释放、人工审核、动态状态、软废弃恢复、媒体读取和 CSV 导入后端闭环；Web 已实现后台身份、任务配置、数据池/导入、权限、审核、用户、操作记录与统计页面，小程序已实现独立的按任务个人统计、每日分段和倒序提交记录。平台领域已整体移除，仍不实现机器审核执行或真实 AI 转写。
+当前已实现身份、会话、后台用户管理、新微信身份邀请码准入、语音生成持久化，以及嵌入式任务配置、授权申请、任务池领取、录音提交/返修/释放、人工审核、动态状态、软废弃恢复、媒体读取和 CSV 导入后端闭环；Web 已实现后台身份、邀请码管理、任务配置、数据池/导入、权限、审核、用户、操作记录与统计页面，小程序已实现首次邀请准入、独立的按任务个人统计、每日分段和倒序提交记录。平台领域已整体移除，仍不实现机器审核执行或真实 AI 转写。
 
 Spring Security 已配置为不透明服务端会话，不使用 JWT。除 Web/微信登录与接管接口外，其余 `/api/**` 默认认证；管理员、任务管理、授权管理、导入和语音生成接口按角色保护，采集写接口仅允许 `COLLECTOR` 小程序 Bearer 身份；外部集成仅允许专用 API Key 访问明确列出的四个端点。
 
@@ -198,7 +198,7 @@ RECORDING_INTEGRATION_API_KEY_SHA256（标注脚本中心机器密钥的 SHA-256
 
 `RECORDING_STORAGE_DIR` 为相对路径时必须按仓库根目录解析，默认 `backend/storage/recordings`；不得按 Spring Boot 的 `backend/` 工作目录再次拼接 `backend`。绝对路径保持原值。启动前置检查、录音存储、导入临时文件和就绪检查必须使用同一目录语义。
 
-根目录 `.env.example` 只能提供空值或安全默认值。Web 会话 Cookie 必须为 HttpOnly、SameSite=Lax；CSRF 使用可读的 `XSRF-TOKEN` Cookie 与 `X-XSRF-TOKEN` 请求头，已登录 Web 用户通过 `GET /api/auth/web/csrf` 获取 token，首次登录待改密账号也必须允许访问该端点。CSRF 缺失或失效必须返回 `403 CSRF_TOKEN_INVALID`，真实角色越权返回 `403 ACCESS_DENIED`，不得使用同一错误码混淆两类问题。服务端和 MongoDB 只保存会话令牌哈希。微信登录必须由后端用临时 code 调用 `jscode2session`，不得信任客户端直接提交的 OpenID。
+根目录 `.env.example` 只能提供空值或安全默认值。Web 会话 Cookie 必须为 HttpOnly、SameSite=Lax；CSRF 使用可读的 `XSRF-TOKEN` Cookie 与 `X-XSRF-TOKEN` 请求头，已登录 Web 用户通过 `GET /api/auth/web/csrf` 获取 token，首次登录待改密账号也必须允许访问该端点。CSRF 缺失或失效必须返回 `403 CSRF_TOKEN_INVALID`，真实角色越权返回 `403 ACCESS_DENIED`，不得使用同一错误码混淆两类问题。服务端和 MongoDB 只保存会话令牌哈希。微信登录必须由后端用临时 code 调用 `jscode2session`，不得信任客户端直接提交的 OpenID。已有 `miniprogram_users` 全部视为已准入；只有新微信身份首次创建账号时需要有效邀请码，同一微信身份只能占用一个名额，完整邀请码不得落库或进入通用幂等响应快照。
 
 ### 6.4.1 一次性旧录音路径迁移规则
 
@@ -281,12 +281,22 @@ Web 数据大屏使用仅 ADMIN 可访问的 `GET /api/reports/dashboard`，返�
 ```text
 请求方法：POST / GET / PUT / DELETE
 请求路径：/api/auth/miniprogram/login、/account-login、/takeover、/profile、/profile/complete、/name、/password、/avatar
-请求参数：微信登录 JSON code；账号登录 JSON account/password；资料完成 JSON name、可选成对 account/password；改密 currentPassword/newPassword；头像 multipart avatar
+请求参数：微信登录 JSON code、可选 invitationCode；账号登录 JSON account/password；资料完成 JSON name、可选成对 account/password；改密 currentPassword/newPassword；头像 multipart avatar
 响应结构：登录返回不透明 Bearer token、account、profileComplete、hasCustomAvatar；资料接口返回采集员摘要；头像 GET 返回文件流
-错误码：503 WECHAT_NOT_CONFIGURED/WECHAT_UNAVAILABLE；401 WECHAT_LOGIN_FAILED/INVALID_CREDENTIALS/TAKEOVER_TOKEN_INVALID；409 ACCOUNT_IN_USE（details.takeoverToken 为短时一次性接管凭证）/USERNAME_EXISTS；413 AVATAR_TOO_LARGE；422 INVALID_NAME/ACCOUNT_PASSWORD_REQUIRED/INVALID_COLLECTOR_ACCOUNT/PASSWORD_TOO_WEAK/INVALID_AVATAR_FILE
+错误码：503 WECHAT_NOT_CONFIGURED/WECHAT_UNAVAILABLE；401 WECHAT_LOGIN_FAILED/INVALID_CREDENTIALS/TAKEOVER_TOKEN_INVALID；403 INVITATION_REQUIRED/INVITATION_CODE_INVALID；409 ACCOUNT_IN_USE（details.takeoverToken 为短时一次性接管凭证）/USERNAME_EXISTS；413 AVATAR_TOO_LARGE；422 INVALID_NAME/ACCOUNT_PASSWORD_REQUIRED/INVALID_COLLECTOR_ACCOUNT/PASSWORD_TOO_WEAK/INVALID_AVATAR_FILE
 权限要求：两种登录公开；其余仅 COLLECTOR 小程序 Bearer
-数据一致性要求：微信和数字账号登录始终映射同一 `MINI-...` 小程序用户 ID；有效姓名存在即 profileComplete=true；数字账号和密码必须同时提供或同时省略，未设置时可后补一次，设置后用户不可自行修改；数字账号仅在 `miniprogram_users` 内唯一；头像 DELETE 接口保留兼容但小程序无入口
+数据一致性要求：微信和数字账号登录始终映射同一 `MINI-...` 小程序用户 ID；已有微信用户不需要邀请码，新微信身份未提供邀请码时不创建用户或会话，无效、停用和用尽统一返回 INVITATION_CODE_INVALID；邀请兑换以 AppID/OpenID 身份哈希原子声明和计数，重试、并发或中途失败不得重复扣次；有效姓名存在即 profileComplete=true；数字账号和密码必须同时提供或同时省略，未设置时可后补一次，设置后用户不可自行修改；数字账号仅在 `miniprogram_users` 内唯一；头像 DELETE 接口保留兼容但小程序无入口
 前端调用位置：apps/miniprogram/services/session.js、services/api.js、pages/login、pages/profile
+```
+
+```text
+请求方法与路径：GET /api/admin/miniprogram-invitations?page=&size=；POST /api/admin/miniprogram-invitations；POST /api/admin/miniprogram-invitations/{id}/disable
+请求参数：创建 JSON name、可选 note、maxUses；停用携带 Idempotency-Key
+响应结构：列表返回 {items,page,size,total} 且只含邀请码末四位；创建响应仅本次额外返回 invitationCode；停用返回脱敏邀请码摘要
+错误码：400 请求结构错误或停用缺少 Idempotency-Key；403 CSRF_TOKEN_INVALID/ACCESS_DENIED；404 INVITATION_CODE_NOT_FOUND；422 INVITATION_NAME_INVALID/INVITATION_NOTE_INVALID/INVITATION_MAX_USES_INVALID
+权限要求：仅 ADMIN，所有写请求需要 Web CSRF
+数据一致性要求：邀请码使用 SecureRandom 生成 12 位无歧义大写字符并显示为 XXXX-XXXX-XXXX；输入忽略大小写、空格和连字符；数据库只保存 SHA-256 和末四位。名称最长 64 字、备注最长 200 字、使用次数 1–1000。创建不使用通用幂等响应快照；停用持久化幂等且永久不可恢复
+前端调用位置：apps/web/src/lib/invitationApi.js、apps/web/src/pages/admin/system/InvitationCodesPage.vue
 ```
 
 ```text
@@ -641,6 +651,30 @@ Web 数据大屏使用仅 ADMIN 可访问的 `GET /api/reports/dashboard`，返�
 数据兼容策略：仅保存小程序采集员身份；不得把明文密码、微信 session_key 或客户端提交的 openId 写入
 迁移步骤：身份拆分后使用 `MINI-` 前缀 ID，旧统一身份集合不再作为当前运行集合
 回滚方式：拆分或清库前备份相关集合；不要直接删除已创建用户
+```
+
+```text
+集合名称：miniprogram_invitation_codes
+字段名称：name、note、codeHash、codeSuffix、maxUses、usedCount、status、redemptionIdentityHashes、createdByUserId、createdByName、createdAt、disabledByUserId、disabledByName、disabledAt
+字段类型：字符串、整数、ACTIVE/DISABLED、数组、UTC Instant
+默认值：新邀请码 ACTIVE、usedCount=0
+唯一约束：codeHash
+索引：codeHash 唯一索引
+数据兼容策略：只保存规范化邀请码 SHA-256 与末四位，不保存或恢复完整邀请码；EXHAUSTED 为 usedCount 达到 maxUses 时的派生状态
+迁移步骤：无需迁移现有小程序用户，历史 `miniprogram_users` 全部视为已准入且不扣次数
+回滚方式：只允许停用，不编辑、删除或重新启用；不得单独回滚准入门禁使公众身份重新自动建号
+```
+
+```text
+集合名称：miniprogram_invitation_claims
+字段名称：identityHash（主键）、invitationId、userId、createdAt、completedAt
+字段类型：字符串、UTC Instant
+默认值：预留阶段 userId、completedAt 为空，用户创建成功后补全
+唯一约束：identityHash
+索引：identityHash 主键唯一
+数据兼容策略：identityHash 为 AppID 与 OpenID 组合的 SHA-256；同一微信身份只允许声明一个邀请码名额，不保存原始 OpenID
+迁移步骤：本阶段首次建立，无历史声明迁移
+回滚方式：排障时需连同邀请码计数和新建用户一起核对，禁止只删声明或只回退 usedCount
 ```
 
 ```text
