@@ -50,6 +50,13 @@ function switchView(next) {
   load()
 }
 
+function sourceLabel(row) {
+  if (row.userType === 'WEB') return '后台创建'
+  if (!row.invitationId) return '历史用户'
+  const name = row.invitationName || '邀请码准入'
+  return row.invitationCodeSuffix ? `${name}（尾号 ${row.invitationCodeSuffix}）` : name
+}
+
 function resetCreateForm() {
   Object.assign(form, { username: '', name: '', role: 'REVIEWER', initialPassword: '' })
 }
@@ -186,7 +193,7 @@ onBeforeUnmount(() => {
           <tbody>
             <tr v-for="row in rows" :key="row.id">
               <td>{{ row.id }}</td><td>{{ row.name || '-' }}</td><td>{{ row.loginName || '未设置' }}</td>
-              <td>{{ row.userType === 'MINIPROGRAM' ? '小程序' : '后台' }}</td>
+              <td>{{ sourceLabel(row) }}</td>
               <td>{{ row.role === 'COLLECTOR' ? '采集员' : row.role === 'REVIEWER' ? '审核员' : '管理员' }}</td>
               <td>{{ statusLabel(row.status) }}</td>
               <td>

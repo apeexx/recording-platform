@@ -17,7 +17,11 @@ public record UserResponse(
 	UserStatus status,
 	boolean firstPasswordChangeRequired,
 	Instant createdAt,
-	Instant updatedAt
+	Instant updatedAt,
+	String invitationId,
+	String invitationName,
+	String invitationCodeSuffix,
+	Instant invitationRedeemedAt
 ) {
 	public static UserResponse from(WebUser user) {
 		return new UserResponse(
@@ -29,17 +33,22 @@ public record UserResponse(
 			user.getStatus(),
 			user.isFirstPasswordChangeRequired(),
 			user.getCreatedAt(),
-			user.getUpdatedAt()
+			user.getUpdatedAt(),
+			null,
+			null,
+			null,
+			null
 		);
 	}
 
 	public static UserResponse from(MiniProgramUser user) {
 		return new UserResponse(user.getId(), UserType.MINIPROGRAM, user.getAccount(), user.getName(), UserRole.COLLECTOR,
-			user.getStatus(), false, user.getCreatedAt(), user.getUpdatedAt());
+			user.getStatus(), false, user.getCreatedAt(), user.getUpdatedAt(), user.getInvitationId(),
+			user.getInvitationName(), user.getInvitationCodeSuffix(), user.getInvitationRedeemedAt());
 	}
 
 	public static UserResponse from(IdentityUser user) {
 		return new UserResponse(user.id(), user.userType(), user.loginName(), user.name(), user.role(), user.status(),
-			user.firstPasswordChangeRequired(), user.createdAt(), user.updatedAt());
+			user.firstPasswordChangeRequired(), user.createdAt(), user.updatedAt(), null, null, null, null);
 	}
 }

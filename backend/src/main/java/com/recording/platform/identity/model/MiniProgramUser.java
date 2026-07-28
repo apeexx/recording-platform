@@ -36,6 +36,10 @@ public class MiniProgramUser {
 	private UserStatus status;
 	private String wechatAppId;
 	private String wechatOpenId;
+	private String invitationId;
+	private String invitationName;
+	private String invitationCodeSuffix;
+	private Instant invitationRedeemedAt;
 	private String avatarPath;
 	private String avatarContentType;
 	private Instant avatarUpdatedAt;

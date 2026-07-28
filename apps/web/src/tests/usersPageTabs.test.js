@@ -42,6 +42,43 @@ describe('用户管理类型页签', () => {
     wrapper.unmount()
   })
 
+  it('按用户类型展示后台创建、邀请码准入和历史用户来源', async () => {
+    userApi.search
+      .mockResolvedValueOnce({
+        content: [{
+          id: 'WEB-1', userType: 'WEB', loginName: 'admin', name: '管理员',
+          role: 'ADMIN', status: 'ACTIVE',
+          invitationId: null, invitationName: null, invitationCodeSuffix: null, invitationRedeemedAt: null
+        }]
+      })
+      .mockResolvedValueOnce({
+        content: [
+          {
+            id: 'MINI-1', userType: 'MINIPROGRAM', loginName: '682913', name: '审核用户',
+            role: 'COLLECTOR', status: 'ACTIVE',
+            invitationId: 'invite-1', invitationName: '审核体验', invitationCodeSuffix: 'JKMN',
+            invitationRedeemedAt: '2026-07-28T08:00:00Z'
+          },
+          {
+            id: 'MINI-2', userType: 'MINIPROGRAM', loginName: null, name: '旧用户',
+            role: 'COLLECTOR', status: 'ACTIVE',
+            invitationId: null, invitationName: null, invitationCodeSuffix: null, invitationRedeemedAt: null
+          }
+        ]
+      })
+
+    const wrapper = mount(UsersPage)
+    await flushPromises()
+    expect(wrapper.text()).toContain('后台创建')
+
+    await wrapper.get('[data-user-type="MINIPROGRAM"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('审核体验（尾号 JKMN）')
+    expect(wrapper.text()).toContain('历史用户')
+    expect(wrapper.text()).not.toContain('ABCD-EFGH-JKMN')
+    wrapper.unmount()
+  })
+
   it('将创建入口放在搜索栏右侧并通过弹窗展示表单', async () => {
     const wrapper = mount(UsersPage, { attachTo: document.body })
     await flushPromises()

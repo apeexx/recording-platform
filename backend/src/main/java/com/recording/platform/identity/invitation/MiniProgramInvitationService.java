@@ -39,7 +39,7 @@ public class MiniProgramInvitationService {
 		this.clock = clock;
 	}
 
-	public void authorizeFirstLogin(String invitationCode, String appId, String openId) {
+	public MiniProgramInvitationAdmission authorizeFirstLogin(String invitationCode, String appId, String openId) {
 		if (invitationCode == null || invitationCode.isBlank()) {
 			throw new ApiException(HttpStatus.FORBIDDEN, "INVITATION_REQUIRED", "当前微信尚未加入使用范围，请输入邀请码");
 		}
@@ -56,6 +56,12 @@ public class MiniProgramInvitationService {
 			claims.release(identityHash, invitation.getId());
 			throw invalidCode();
 		}
+		return new MiniProgramInvitationAdmission(
+			invitation.getId(),
+			invitation.getName(),
+			invitation.getCodeSuffix(),
+			now
+		);
 	}
 
 	public void completeRedemption(String appId, String openId, String userId) {

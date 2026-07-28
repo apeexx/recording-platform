@@ -46,10 +46,26 @@ class AdminUserServiceTests {
 		.isInstanceOfSatisfying(ApiException.class,e->assertThat(e.getCode()).isEqualTo("PASSWORD_TOO_WEAK"));}
 
 	@Test void collectorSearchAndUpdatesUseOnlyMiniProgramStore(){MiniProgramUser user=new MiniProgramUser();user.setId("MINI-0123456789abcdef01234567");user.setAccount("682913");user.setStatus(UserStatus.ACTIVE);
+		user.setInvitationId("invite-1");user.setInvitationName("审核体验");user.setInvitationCodeSuffix("JKMN");user.setInvitationRedeemedAt(CLOCK.instant());
 		when(mini.search("张",org.springframework.data.domain.PageRequest.of(0,20))).thenReturn(new PageImpl<>(java.util.List.of(user)));
 		when(mini.findById(user.getId())).thenReturn(Optional.of(user));when(mini.findByAccount("682914")).thenReturn(Optional.empty());when(mini.updateAccountIfActive(org.mockito.ArgumentMatchers.eq(user.getId()),org.mockito.ArgumentMatchers.eq("682914"),any())).thenAnswer(i->{user.setAccount("682914");return Optional.of(user);});
-		assertThat(service().search(" 张 ",UserRole.COLLECTOR,null,0,20).getContent()).extracting(r->r.userType()).containsExactly(UserType.MINIPROGRAM);
+		var response=service().search(" 张 ",UserRole.COLLECTOR,null,0,20).getContent().get(0);
+		assertThat(response.userType()).isEqualTo(UserType.MINIPROGRAM);
+		assertThat(response.invitationId()).isEqualTo("invite-1");
+		assertThat(response.invitationName()).isEqualTo("审核体验");
+		assertThat(response.invitationCodeSuffix()).isEqualTo("JKMN");
+		assertThat(response.invitationRedeemedAt()).isEqualTo(CLOCK.instant());
 		assertThat(service().updateCollectorAccount(user.getId(),"682914").loginName()).isEqualTo("682914");verify(sessions).revokeAll(user.getId());}
+
+	@Test void webUserResponseNeverContainsInvitationSource(){
+		WebUser user=webUser("WEB-000000000000000000000001","admin",CLOCK.instant());
+		when(web.search("",null,org.springframework.data.domain.PageRequest.of(0,20))).thenReturn(new PageImpl<>(java.util.List.of(user)));
+		var response=service().search("",null,UserType.WEB,0,20).getContent().get(0);
+		assertThat(response.invitationId()).isNull();
+		assertThat(response.invitationName()).isNull();
+		assertThat(response.invitationCodeSuffix()).isNull();
+		assertThat(response.invitationRedeemedAt()).isNull();
+	}
 
 	@Test void userTypeSearchUsesOnlyMatchingStore(){
 		WebUser webUser=webUser("WEB-000000000000000000000001","admin",CLOCK.instant());

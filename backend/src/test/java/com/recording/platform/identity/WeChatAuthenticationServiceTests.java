@@ -16,6 +16,7 @@ import com.recording.platform.identity.model.UserStatus;
 import com.recording.platform.identity.service.IssuedSession;
 import com.recording.platform.identity.service.SessionService;
 import com.recording.platform.identity.service.WeChatAuthenticationService;
+import com.recording.platform.identity.invitation.MiniProgramInvitationAdmission;
 import com.recording.platform.identity.invitation.MiniProgramInvitationService;
 import com.recording.platform.identity.store.MiniProgramUserStore;
 import com.recording.platform.identity.wechat.WeChatClient;
@@ -33,10 +34,17 @@ class WeChatAuthenticationServiceTests {
 		MiniProgramUserStore users=mock(MiniProgramUserStore.class);SessionService sessions=mock(SessionService.class);WeChatClient client=mock(WeChatClient.class);
 		MiniProgramInvitationService invitations=mock(MiniProgramInvitationService.class);
 		when(client.exchange("code")).thenReturn(new WeChatIdentity("app", "openid")); when(users.findByWechatIdentity("app","openid")).thenReturn(Optional.empty());
+		when(invitations.authorizeFirstLogin("ABCD-EFGH-JKMN","app","openid")).thenReturn(new MiniProgramInvitationAdmission(
+			"invite-1", "审核体验", "JKMN", Instant.parse("2026-07-20T02:00:00Z")
+		));
 		when(users.save(any())).thenAnswer(invocation -> invocation.getArgument(0)); when(sessions.active(any(), org.mockito.ArgumentMatchers.eq(SessionType.MINIPROGRAM))).thenReturn(Optional.empty());
 		when(sessions.issueMiniProgram(any())).thenAnswer(invocation -> { SessionRecord record=new SessionRecord();record.setId("session");record.setUserId(invocation.getArgument(0));return new IssuedSession("token",record); });
 		var result=new WeChatAuthenticationService(users,sessions,client,invitations,Clock.fixed(Instant.parse("2026-07-20T02:00:00Z"),ZoneOffset.UTC)).login("code","ABCD-EFGH-JKMN");
 		assertThat(result.user().getId()).matches("MINI-[0-9a-f]{24}"); assertThat(result.user().getStatus()).isEqualTo(UserStatus.ACTIVE);
+		assertThat(result.user().getInvitationId()).isEqualTo("invite-1");
+		assertThat(result.user().getInvitationName()).isEqualTo("审核体验");
+		assertThat(result.user().getInvitationCodeSuffix()).isEqualTo("JKMN");
+		assertThat(result.user().getInvitationRedeemedAt()).isEqualTo(Instant.parse("2026-07-20T02:00:00Z"));
 		assertThat(java.util.Arrays.stream(MiniProgramUser.class.getDeclaredFields()).map(java.lang.reflect.Field::getName)).doesNotContain("role");
 		verify(invitations).authorizeFirstLogin("ABCD-EFGH-JKMN","app","openid");
 		verify(invitations).completeRedemption("app","openid",result.user().getId());
@@ -78,6 +86,9 @@ class WeChatAuthenticationServiceTests {
 		MiniProgramUser winner = new MiniProgramUser();
 		winner.setId("MINI-0123456789abcdef01234567");
 		winner.setStatus(UserStatus.ACTIVE);
+		winner.setInvitationId("winner-invite");
+		winner.setInvitationName("并发胜者");
+		winner.setInvitationCodeSuffix("SAFE");
 		SessionRecord active = new SessionRecord();
 		active.setId("active-mini");
 		SessionRecord takeover = new SessionRecord();
@@ -85,6 +96,9 @@ class WeChatAuthenticationServiceTests {
 
 		when(client.exchange("code")).thenReturn(new WeChatIdentity("app", "openid"));
 		when(users.findByWechatIdentity("app", "openid")).thenReturn(Optional.empty(), Optional.of(winner));
+		when(invitations.authorizeFirstLogin("ABCD-EFGH-JKMN", "app", "openid")).thenReturn(new MiniProgramInvitationAdmission(
+			"loser-invite", "并发失败请求", "JKMN", Instant.parse("2026-07-20T02:00:00Z")
+		));
 		when(users.save(any())).thenThrow(new DuplicateKeyException("unique_wechat_identity"));
 		when(sessions.active(winner.getId(), SessionType.MINIPROGRAM)).thenReturn(Optional.of(active));
 		when(sessions.issueMiniProgramTakeover(winner.getId(), active.getId()))
@@ -95,5 +109,8 @@ class WeChatAuthenticationServiceTests {
 				assertThat(exception.getCode()).isEqualTo("ACCOUNT_IN_USE");
 				assertThat(exception.getDetails()).containsEntry("takeoverToken", "takeover-token");
 			});
+		assertThat(winner.getInvitationId()).isEqualTo("winner-invite");
+		assertThat(winner.getInvitationName()).isEqualTo("并发胜者");
+		assertThat(winner.getInvitationCodeSuffix()).isEqualTo("SAFE");
 	}
 }

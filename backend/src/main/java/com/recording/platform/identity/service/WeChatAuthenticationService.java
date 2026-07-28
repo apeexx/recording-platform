@@ -6,6 +6,7 @@ import com.recording.platform.identity.model.UserStatus;
 import com.recording.platform.identity.store.MiniProgramUserStore;
 import com.recording.platform.identity.wechat.WeChatClient;
 import com.recording.platform.identity.wechat.WeChatIdentity;
+import com.recording.platform.identity.invitation.MiniProgramInvitationAdmission;
 import com.recording.platform.identity.invitation.MiniProgramInvitationService;
 import java.time.Clock;
 import java.time.Instant;
@@ -41,8 +42,9 @@ public class WeChatAuthenticationService {
 		WeChatIdentity identity = weChatClient.exchange(code);
 		MiniProgramUser user = users.findByWechatIdentity(identity.appId(), identity.openId()).orElse(null);
 		if (user == null) {
-			invitations.authorizeFirstLogin(invitationCode, identity.appId(), identity.openId());
-			user = findOrCreateCollector(identity);
+			MiniProgramInvitationAdmission admission =
+				invitations.authorizeFirstLogin(invitationCode, identity.appId(), identity.openId());
+			user = findOrCreateCollector(identity, admission);
 			invitations.completeRedemption(identity.appId(), identity.openId(), user.getId());
 		}
 		if (user.getStatus() != UserStatus.ACTIVE) {
@@ -52,11 +54,14 @@ public class WeChatAuthenticationService {
 		return new MiniProgramLoginResult(issued.token(), issued.session().getId(), user);
 	}
 
-	private MiniProgramUser findOrCreateCollector(WeChatIdentity identity) {
+	private MiniProgramUser findOrCreateCollector(
+		WeChatIdentity identity,
+		MiniProgramInvitationAdmission admission
+	) {
 		var existing = users.findByWechatIdentity(identity.appId(), identity.openId());
 		if (existing.isPresent()) return existing.get();
 		try {
-			return createCollector(identity);
+			return createCollector(identity, admission);
 		} catch (DuplicateKeyException exception) {
 			return users.findByWechatIdentity(identity.appId(), identity.openId())
 				.orElseThrow(() -> new ApiException(
@@ -80,13 +85,20 @@ public class WeChatAuthenticationService {
 			.orElseThrow(() -> new ApiException(HttpStatus.CONFLICT, "ACCOUNT_STATE_CHANGED", "账号状态已变化，请重试"));
 	}
 
-	private MiniProgramUser createCollector(WeChatIdentity identity) {
+	private MiniProgramUser createCollector(
+		WeChatIdentity identity,
+		MiniProgramInvitationAdmission admission
+	) {
 		Instant now = Instant.now(clock);
 		MiniProgramUser user = new MiniProgramUser();
 		user.setId(IdentityIds.miniProgram());
 		user.setStatus(UserStatus.ACTIVE);
 		user.setWechatAppId(identity.appId());
 		user.setWechatOpenId(identity.openId());
+		user.setInvitationId(admission.invitationId());
+		user.setInvitationName(admission.invitationName());
+		user.setInvitationCodeSuffix(admission.invitationCodeSuffix());
+		user.setInvitationRedeemedAt(admission.invitationRedeemedAt());
 		user.setCreatedAt(now);
 		user.setUpdatedAt(now);
 		return users.save(user);

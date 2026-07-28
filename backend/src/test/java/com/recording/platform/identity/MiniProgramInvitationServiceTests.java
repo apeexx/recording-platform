@@ -75,11 +75,16 @@ class MiniProgramInvitationServiceTests {
 		when(invitations.reserve(org.mockito.ArgumentMatchers.eq("invite-1"), any(), any()))
 			.thenReturn(InvitationReservationResult.RESERVED, InvitationReservationResult.ALREADY_RESERVED);
 
-		service.authorizeFirstLogin("ABCD-EFGH-JKMN", "wx-app", "openid");
-		service.authorizeFirstLogin("abcd efgh jkmn", "wx-app", "openid");
+		var first = service.authorizeFirstLogin("ABCD-EFGH-JKMN", "wx-app", "openid");
+		var retry = service.authorizeFirstLogin("abcd efgh jkmn", "wx-app", "openid");
 
 		verify(invitations, org.mockito.Mockito.times(2))
 			.reserve(org.mockito.ArgumentMatchers.eq("invite-1"), any(), any());
+		assertThat(first.invitationId()).isEqualTo("invite-1");
+		assertThat(first.invitationName()).isEqualTo("审核体验");
+		assertThat(first.invitationCodeSuffix()).isEqualTo("JKMN");
+		assertThat(first.invitationRedeemedAt()).isEqualTo(CLOCK.instant());
+		assertThat(retry).isEqualTo(first);
 	}
 
 	@Test
@@ -152,6 +157,8 @@ class MiniProgramInvitationServiceTests {
 	private MiniProgramInvitation invitation(String id) {
 		MiniProgramInvitation value = new MiniProgramInvitation();
 		value.setId(id);
+		value.setName("审核体验");
+		value.setCodeSuffix("JKMN");
 		value.setStatus(com.recording.platform.identity.invitation.model.InvitationStatus.ACTIVE);
 		value.setMaxUses(5);
 		value.setUsedCount(0);

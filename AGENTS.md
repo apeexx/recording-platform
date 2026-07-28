@@ -198,7 +198,7 @@ RECORDING_INTEGRATION_API_KEY_SHA256（标注脚本中心机器密钥的 SHA-256
 
 `RECORDING_STORAGE_DIR` 为相对路径时必须按仓库根目录解析，默认 `backend/storage/recordings`；不得按 Spring Boot 的 `backend/` 工作目录再次拼接 `backend`。绝对路径保持原值。启动前置检查、录音存储、导入临时文件和就绪检查必须使用同一目录语义。
 
-根目录 `.env.example` 只能提供空值或安全默认值。Web 会话 Cookie 必须为 HttpOnly、SameSite=Lax；CSRF 使用可读的 `XSRF-TOKEN` Cookie 与 `X-XSRF-TOKEN` 请求头，已登录 Web 用户通过 `GET /api/auth/web/csrf` 获取 token，首次登录待改密账号也必须允许访问该端点。CSRF 缺失或失效必须返回 `403 CSRF_TOKEN_INVALID`，真实角色越权返回 `403 ACCESS_DENIED`，不得使用同一错误码混淆两类问题。服务端和 MongoDB 只保存会话令牌哈希。微信登录必须由后端用临时 code 调用 `jscode2session`，不得信任客户端直接提交的 OpenID。已有 `miniprogram_users` 全部视为已准入；只有新微信身份首次创建账号时需要有效邀请码，同一微信身份只能占用一个名额，完整邀请码不得落库或进入通用幂等响应快照。
+根目录 `.env.example` 只能提供空值或安全默认值。Web 会话 Cookie 必须为 HttpOnly、SameSite=Lax；CSRF 使用可读的 `XSRF-TOKEN` Cookie 与 `X-XSRF-TOKEN` 请求头，已登录 Web 用户通过 `GET /api/auth/web/csrf` 获取 token，首次登录待改密账号也必须允许访问该端点。CSRF 缺失或失效必须返回 `403 CSRF_TOKEN_INVALID`，真实角色越权返回 `403 ACCESS_DENIED`，不得使用同一错误码混淆两类问题。服务端和 MongoDB 只保存会话令牌哈希，`sessions.expiresAt` 使用 TTL 自动清理，失效记录无需人工定期删除。微信登录必须由后端用临时 code 调用 `jscode2session`，不得信任客户端直接提交的 OpenID。已有 `miniprogram_users` 全部视为已准入；只有新微信身份首次创建账号时需要有效邀请码，同一微信身份只能占用一个名额。新建用户保存邀请码 ID、名称快照、末四位和兑换时间供管理员审计；完整邀请码不得落库或进入通用幂等响应快照。
 
 ### 6.4.1 一次性旧录音路径迁移规则
 
@@ -312,7 +312,7 @@ Web 数据大屏使用仅 ADMIN 可访问的 `GET /api/reports/dashboard`，返�
 ```text
 请求方法与路径：GET /api/admin/users/search?query=&role=&userType=&page=&size=；POST /api/admin/users/{userId}/reset-password；PUT /api/admin/users/{userId}/collector-account
 请求参数：搜索支持姓名、完整前缀用户 ID 或登录名，以及可选角色和 `userType=WEB|MINIPROGRAM`；重置 JSON newPassword；改采集员账号 JSON account
-响应结构：搜索返回 Spring Page<UserResponse>；重置密码或改采集员账号返回用户摘要
+响应结构：搜索返回 Spring Page<UserResponse>；重置密码或改采集员账号返回用户摘要；小程序用户摘要额外包含可空 invitationId、invitationName、invitationCodeSuffix、invitationRedeemedAt，后台用户固定为空
 错误码：404 USER_NOT_FOUND；409 ACCOUNT_STATE_CHANGED/USERNAME_EXISTS；422 PASSWORD_TOO_WEAK/INVALID_COLLECTOR_ACCOUNT
 权限要求：仅 ADMIN
 数据一致性要求：`userType=WEB` 只查询 `web_users`，`userType=MINIPROGRAM` 只查询 `miniprogram_users`，省略时保持跨两集合合并搜索；与角色不匹配时返回空分页，不跨类型降级；ADMIN 可重置 ACTIVE Web 或 Mini 用户密码；Web 用户密码 BCrypt 编码、强制下次改密并废止全部会话，Mini 用户密码 BCrypt 编码、废止全部小程序会话但不设置 Web 首改密标记；改采集员账号仅作用于 ACTIVE Mini 用户，账号在 `miniprogram_users` 内唯一并废止其会话
@@ -643,13 +643,13 @@ Web 数据大屏使用仅 ADMIN 可访问的 `GET /api/reports/dashboard`，返�
 
 ```text
 集合名称：miniprogram_users
-字段名称：id（`MINI-` 前缀）、version、account、name、passwordHash、status、wechatAppId、wechatOpenId、avatarPath、avatarContentType、avatarUpdatedAt、createdAt、updatedAt
+字段名称：id（`MINI-` 前缀）、version、account、name、passwordHash、status、wechatAppId、wechatOpenId、invitationId、invitationName、invitationCodeSuffix、invitationRedeemedAt、avatarPath、avatarContentType、avatarUpdatedAt、createdAt、updatedAt
 字段类型：字符串、布尔值、UTC Instant
 默认值：新微信用户 ACTIVE；角色不在本集合存储，小程序身份在鉴权与响应中固定视为 COLLECTOR
 唯一约束：稀疏 account；稀疏复合 (wechatAppId, wechatOpenId)
 索引：account 唯一稀疏索引；(wechatAppId, wechatOpenId) 唯一稀疏复合索引
-数据兼容策略：仅保存小程序采集员身份；不得把明文密码、微信 session_key 或客户端提交的 openId 写入
-迁移步骤：身份拆分后使用 `MINI-` 前缀 ID，旧统一身份集合不再作为当前运行集合
+数据兼容策略：仅保存小程序采集员身份；新微信用户保存脱敏邀请码来源，历史用户允许四个邀请码来源字段为空；不得把完整邀请码、邀请码哈希、明文密码、微信 session_key 或客户端提交的 openId 写入管理员响应
+迁移步骤：不回填历史用户；身份拆分后使用 `MINI-` 前缀 ID，旧统一身份集合不再作为当前运行集合
 回滚方式：拆分或清库前备份相关集合；不要直接删除已创建用户
 ```
 
@@ -683,7 +683,7 @@ Web 数据大屏使用仅 ADMIN 可访问的 `GET /api/reports/dashboard`，返�
 字段类型：字符串、枚举、UTC Instant
 默认值：新会话 ACTIVE；Web 空闲 12 小时；小程序 30 天；接管凭证 5 分钟
 唯一约束：tokenHash；同一用户最多一个 ACTIVE WEB 会话，且最多一个 ACTIVE MINIPROGRAM 会话
-索引：expiresAt TTL；(userId, status)；ACTIVE WEB 部分唯一索引；ACTIVE MINIPROGRAM 部分唯一索引
+索引：expiresAt TTL（expireAfterSeconds=0，由 MongoDB 异步自动删除过期文档）；(userId, status)；ACTIVE WEB 部分唯一索引；ACTIVE MINIPROGRAM 部分唯一索引
 数据兼容策略：只保存 SHA-256 tokenHash，不保存原始 Cookie/Bearer/takeoverToken
 迁移步骤：本阶段为首次建立，无旧会话迁移
 回滚方式：可废止全部会话并要求重新登录，不得导出或恢复原始令牌
