@@ -199,7 +199,8 @@ public class TaskItemCreationService {
 		if (!ignoreDisabledReferences) validateEnabledReferences(configuration, text, audioUrl, videoUrl);
 		audioUrl = referenceUrls.validateNullable(audioUrl);
 		videoUrl = referenceUrls.validateNullable(videoUrl);
-		long sequence = tasks.nextItemSequence(taskId);
+		long maximumSequence = items.findMaximumSequenceByTaskId(taskId);
+		long sequence = tasks.nextItemSequence(taskId, maximumSequence);
 		if (sequence < 1) throw new ApiException(HttpStatus.CONFLICT, "TASK_STATE_CHANGED", "任务状态已变化");
 		if (sequence > 1_000_000) {
 			throw new ApiException(HttpStatus.CONFLICT, "ITEM_CODE_EXHAUSTED", "该任务的数据条目已达到 100 万上限");

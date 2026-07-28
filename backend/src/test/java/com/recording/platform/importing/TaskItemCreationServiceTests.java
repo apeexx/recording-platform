@@ -3,6 +3,7 @@ package com.recording.platform.importing;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -53,7 +54,8 @@ class TaskItemCreationServiceTests {
 		configuration.setReferenceTypes(Set.of(ReferenceType.TEXT, ReferenceType.AUDIO, ReferenceType.VIDEO));
 		task.setConfiguration(configuration);
 		when(tasks.findById("task-1")).thenReturn(Optional.of(task));
-		when(tasks.nextItemSequence("task-1")).thenReturn(1L);
+		when(items.findMaximumSequenceByTaskId("task-1")).thenReturn(0L);
+		when(tasks.nextItemSequence("task-1", 0L)).thenReturn(1L);
 		when(items.findByTaskIdAndCreationOperationId(any(), any())).thenReturn(Optional.empty());
 		when(items.save(any())).thenAnswer((invocation) -> invocation.getArgument(0));
 		service = new TaskItemCreationService(
@@ -149,6 +151,50 @@ class TaskItemCreationServiceTests {
 	}
 
 	@Test
+	void itemSequenceRaisesAnOutdatedCounterToTheHighestPersistedItemSequence() {
+		when(items.findMaximumSequenceByTaskId("task-1")).thenReturn(83L);
+		when(tasks.nextItemSequence("task-1", 83L)).thenReturn(84L);
+
+		TaskItem created = service.add(
+			"task-1", new AddTaskItemCommand("接续历史编号", null, null), "add-after-history", admin
+		);
+
+		assertThat(created.getSequence()).isEqualTo(84L);
+		assertThat(created.getItemCode()).isEqualTo("T000001-0000084");
+		verify(items).findMaximumSequenceByTaskId("task-1");
+		verify(tasks).nextItemSequence("task-1", 83L);
+	}
+
+	@Test
+	void itemSequenceDoesNotLowerACounterThatIsAlreadyAboveThePersistedMaximum() {
+		when(items.findMaximumSequenceByTaskId("task-1")).thenReturn(83L);
+		when(tasks.nextItemSequence("task-1", 83L)).thenReturn(101L);
+
+		TaskItem created = service.add(
+			"task-1", new AddTaskItemCommand("保留编号缺口", null, null), "add-after-gap", admin
+		);
+
+		assertThat(created.getSequence()).isEqualTo(101L);
+		assertThat(created.getItemCode()).isEqualTo("T000001-0000101");
+	}
+
+	@Test
+	void idempotentCreationReplayDoesNotReadOrAllocateAnotherSequence() {
+		TaskItem existing = new TaskItem();
+		existing.setId("item-existing");
+		when(items.findByTaskIdAndCreationOperationId("task-1", "add-replay"))
+			.thenReturn(Optional.of(existing));
+
+		TaskItem replayed = service.add(
+			"task-1", new AddTaskItemCommand("幂等重放", null, null), "add-replay", admin
+		);
+
+		assertThat(replayed).isSameAs(existing);
+		verify(items, never()).findMaximumSequenceByTaskId("task-1");
+		verify(tasks, never()).nextItemSequence(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyLong());
+	}
+
+	@Test
 	void integrationEntryReusesCreationRulesAndRecordsTheDedicatedActor() {
 		TaskItem created = service.addIntegration(
 			"task-1",
@@ -221,6 +267,8 @@ class TaskItemCreationServiceTests {
 			assertThat(exception.getStatus().value()).isEqualTo(409);
 			assertThat(exception.getCode()).isEqualTo("SOURCE_ITEM_ALREADY_BOUND");
 		});
+		verify(items, never()).findMaximumSequenceByTaskId("task-1");
+		verify(tasks, never()).nextItemSequence(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyLong());
 	}
 
 	@Test
@@ -328,7 +376,7 @@ class TaskItemCreationServiceTests {
 
 	@Test
 	void itemSequenceStopsAtOneMillion() {
-		when(tasks.nextItemSequence("task-1")).thenReturn(1_000_001L);
+		when(tasks.nextItemSequence("task-1", 0L)).thenReturn(1_000_001L);
 
 		assertThatThrownBy(() -> service.add(
 			"task-1", new AddTaskItemCommand("请朗读", null, null), "add-overflow", admin
