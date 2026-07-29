@@ -18,7 +18,6 @@ public interface TaskItemStore {
 	) {
 		return Optional.empty();
 	}
-	default long findMaximumSequenceByTaskId(String taskId) { return 0; }
 	Optional<TaskItem> claimAvailable(ClaimMutation mutation);
 	default Optional<TaskItem> claimReview(ReviewClaimMutation mutation) { return Optional.empty(); }
 	default Optional<TaskItem> claimReviewItem(ReviewItemClaimMutation mutation) { return Optional.empty(); }

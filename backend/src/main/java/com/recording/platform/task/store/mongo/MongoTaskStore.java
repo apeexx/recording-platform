@@ -10,10 +10,9 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.mongodb.core.FindAndModifyOptions;
 import org.springframework.data.mongodb.core.MongoTemplate;
-import org.springframework.data.mongodb.core.aggregation.AggregationExpression;
-import org.springframework.data.mongodb.core.aggregation.AggregationUpdate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Repository;
 
 @Repository
@@ -46,24 +45,9 @@ public class MongoTaskStore implements TaskStore {
 	@Override public List<TaskRecord> findAllByIdIn(Collection<String> ids) { return repository.findAllByIdIn(ids); }
 	@Override
 	public long nextItemSequence(String taskId) {
-		return nextItemSequence(taskId, 0L);
-	}
-	@Override
-	public long nextItemSequence(String taskId, long observedMaximumSequence) {
-		long sequenceFloor = Math.max(0L, observedMaximumSequence);
-		AggregationExpression nextSequence = context -> new org.bson.Document(
-			"$add",
-			List.of(
-				new org.bson.Document("$max", List.of(
-					new org.bson.Document("$ifNull", List.of("$itemSequence", 0L)),
-					sequenceFloor
-				)),
-				1L
-			)
-		);
 		TaskRecord task = mongoTemplate.findAndModify(
 			Query.query(Criteria.where("_id").is(taskId)),
-			AggregationUpdate.update().set("itemSequence").toValue(nextSequence),
+			new Update().inc("itemSequence", 1),
 			FindAndModifyOptions.options().returnNew(true),
 			TaskRecord.class
 		);

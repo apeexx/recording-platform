@@ -98,26 +98,6 @@ class MongoTaskItemStoreTests {
 	}
 
 	@Test
-	void maximumSequenceReadsOnlyTheHighestSequenceForTheTask() {
-		SpringDataTaskItemRepository repository = org.mockito.Mockito.mock(SpringDataTaskItemRepository.class);
-		MongoTemplate template = org.mockito.Mockito.mock(MongoTemplate.class);
-		TaskItem highest = new TaskItem();
-		highest.setSequence(83L);
-		when(template.findOne(any(Query.class), eq(TaskItem.class))).thenReturn(highest);
-		MongoTaskItemStore store = new MongoTaskItemStore(repository, template);
-
-		long maximum = store.findMaximumSequenceByTaskId("task-1");
-
-		assertThat(maximum).isEqualTo(83L);
-		ArgumentCaptor<Query> query = ArgumentCaptor.forClass(Query.class);
-		verify(template).findOne(query.capture(), eq(TaskItem.class));
-		assertThat(query.getValue().getQueryObject()).containsEntry("taskId", "task-1");
-		assertThat(query.getValue().getSortObject()).containsEntry("sequence", -1);
-		assertThat(query.getValue().getLimit()).isEqualTo(1);
-		assertThat(query.getValue().getFieldsObject()).containsEntry("sequence", 1);
-	}
-
-	@Test
 	void adminSearchCombinesMultiValueDimensionsAndCodeQueryInMongo() {
 		SpringDataTaskItemRepository repository = org.mockito.Mockito.mock(SpringDataTaskItemRepository.class);
 		MongoTemplate template = org.mockito.Mockito.mock(MongoTemplate.class);

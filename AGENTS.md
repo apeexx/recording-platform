@@ -210,7 +210,7 @@ DASHSCOPE_BASE_URL（默认 https://dashscope.aliyuncs.com/compatible-mode/v1，
 
 ## 6.5 任务池、媒体与导入规则
 
-任务结构固定使用 `tasks`，配置嵌入 `configuration`；不再维护 `task_versions`。任务仅在 DRAFT 状态允许修改名称、说明和配置，发布后永久冻结；运行中任务必须先暂停，只有 PAUSED 状态允许结束。任务至少启用 TEXT/AUDIO/VIDEO 一种参考组件。最终成果为 `TEXT` 时文本或录音至少提交一项，也允许同时提交；`AUDIO` 必须提交录音且不得夹带文本。只有实际提交录音时才校验格式、采样率、单声道、大小和时长。录音时长配置固定为 1–600 秒；Web 双端滑块使用统一像素坐标绘制 22px 胶囊轨道、16px 选区和 20px 白色圆点，原生 range 仅保留键盘与无障碍输入。关闭人工审核时不得保存驳回预设原因；首期 `aiEnabled` 必须为 false。任务编码由数据库序列自动生成 `T000001`，条目编码为 `{taskCode}-{7位序号}`，不接受前端输入且序号不复用。创建条目时先读取该任务 `task_items.sequence` 的最大值，再以 Mongo 单文档原子更新分配“`itemSequence` 与最大值取大后加一”；历史条目高于计数器时自动抬高，计数器更高或保存失败后的缺口均不得降低、重用或由客户端指定。
+任务结构固定使用 `tasks`，配置嵌入 `configuration`；不再维护 `task_versions`。任务仅在 DRAFT 状态允许修改名称、说明和配置，发布后永久冻结；运行中任务必须先暂停，只有 PAUSED 状态允许结束。任务至少启用 TEXT/AUDIO/VIDEO 一种参考组件。最终成果为 `TEXT` 时文本或录音至少提交一项，也允许同时提交；`AUDIO` 必须提交录音且不得夹带文本。只有实际提交录音时才校验格式、采样率、单声道、大小和时长。录音时长配置固定为 1–600 秒；Web 双端滑块使用统一像素坐标绘制 22px 胶囊轨道、16px 选区和 20px 白色圆点，原生 range 仅保留键盘与无障碍输入。关闭人工审核时不得保存驳回预设原因；首期 `aiEnabled` 必须为 false。任务编码由数据库序列自动生成 `T000001`，条目编码为 `{taskCode}-{7位序号}`，不接受前端输入且序号不复用。
 
 采集员领取必须同时满足任务 RUNNING 和 ACTIVE grant；普通 `RECORDING_PENDING` 不限制采集员持有数量，每个新的 `Idempotency-Key` 使用 Mongo `findAndModify` 从 `AVAILABLE` 按 sequence 原子领取一条新数据，相同幂等键重放仍返回首次结果。驳回进入独立 `REWORK_PENDING`，保留原采集员、assignment 和驳回原因；授权撤销只阻止新领取，不影响已领取条目的提交和释放。
 
@@ -709,7 +709,7 @@ Web 数据大屏使用仅 ADMIN 可访问的 `GET /api/reports/dashboard`，返�
 默认值：DRAFT、itemSequence=0、humanReviewEnabled=true、channels=1、minDurationMillis=1000、maxDurationMillis=600000、aiEnabled=false
 唯一约束：taskCode
 索引：taskCode 唯一；lifecycle
-数据兼容策略：`itemSequence` 是任务内编号持久化计数器；历史导入或迁移使其低于 `task_items.sequence` 最大值时，下一次有效创建自动抬高，无需手工改库；计数器已高于最大值时继续递增，不回退或复用。发布后任务定义不再修改，条目通过 taskId 读取配置
+数据兼容策略：本次不迁移旧开发数据；发布后任务定义不再修改，条目通过 taskId 读取配置
 迁移步骤：停止服务后使用受保护脚本清空本地开发数据库并按新模型重建；不在生产数据上直接执行
 回滚方式：恢复代码与重置前备份；不得在存在业务数据的环境直接删除集合
 ```

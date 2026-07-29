@@ -59,15 +59,6 @@ public class MongoTaskItemStore implements TaskItemStore {
 		);
 	}
 	@Override
-	public long findMaximumSequenceByTaskId(String taskId) {
-		Query query = Query.query(Criteria.where("taskId").is(taskId));
-		query.fields().include("sequence").exclude("_id");
-		query.with(Sort.by(Sort.Direction.DESC, "sequence"));
-		query.limit(1);
-		TaskItem item = mongoTemplate.findOne(query, TaskItem.class);
-		return item == null ? 0L : Math.max(0L, item.getSequence());
-	}
-	@Override
 	public Optional<TaskItem> updateReferencesIfAvailable(UpdateTaskItemReferencesMutation mutation) {
 		TaskItem snapshot = new TaskItem();
 		snapshot.setId(mutation.itemId());

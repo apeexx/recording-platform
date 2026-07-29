@@ -19,7 +19,4 @@ public interface TaskStore {
 	}
 	default List<TaskRecord> findAllByIdIn(Collection<String> ids) { return List.of(); }
 	long nextItemSequence(String taskId);
-	default long nextItemSequence(String taskId, long observedMaximumSequence) {
-		return nextItemSequence(taskId);
-	}
 }
