@@ -230,8 +230,8 @@ onBeforeUnmount(clearPoll)
             <thead><tr>
               <th><input type="checkbox" :checked="selection.pageAllSelected.value" aria-label="选择当前页面" @change="selection.togglePage"/></th>
               <th><TaskItemFilters review-mode kind="code" :task-id="route.params.taskId" :model-value="filters" @change="changeFilters"/></th>
-              <th>采集员 ID</th><th><TaskItemFilters review-mode kind="collector" :model-value="filters" @change="changeFilters"/></th>
-              <th>审核员 ID</th><th><TaskItemFilters review-mode kind="reviewer" :model-value="filters" @change="changeFilters"/></th>
+              <th>采集员 ID</th><th><TaskItemFilters review-mode kind="collector" :task-id="route.params.taskId" :model-value="filters" @change="changeFilters"/></th>
+              <th>审核员 ID</th><th><TaskItemFilters review-mode kind="reviewer" :task-id="route.params.taskId" :model-value="filters" @change="changeFilters"/></th>
               <th><TaskItemFilters review-mode kind="status" :model-value="filters" @change="changeFilters"/></th>
               <th><TaskItemFilters review-mode kind="result" :model-value="filters" @change="changeFilters"/></th><th>时长</th><th>操作</th>
             </tr></thead>

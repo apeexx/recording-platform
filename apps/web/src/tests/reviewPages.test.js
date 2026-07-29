@@ -1,9 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-vi.mock('../lib/httpClient.js', () => ({ httpRequest: vi.fn() }))
+import { flushPromises, mount } from '@vue/test-utils'
+import { createMemoryHistory, createRouter } from 'vue-router'
+vi.mock('../lib/httpClient.js', () => ({
+  httpRequest: vi.fn(),
+  configureSessionReplacedHandler: vi.fn(),
+  markWebSessionEstablished: vi.fn(),
+}))
 import { httpRequest } from '../lib/httpClient.js'
 import { reviewApi } from '../lib/reviewApi.js'
+import ReviewQueuePage from '../pages/admin/review/ReviewQueuePage.vue'
 
 describe('审核页面 API', () => {
   beforeEach(() => vi.clearAllMocks())
@@ -92,6 +99,36 @@ describe('审核页面 API', () => {
     const filters = readFileSync(join(process.cwd(), 'src/components/admin/TaskItemFilters.vue'), 'utf8')
     expect(filters).toContain('await reviewApi.filterUsers(props.taskId, role, userQuery.value)')
     expect(filters).toContain('await reviewApi.pool(props.taskId, 0, 20')
+  })
+
+  it('审核池挂载时为采集员和审核员候选请求携带当前任务 ID', async () => {
+    httpRequest.mockImplementation((url) => Promise.resolve(
+      url.startsWith('/api/batch-operation-jobs') ? []
+        : url.includes('/filter-users') ? []
+          : { items: [{
+              id: 'item-1', itemCode: 'T000001-0000001', status: 'SUBMITTED',
+              revision: 1, collectorId: 'MINI-1', collectorName: '采集员',
+              reviewerId: null, reviewerName: null, hasText: true, hasAudio: false,
+            }], total: 1 }
+    ))
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: '/admin/review', component: { template: '<div />' } },
+        { path: '/admin/review/tasks/:taskId', component: ReviewQueuePage },
+      ],
+    })
+    await router.push('/admin/review/tasks/task-9')
+    await router.isReady()
+
+    const wrapper = mount(ReviewQueuePage, { global: { plugins: [router] } })
+    await flushPromises()
+    const urls = httpRequest.mock.calls.map(([url]) => url)
+
+    expect(urls).toContain('/api/reviews/tasks/task-9/filter-users?role=COLLECTOR')
+    expect(urls).toContain('/api/reviews/tasks/task-9/filter-users?role=REVIEWER')
+    expect(urls.some(url => url.includes('/api/reviews/tasks//'))).toBe(false)
+    wrapper.unmount()
   })
 
   it('工作台只读展示原始结果并独立编辑最终答案和采用 AI 结果', () => {
