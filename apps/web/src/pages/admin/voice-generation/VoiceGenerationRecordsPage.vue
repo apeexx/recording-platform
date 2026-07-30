@@ -2,24 +2,32 @@
 import { onMounted, ref } from 'vue'
 import { fetchRecords } from '../../../lib/voiceGenerationApi.js'
 import { useNotifications } from '../../../composables/useNotifications.js'
+import PaginationControls from '../../../components/admin/PaginationControls.vue'
 
 const notifications = useNotifications()
 const loading = ref(false)
 const message = ref('生成记录来自后端 MongoDB。')
 const records = ref([])
+const page = ref(0)
+const size = ref(20)
+const total = ref(0)
 
 async function loadRecords() {
   loading.value = true
   try {
-    const data = await fetchRecords({ page: 0, size: 50 })
+    const data = await fetchRecords({ page: page.value, size: size.value })
     records.value = data.items || []
-    message.value = `已加载 ${records.value.length} 条生成记录`
+    total.value = Number(data.total) || 0
+    message.value = `共 ${total.value} 条生成记录`
   } catch (error) {
     notifications.error(error.message)
   } finally {
     loading.value = false
   }
 }
+
+async function changePage(value) { page.value = value; await loadRecords() }
+async function changeSize(value) { size.value = value; page.value = 0; await loadRecords() }
 
 onMounted(loadRecords)
 </script>
@@ -64,6 +72,7 @@ onMounted(loadRecords)
           </tr>
         </tbody>
       </table>
+      <PaginationControls :page="page" :size="size" :total="total" @change="changePage" @size-change="changeSize" />
     </section>
   </div>
 </template>

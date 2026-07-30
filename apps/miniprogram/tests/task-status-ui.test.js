@@ -56,6 +56,9 @@ test('作业页区分可编辑和只读状态并使用本地 SVG 图标', () => 
 	assert.match(page, /点击开始录音/)
 	assert.match(page, /bindtap="deleteRecording"/)
 	assert.match(page, /删除录音/)
+	const deleteRecordingButton = page.match(/<button class="delete-recording-button"[\s\S]*?<\/button>/)?.[0]
+	assert.ok(deleteRecordingButton)
+	assert.doesNotMatch(deleteRecordingButton, /<image/)
 	assert.match(page, /录音中/)
 	assert.match(page, /已暂停/)
 	assert.match(style, /\.recorder-stage\{[^}]*min-height:460rpx;[^}]*padding:28rpx/)

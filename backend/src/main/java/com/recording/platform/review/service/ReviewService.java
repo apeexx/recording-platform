@@ -19,8 +19,10 @@ import com.recording.platform.task.store.AdminReviewDecisionMutation;
 import com.recording.platform.task.store.ReviewReleaseMutation;
 import com.recording.platform.task.store.TaskItemStore;
 import com.recording.platform.task.store.TaskStore;
+import com.recording.platform.task.store.ReviewTaskMetrics;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.util.UUID;
 import java.util.List;
 import org.springframework.http.HttpStatus;
@@ -86,11 +88,49 @@ public class ReviewService {
 	public List<ReviewTaskSummary> tasks(PlatformPrincipal actor) {
 		requireReviewAccess(actor);
 		if (tasks == null) return List.of();
-		return tasks.findAll(Pageable.unpaged()).getContent().stream()
-			.map(task -> new ReviewTaskSummary(task.getId(), task.getTaskCode(), task.getName(),
-				items.countReviewPendingByTaskId(task.getId())))
+		List<TaskRecord> allTasks = tasks.findAll(Pageable.unpaged()).getContent();
+		Map<String, ReviewTaskMetrics> metrics = metricsByTask(
+			allTasks.stream().map(TaskRecord::getId).toList()
+		);
+		return allTasks.stream()
+			.map(task -> summary(task, metrics.get(task.getId())))
 			.filter(summary -> summary.pendingCount() > 0)
+			.sorted(Comparator.comparingLong(ReviewTaskSummary::pendingCount).reversed()
+				.thenComparing(ReviewTaskSummary::taskCode))
 			.toList();
+	}
+
+	public ReviewTaskSummary taskSummary(String taskId, PlatformPrincipal actor) {
+		requireReviewAccess(actor);
+		if (tasks == null) throw taskNotFound();
+		TaskRecord task = tasks.findById(taskId).orElseThrow(this::taskNotFound);
+		return summary(task, metricsByTask(List.of(taskId)).get(taskId));
+	}
+
+	private Map<String, ReviewTaskMetrics> metricsByTask(List<String> taskIds) {
+		if (taskIds.isEmpty()) return Map.of();
+		ZoneId shanghai = ZoneId.of("Asia/Shanghai");
+		var today = java.time.LocalDate.now(clock.withZone(shanghai));
+		Instant todayStart = today.atStartOfDay(shanghai).toInstant();
+		Instant tomorrowStart = today.plusDays(1).atStartOfDay(shanghai).toInstant();
+		return items.reviewTaskMetrics(taskIds, todayStart, tomorrowStart).stream()
+			.collect(Collectors.toMap(ReviewTaskMetrics::taskId, Function.identity()));
+	}
+
+	private ReviewTaskSummary summary(TaskRecord task, ReviewTaskMetrics metrics) {
+		ReviewTaskMetrics value = metrics == null
+			? new ReviewTaskMetrics(task.getId(), 0, 0, 0, 0, 0, 0, 0)
+			: metrics;
+		return new ReviewTaskSummary(
+			task.getId(), task.getTaskCode(), task.getName(), value.pendingCount(),
+			value.effectiveItemCount(), value.completedCount(), value.reviewEnteredCount(),
+			value.reviewProcessedCount(), value.submittedCount(), value.reviewPendingCount(),
+			value.todayCompletedCount()
+		);
+	}
+
+	private ApiException taskNotFound() {
+		return new ApiException(HttpStatus.NOT_FOUND, "TASK_NOT_FOUND", "任务不存在");
 	}
 
 	public Page<ReviewPoolItemView> pool(

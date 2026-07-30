@@ -21,6 +21,7 @@ const toDate = String(route.query.toDate || '')
 const activeTab = ref(route.query.tab === 'completions' ? 'completions' : 'submissions')
 const submissionPage = ref(Math.max(0, Number(route.query.submissionPage) || 0))
 const completionPage = ref(Math.max(0, Number(route.query.completionPage) || 0))
+const pageSize = ref([10, 20, 50].includes(Number(route.query.detailSize)) ? Number(route.query.detailSize) : 20)
 const detail = ref(null)
 const submissions = ref([])
 const completions = ref([])
@@ -28,7 +29,6 @@ const submissionTotal = ref(0)
 const completionTotal = ref(0)
 const loading = ref(false)
 const loadError = ref('')
-const pageSize = 20
 const reportParams = computed(() => ({
   ...(fromDate ? { fromDate } : {}), ...(toDate ? { toDate } : {}),
 }))
@@ -50,6 +50,7 @@ function detailQuery() {
     tab: activeTab.value === 'completions' ? 'completions' : undefined,
     submissionPage: submissionPage.value || undefined,
     completionPage: completionPage.value || undefined,
+    detailSize: pageSize.value === 20 ? undefined : pageSize.value,
   }
 }
 function syncQuery() {
@@ -66,10 +67,10 @@ async function load(refresh = false) {
     const [nextDetail, submissionResult, completionResult] = await Promise.all([
       reportApi.collectorTask(collectorId, taskId, reportParams.value),
       reportApi.collectorTaskSubmissions(collectorId, taskId, {
-        ...reportParams.value, page: submissionPage.value, size: pageSize,
+        ...reportParams.value, page: submissionPage.value, size: pageSize.value,
       }),
       reportApi.collectorTaskCompletions(collectorId, taskId, {
-        ...reportParams.value, page: completionPage.value, size: pageSize,
+        ...reportParams.value, page: completionPage.value, size: pageSize.value,
       }),
     ])
     detail.value = nextDetail
@@ -92,6 +93,13 @@ async function changePage(value) {
   await syncQuery()
   await load(true)
 }
+async function changeSize(value) {
+  pageSize.value = value
+  submissionPage.value = 0
+  completionPage.value = 0
+  await syncQuery()
+  await load(true)
+}
 function goBack() {
   router.push({
     name: 'collector-statistics',
@@ -100,6 +108,7 @@ function goBack() {
       sortBy: route.query.sortBy || undefined,
       sortDirection: route.query.sortDirection || undefined,
       page: route.query.page || undefined,
+      size: route.query.size || undefined,
     },
   })
 }
@@ -163,7 +172,7 @@ onMounted(() => load())
           </table>
         </div>
         <p v-if="!currentRows.length" class="business-note">当前范围内暂无{{ activeTab === 'submissions' ? '提交' : '完成' }}明细。</p>
-        <PaginationControls :page="currentPage" :size="pageSize" :total="currentTotal" @change="changePage" />
+        <PaginationControls :page="currentPage" :size="pageSize" :total="currentTotal" @change="changePage" @size-change="changeSize" />
       </section>
     </AsyncState>
   </section>

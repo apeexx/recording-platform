@@ -17,6 +17,10 @@ import com.recording.platform.task.store.AdminReviewDecisionMutation;
 import com.recording.platform.task.store.AdminItemTransitionMutation;
 import com.recording.platform.task.store.SubmitMutation;
 import com.recording.platform.task.store.TaskItemStore;
+import com.recording.platform.task.store.ReviewTaskMetrics;
+import java.time.Instant;
+import java.util.Collection;
+import java.util.Date;
 import com.recording.platform.task.store.UpdateTaskItemReferencesMutation;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
@@ -647,6 +651,68 @@ public class MongoTaskItemStore implements TaskItemStore {
 	@Override public long countReviewPendingByTaskId(String taskId) {
 		return mongoTemplate.count(Query.query(Criteria.where("taskId").is(taskId)
 			.and("status").in(TaskItemStatus.SUBMITTED, TaskItemStatus.REVIEW_PENDING)), TaskItem.class);
+	}
+
+	@Override
+	public List<ReviewTaskMetrics> reviewTaskMetrics(
+		Collection<String> taskIds, Instant todayStart, Instant tomorrowStart
+	) {
+		if (taskIds == null || taskIds.isEmpty()) return List.of();
+		Document entered = new Document("$and", List.of(
+			new Document("$ne", List.of("$firstSubmittedAt", null)),
+			new Document("$not", List.of(new Document("$in", List.of(
+				"$status", List.of(TaskItemStatus.AVAILABLE.name(), TaskItemStatus.DISCARDED.name())
+			))))
+		));
+		Document group = new Document("_id", "$taskId")
+			.append("effectiveItemCount", conditionalSum(new Document("$ne", List.of(
+				"$status", TaskItemStatus.DISCARDED.name()
+			))))
+			.append("completedCount", conditionalSum(new Document("$eq", List.of(
+				"$status", TaskItemStatus.COMPLETED.name()
+			))))
+			.append("reviewEnteredCount", conditionalSum(entered))
+			.append("reviewProcessedCount", conditionalSum(new Document("$and", List.of(
+				entered,
+				new Document("$in", List.of("$status", List.of(
+					TaskItemStatus.COMPLETED.name(), TaskItemStatus.REWORK_PENDING.name()
+				)))
+			))))
+			.append("submittedCount", conditionalSum(new Document("$eq", List.of(
+				"$status", TaskItemStatus.SUBMITTED.name()
+			))))
+			.append("reviewPendingCount", conditionalSum(new Document("$eq", List.of(
+				"$status", TaskItemStatus.REVIEW_PENDING.name()
+			))))
+			.append("todayCompletedCount", conditionalSum(new Document("$and", List.of(
+				new Document("$eq", List.of("$status", TaskItemStatus.COMPLETED.name())),
+				new Document("$gte", List.of("$firstCompletedAt", Date.from(todayStart))),
+				new Document("$lt", List.of("$firstCompletedAt", Date.from(tomorrowStart)))
+			))));
+		List<Document> pipeline = List.of(
+			new Document("$match", new Document("taskId", new Document("$in", taskIds))),
+			new Document("$group", group)
+		);
+		List<ReviewTaskMetrics> result = new java.util.ArrayList<>();
+		for (Document row : mongoTemplate.getCollection("task_items").aggregate(pipeline)) {
+			result.add(new ReviewTaskMetrics(
+				row.getString("_id"),
+				number(row, "effectiveItemCount"), number(row, "completedCount"),
+				number(row, "reviewEnteredCount"), number(row, "reviewProcessedCount"),
+				number(row, "submittedCount"), number(row, "reviewPendingCount"),
+				number(row, "todayCompletedCount")
+			));
+		}
+		return result;
+	}
+
+	private Document conditionalSum(Document condition) {
+		return new Document("$sum", new Document("$cond", List.of(condition, 1, 0)));
+	}
+
+	private long number(Document row, String key) {
+		Number value = row.get(key, Number.class);
+		return value == null ? 0 : value.longValue();
 	}
 
 	@Override public Page<TaskItem> findReviewPoolByTaskId(

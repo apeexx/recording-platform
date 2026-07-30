@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import AsyncState from '../../../components/admin/AsyncState.vue'
 import PageActions from '../../../components/admin/PageActions.vue'
+import PaginationControls from '../../../components/admin/PaginationControls.vue'
 import { useNotifications } from '../../../composables/useNotifications.js'
 import { operationId } from '../../../lib/apiUtils.js'
 import { invitationApi } from '../../../lib/invitationApi.js'
@@ -11,7 +12,7 @@ const rows = ref([])
 const loading = ref(false)
 const error = ref('')
 const page = ref(0)
-const size = 20
+const size = ref(20)
 const total = ref(0)
 const createOpen = ref(false)
 const creating = ref(false)
@@ -23,14 +24,14 @@ const maxUsesInput = ref(null)
 const form = reactive({ name: '', note: '', maxUses: 1 })
 let loadSequence = 0
 
-const totalPages = computed(() => Math.max(1, Math.ceil(total.value / size)))
+const totalPages = computed(() => Math.max(1, Math.ceil(total.value / size.value)))
 
 async function load(showToast = false) {
   const sequence = ++loadSequence
   loading.value = true
   error.value = ''
   try {
-    const response = await invitationApi.list(page.value, size)
+    const response = await invitationApi.list(page.value, size.value)
     if (sequence !== loadSequence) return
     rows.value = response.items || []
     total.value = Number(response.total) || 0
@@ -139,6 +140,7 @@ async function go(nextPage) {
   page.value = nextPage
   await load(true)
 }
+async function changeSize(value) { size.value = value; page.value = 0; await load(true) }
 
 watch(createOpen, async (open) => {
   document.body.style.overflow = open || revealCode.value ? 'hidden' : ''
@@ -178,10 +180,7 @@ onBeforeUnmount(() => { document.body.style.overflow = '' })
           </tbody>
         </table>
       </div>
-      <div class="pagination">
-        <span>共 {{ total }} 个邀请码</span>
-        <div><button :disabled="page === 0" @click="go(page - 1)">上一页</button><span>第 {{ page + 1 }} / {{ totalPages }} 页</span><button :disabled="page + 1 >= totalPages" @click="go(page + 1)">下一页</button></div>
-      </div>
+      <PaginationControls :page="page" :size="size" :total="total" @change="go" @size-change="changeSize" />
     </AsyncState>
 
     <Teleport to="body">
@@ -210,5 +209,5 @@ onBeforeUnmount(() => { document.body.style.overflow = '' })
 </template>
 
 <style scoped>
-.panel{overflow:auto;background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:20px}.primary{border:0;border-radius:10px;padding:10px 18px;background:var(--primary);color:var(--primary-foreground)}.primary:disabled{opacity:.65}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:14px;border-bottom:1px solid var(--border);vertical-align:top}small{display:block;margin-top:5px;color:var(--muted-foreground)}.code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;white-space:nowrap}.status{display:inline-flex;padding:4px 9px;border-radius:999px;background:var(--accent);color:var(--foreground)}.status.disabled{color:var(--muted-foreground)}.status.exhausted{color:var(--chart-3)}.link{border:0;background:transparent;color:var(--primary)}.danger{color:var(--destructive)}.pagination{display:flex;justify-content:space-between;align-items:center;margin-top:16px}.pagination div{display:flex;align-items:center;gap:10px}.pagination button,.modal button{border:1px solid var(--border);border-radius:10px;background:var(--card);color:var(--foreground);padding:9px 14px}.modal-backdrop{position:fixed;inset:0;z-index:2900;display:grid;place-items:center;padding:24px;background:color-mix(in srgb,var(--foreground) 48%,transparent);backdrop-filter:blur(4px)}.modal{width:min(500px,100%);padding:26px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--foreground);box-shadow:0 24px 70px var(--shadow-color)}.modal h2{margin:0 0 10px}.modal p{color:var(--muted-foreground)}.modal form{display:grid;gap:16px;margin-top:20px}.modal label{display:grid;gap:8px;font-weight:700}.modal input{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:10px;background:var(--background);color:var(--foreground);padding:11px 12px}.modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:12px}.modal-actions .primary{background:var(--primary);color:var(--primary-foreground)}.secret{margin:20px 0;padding:18px;border:1px dashed var(--primary);border-radius:12px;background:var(--background);font:700 24px ui-monospace,SFMono-Regular,Consolas,monospace;text-align:center;letter-spacing:2px}@media(max-width:720px){.pagination{align-items:flex-start;gap:12px;flex-direction:column}.modal-backdrop{padding:16px}}
+.panel{overflow:auto;background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:20px}.primary{border:0;border-radius:10px;padding:10px 18px;background:var(--primary);color:var(--primary-foreground)}.primary:disabled{opacity:.65}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:14px;border-bottom:1px solid var(--border);vertical-align:top}small{display:block;margin-top:5px;color:var(--muted-foreground)}.code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;white-space:nowrap}.status{display:inline-flex;padding:4px 9px;border-radius:999px;background:var(--accent);color:var(--foreground)}.status.disabled{color:var(--muted-foreground)}.status.exhausted{color:var(--chart-3)}.link{border:0;background:transparent;color:var(--primary)}.danger{color:var(--destructive)}.modal button{border:1px solid var(--border);border-radius:10px;background:var(--card);color:var(--foreground);padding:9px 14px}.modal-backdrop{position:fixed;inset:0;z-index:2900;display:grid;place-items:center;padding:24px;background:color-mix(in srgb,var(--foreground) 48%,transparent);backdrop-filter:blur(4px)}.modal{width:min(500px,100%);padding:26px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--foreground);box-shadow:0 24px 70px var(--shadow-color)}.modal h2{margin:0 0 10px}.modal p{color:var(--muted-foreground)}.modal form{display:grid;gap:16px;margin-top:20px}.modal label{display:grid;gap:8px;font-weight:700}.modal input{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:10px;background:var(--background);color:var(--foreground);padding:11px 12px}.modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:12px}.modal-actions .primary{background:var(--primary);color:var(--primary-foreground)}.secret{margin:20px 0;padding:18px;border:1px dashed var(--primary);border-radius:12px;background:var(--background);font:700 24px ui-monospace,SFMono-Regular,Consolas,monospace;text-align:center;letter-spacing:2px}@media(max-width:720px){.modal-backdrop{padding:16px}}
 </style>

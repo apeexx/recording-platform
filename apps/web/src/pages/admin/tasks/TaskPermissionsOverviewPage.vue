@@ -8,6 +8,7 @@ import { statusLabel } from '../../../lib/statusLabels.js'
 
 const rows = ref([])
 const page = ref(0)
+const size = ref(20)
 const total = ref(0)
 const loading = ref(false)
 const error = ref('')
@@ -16,7 +17,7 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    const result = await taskApi.list(page.value, 20)
+    const result = await taskApi.list(page.value, size.value)
     rows.value = result.items || []
     total.value = result.total || 0
   } catch (exception) {
@@ -28,6 +29,11 @@ async function load() {
 
 function changePage(value) {
   page.value = value
+  load()
+}
+function changeSize(value) {
+  size.value = value
+  page.value = 0
   load()
 }
 
@@ -74,7 +80,7 @@ onMounted(load)
             </tbody>
           </table>
         </div>
-        <PaginationControls :page="page" :size="20" :total="total" @change="changePage" />
+        <PaginationControls :page="page" :size="size" :total="total" @change="changePage" @size-change="changeSize" />
       </AsyncState>
     </div>
   </section>

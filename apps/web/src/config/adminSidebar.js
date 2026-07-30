@@ -7,16 +7,8 @@ export const adminSidebar = [
       { key: 'permissions', title: '采集权限', path: '/admin/permissions' }
     ]
   },
-  {
-    key: 'review', title: '录音审核', icon: 'review', roles: ['ADMIN', 'REVIEWER'], children: [
-	  { key: 'review-queue', title: '审核任务', path: '/admin/review' }
-    ]
-  },
-  {
-    key: 'reports', title: '工作统计', icon: 'report', roles: ['ADMIN'], children: [
-      { key: 'collector-reports', title: '采集员统计', path: '/admin/reports/collectors' }
-    ]
-  },
+  { key: 'review', title: '录音审核', icon: 'review', path: '/admin/review', activePrefixes: ['/admin/review/'], roles: ['ADMIN', 'REVIEWER'] },
+  { key: 'reports', title: '工作统计', icon: 'report', path: '/admin/reports/collectors', activePrefixes: ['/admin/reports/'], roles: ['ADMIN'] },
   {
     key: 'voice-generation', title: '语音生成', icon: 'voice', roles: ['ADMIN'], children: [
       { key: 'voice-workbench', title: '语音生成工作台', path: '/admin/voice-generation/workbench' },
@@ -44,5 +36,7 @@ export function sidebarForRole(role) {
 }
 
 export function findAdminSidebarGroupKeyByPath(path, items = adminSidebar) {
-  return items.find((item) => item.children?.some((child) => child.path === path))?.key || null
+  return items.find((item) => item.children?.some((child) =>
+    child.path === path || child.activePrefixes?.some(prefix => path.startsWith(prefix))
+  ))?.key || null
 }

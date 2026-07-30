@@ -45,8 +45,19 @@ describe('adminSidebar', () => {
   it('finds the parent group key for child route paths', () => {
     assert.equal(typeof adminSidebarConfig.findAdminSidebarGroupKeyByPath, 'function')
     assert.equal(adminSidebarConfig.findAdminSidebarGroupKeyByPath('/admin/tasks'), 'tasks')
-	assert.equal(adminSidebarConfig.findAdminSidebarGroupKeyByPath('/admin/review'), 'review')
+	assert.equal(adminSidebarConfig.findAdminSidebarGroupKeyByPath('/admin/review'), null)
     assert.equal(adminSidebarConfig.findAdminSidebarGroupKeyByPath('/admin/dashboard'), null)
+  })
+
+  it('uses direct review and report entries with child-route active prefixes', () => {
+    const review = adminSidebar.find((item) => item.key === 'review')
+    const reports = adminSidebar.find((item) => item.key === 'reports')
+    assert.equal(review.path, '/admin/review')
+    assert.deepEqual(review.activePrefixes, ['/admin/review/'])
+    assert.equal(review.children, undefined)
+    assert.equal(reports.path, '/admin/reports/collectors')
+    assert.deepEqual(reports.activePrefixes, ['/admin/reports/'])
+    assert.equal(reports.children, undefined)
   })
 
   it('uses the real-data dashboard label', () => {

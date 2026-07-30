@@ -23,6 +23,7 @@ import com.recording.platform.task.store.ReviewReleaseMutation;
 import com.recording.platform.task.store.ReviewDecisionMutation;
 import com.recording.platform.task.store.TaskItemStore;
 import com.recording.platform.task.store.TaskStore;
+import com.recording.platform.task.store.ReviewTaskMetrics;
 import com.recording.platform.task.model.TaskConfiguration;
 import com.recording.platform.task.model.TaskRecord;
 import com.recording.platform.task.model.TaskResultType;
@@ -40,12 +41,59 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Optional;
 import java.util.List;
+import org.springframework.data.domain.Page;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 
 class ReviewServiceTests {
 	private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-07-12T08:00:00Z"), ZoneOffset.UTC);
+
+	@Test
+	void reviewTaskSummariesUseOneAggregateFilterBacklogAndSortStably() {
+		TaskItemStore items = mock(TaskItemStore.class);
+		TaskStore tasks = mock(TaskStore.class);
+		TaskRecord first = task("task-1", "T000002", "任务二");
+		TaskRecord second = task("task-2", "T000001", "任务一");
+		TaskRecord empty = task("task-3", "T000003", "无积压");
+		when(tasks.findAll(any())).thenReturn(new PageImpl<>(List.of(first, second, empty)));
+		when(items.reviewTaskMetrics(any(), any(), any())).thenReturn(List.of(
+			new ReviewTaskMetrics("task-1", 12, 5, 8, 6, 2, 1, 3),
+			new ReviewTaskMetrics("task-2", 9, 4, 6, 3, 1, 0, 2),
+			new ReviewTaskMetrics("task-3", 3, 3, 3, 3, 0, 0, 1)
+		));
+		ReviewService service = new ReviewService(items, tasks, CLOCK);
+
+		var summaries = service.tasks(admin());
+
+		assertThat(summaries).extracting("taskId").containsExactly("task-1", "task-2");
+		assertThat(summaries.get(0).pendingCount()).isEqualTo(3);
+		assertThat(summaries.get(0).submittedCount()).isEqualTo(2);
+		assertThat(summaries.get(0).reviewPendingCount()).isEqualTo(1);
+		assertThat(summaries.get(0).todayCompletedCount()).isEqualTo(3);
+		verify(items).reviewTaskMetrics(
+			eq(List.of("task-1", "task-2", "task-3")),
+			eq(Instant.parse("2026-07-11T16:00:00Z")),
+			eq(Instant.parse("2026-07-12T16:00:00Z"))
+		);
+	}
+
+	@Test
+	void singleTaskSummaryReturnsMetricsAndMissingTaskUsesExistingNotFoundError() {
+		TaskItemStore items = mock(TaskItemStore.class);
+		TaskStore tasks = mock(TaskStore.class);
+		TaskRecord task = task("task-1", "T000001", "任务一");
+		when(tasks.findById("task-1")).thenReturn(Optional.of(task));
+		when(items.reviewTaskMetrics(any(), any(), any())).thenReturn(List.of(
+			new ReviewTaskMetrics("task-1", 10, 4, 7, 5, 2, 1, 2)
+		));
+		ReviewService service = new ReviewService(items, tasks, CLOCK);
+
+		assertThat(service.taskSummary("task-1", reviewer()).reviewProcessedCount()).isEqualTo(5);
+		assertThatThrownBy(() -> service.taskSummary("missing", reviewer()))
+			.isInstanceOfSatisfying(ApiException.class,
+				error -> assertThat(error.getCode()).isEqualTo("TASK_NOT_FOUND"));
+	}
 
 	@Test
 	void adminOrReviewerClaimsASpecificSubmittedItemBeforeDecision() {
@@ -544,6 +592,14 @@ class ReviewServiceTests {
 		task.setId("task-1");
 		task.setConfiguration(configuration);
 		when(tasks.findById("task-1")).thenReturn(Optional.of(task));
+	}
+
+	private TaskRecord task(String id, String code, String name) {
+		TaskRecord task = new TaskRecord();
+		task.setId(id);
+		task.setTaskCode(code);
+		task.setName(name);
+		return task;
 	}
 
 	private com.recording.platform.task.model.SubmittedRecording recording() {

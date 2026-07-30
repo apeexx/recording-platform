@@ -90,6 +90,14 @@ describe('审核页面 API', () => {
     expect(url).toContain('result=TEXT_AND_AUDIO')
   })
 
+  it('审核汇总支持任务列表和单任务指标', async () => {
+    httpRequest.mockResolvedValue({})
+    await reviewApi.tasks()
+    await reviewApi.taskSummary('task-1')
+    expect(httpRequest).toHaveBeenNthCalledWith(1, '/api/reviews/tasks')
+    expect(httpRequest).toHaveBeenNthCalledWith(2, '/api/reviews/tasks/task-1/summary')
+  })
+
   it('审核人员候选使用审核域接口而不是管理员用户搜索', async () => {
     httpRequest.mockResolvedValue([])
     await reviewApi.filterUsers('task-1', 'COLLECTOR', '张')
@@ -156,5 +164,19 @@ describe('审核页面 API', () => {
     expect(queue).toContain('kind="reviewer"')
     expect(queue).toContain('kind="status"')
     expect(queue).toContain('kind="result"')
+    expect(queue).toContain('审核池筛选')
+    expect(queue).toContain('清除筛选')
+    expect(queue).toContain('review-summary-grid')
+  })
+
+  it('审核入口包含双进度轮播、六秒自动切换和手动锁定阈值', () => {
+    const entry = readFileSync(join(process.cwd(), 'src/pages/admin/review/ReviewTaskSelectPage.vue'), 'utf8')
+    expect(entry).toContain('任务整体进度')
+    expect(entry).toContain('审核处理进度')
+    expect(entry).toContain('6000')
+    expect(entry).toContain('48')
+    expect(entry).toContain('prefers-reduced-motion')
+    expect(entry).toContain('当前积压')
+    expect(entry).toContain('今日完成')
   })
 })

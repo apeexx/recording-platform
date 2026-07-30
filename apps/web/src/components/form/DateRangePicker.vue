@@ -11,6 +11,7 @@ const root = ref(null)
 const trigger = ref(null)
 const open = ref(false)
 const draftStart = ref('')
+const previewDate = ref('')
 const displayMonth = ref('')
 const weekdays = ['一', '二', '三', '四', '五', '六', '日']
 
@@ -57,8 +58,14 @@ const displayValue = computed(() => {
   const format = value => value ? value.replaceAll('-', '/') : '—'
   return `${format(props.fromDate)} — ${format(props.toDate)}`
 })
-function rangeStart() { return draftStart.value || props.fromDate }
-function rangeEnd() { return draftStart.value ? draftStart.value : props.toDate }
+function rangeStart() {
+  if (draftStart.value && previewDate.value) return previewDate.value < draftStart.value ? previewDate.value : draftStart.value
+  return draftStart.value || props.fromDate
+}
+function rangeEnd() {
+  if (draftStart.value && previewDate.value) return previewDate.value < draftStart.value ? draftStart.value : previewDate.value
+  return draftStart.value ? draftStart.value : props.toDate
+}
 function dayClass(date) {
   const start = rangeStart()
   const end = rangeEnd()
@@ -72,16 +79,19 @@ function dayClass(date) {
 async function openPicker() {
   displayMonth.value = monthStart(props.fromDate || props.today)
   draftStart.value = ''
+  previewDate.value = ''
   open.value = true
   await nextTick()
 }
 function closePicker() {
   open.value = false
   draftStart.value = ''
+  previewDate.value = ''
 }
 function chooseDate(date) {
   if (!draftStart.value) {
     draftStart.value = date
+    previewDate.value = ''
     return
   }
   const fromDate = date < draftStart.value ? date : draftStart.value
@@ -89,6 +99,9 @@ function chooseDate(date) {
   emit('change', { fromDate, toDate })
   closePicker()
   trigger.value?.focus()
+}
+function previewRange(date) {
+  if (draftStart.value) previewDate.value = date
 }
 function keydown(event) {
   if (event.key === 'Escape' && open.value) {
@@ -134,6 +147,7 @@ defineExpose({ openPicker })
           :data-date="day.date"
           :class="[dayClass(day.date), { 'is-outside': !day.currentMonth }]"
           :aria-label="day.date"
+          @pointerenter="previewRange(day.date)"
           @click="chooseDate(day.date)"
         >{{ day.day }}</button>
       </div>

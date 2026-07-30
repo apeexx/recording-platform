@@ -1,10 +1,7 @@
-package com.recording.platform.review.service;
+package com.recording.platform.task.store;
 
-public record ReviewTaskSummary(
+public record ReviewTaskMetrics(
 	String taskId,
-	String taskCode,
-	String taskName,
-	long pendingCount,
 	long effectiveItemCount,
 	long completedCount,
 	long reviewEnteredCount,
@@ -12,4 +9,8 @@ public record ReviewTaskSummary(
 	long submittedCount,
 	long reviewPendingCount,
 	long todayCompletedCount
-) { }
+) {
+	public long pendingCount() {
+		return submittedCount + reviewPendingCount;
+	}
+}

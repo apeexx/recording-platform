@@ -19,6 +19,7 @@ const tasks = ref([])
 const taskId = ref('')
 const rows = ref([])
 const page = ref(0)
+const size = ref(20)
 const total = ref(0)
 const loading = ref(false)
 const error = ref('')
@@ -49,7 +50,7 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    const result = await taskApi.items(taskId.value, page.value, 20, filters.value)
+    const result = await taskApi.items(taskId.value, page.value, size.value, filters.value)
     rows.value = result.items || []
     total.value = result.total || 0
   } catch (exception) {
@@ -70,6 +71,12 @@ async function choose() {
 async function changePage(value) {
   page.value = value
   selection.clearPageMode()
+  await load()
+}
+async function changeSize(value) {
+  size.value = value
+  page.value = 0
+  selection.clear()
   await load()
 }
 async function changeFilters(value) {
@@ -270,7 +277,7 @@ onBeforeUnmount(clearPoll)
             </tr></tbody>
           </table>
         </div>
-        <PaginationControls :page="page" :size="20" :total="total" @change="changePage"/>
+        <PaginationControls :page="page" :size="size" :total="total" @change="changePage" @size-change="changeSize"/>
       </AsyncState>
     </div>
   </section>

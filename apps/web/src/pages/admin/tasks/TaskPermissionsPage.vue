@@ -181,15 +181,17 @@ onMounted(initialize)
             <input v-model.trim="userQuery" placeholder="姓名、完整用户 ID 或登录账号">
             <button class="button-primary" :disabled="userLoading">搜索</button>
           </form>
-          <AsyncState :loading="userLoading" :error="''" :empty="!users.length" empty-text="没有匹配的小程序用户">
-            <div class="permission-user-list">
+          <div class="permission-list-slot permission-list-slot--ten">
+            <AsyncState :loading="userLoading" :error="''" :empty="!users.length" empty-text="没有匹配的小程序用户">
+              <div class="permission-user-list">
               <div v-for="user in users" :key="user.id">
                 <span><strong>{{ user.name || '未设置姓名' }}</strong><small>{{ user.id }} · {{ user.loginName || '未设置登录账号' }}</small></span>
                 <button class="button-secondary" :disabled="grantedIds.has(user.id)" @click="grant(user)">{{ grantedIds.has(user.id) ? '已授权' : '直接授权' }}</button>
               </div>
-            </div>
-            <PaginationControls numbered :page="userPage" :size="userSize" :page-sizes="[5, 10]" :total="userTotal" @change="changeUserPage" @size-change="changeUserSize"/>
-          </AsyncState>
+              </div>
+            </AsyncState>
+          </div>
+          <PaginationControls :page="userPage" :size="userSize" :page-sizes="[5, 10]" :total="userTotal" @change="changeUserPage" @size-change="changeUserSize"/>
         </article>
 
         <div class="permission-side">
@@ -199,15 +201,17 @@ onMounted(initialize)
               <input v-model.trim="requestQuery" placeholder="姓名、完整用户 ID 或登录账号">
               <button class="button-primary" :disabled="requestLoading">搜索</button>
             </form>
-            <AsyncState :loading="requestLoading" :error="''" :empty="!requests.length" empty-text="当前没有待审批申请">
-              <div class="permission-user-list">
+            <div class="permission-list-slot permission-list-slot--five">
+              <AsyncState :loading="requestLoading" :error="''" :empty="!requests.length" empty-text="当前没有待审批申请">
+                <div class="permission-user-list">
                 <div v-for="row in requests" :key="row.id">
                   <span><strong>{{ row.userName || '未设置姓名' }}</strong><small>{{ row.userId }} · {{ row.userLoginName || '未设置登录账号' }}</small></span>
                   <span class="permission-row-actions"><button class="button-link" @click="decide(row,'approve')">通过</button><button class="button-link is-danger" @click="decide(row,'reject')">驳回</button></span>
                 </div>
-              </div>
-              <PaginationControls numbered :page="requestPage" :size="requestSize" :page-sizes="[5, 10]" :total="requestTotal" @change="changeRequestPage" @size-change="changeRequestSize"/>
-            </AsyncState>
+                </div>
+              </AsyncState>
+            </div>
+            <PaginationControls :page="requestPage" :size="requestSize" :page-sizes="[5, 10]" :total="requestTotal" @change="changeRequestPage" @size-change="changeRequestSize"/>
           </article>
 
           <article class="business-card">
@@ -216,15 +220,17 @@ onMounted(initialize)
               <input v-model.trim="grantQuery" placeholder="姓名、完整用户 ID 或登录账号">
               <button class="button-primary" :disabled="grantLoading">搜索</button>
             </form>
-            <AsyncState :loading="grantLoading" :error="''" :empty="!grants.length" empty-text="尚未授权采集员">
-              <div class="permission-user-list">
+            <div class="permission-list-slot permission-list-slot--five">
+              <AsyncState :loading="grantLoading" :error="''" :empty="!grants.length" empty-text="尚未授权采集员">
+                <div class="permission-user-list">
                 <div v-for="row in grants" :key="row.id">
                   <span><strong>{{ row.userName || '未设置姓名' }}</strong><small>{{ row.userId }} · {{ row.userLoginName || '未设置登录账号' }}</small></span>
                   <button class="button-link is-danger" @click="revoke(row)">撤销</button>
                 </div>
-              </div>
-              <PaginationControls numbered :page="grantPage" :size="grantSize" :page-sizes="[5, 10]" :total="grantTotal" @change="changeGrantPage" @size-change="changeGrantSize"/>
-            </AsyncState>
+                </div>
+              </AsyncState>
+            </div>
+            <PaginationControls :page="grantPage" :size="grantSize" :page-sizes="[5, 10]" :total="grantTotal" @change="changeGrantPage" @size-change="changeGrantSize"/>
           </article>
         </div>
       </div>

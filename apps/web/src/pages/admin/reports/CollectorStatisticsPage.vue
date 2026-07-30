@@ -28,16 +28,16 @@ const taskId = ref(String(route.query.taskId || ''))
 const fromDate = ref(String(route.query.fromDate ?? today))
 const toDate = ref(String(route.query.toDate ?? today))
 const activePreset = ref(route.query.fromDate || route.query.toDate ? 'custom' : 'today')
-const sortBy = ref(String(route.query.sortBy || 'completionCount'))
-const sortDirection = ref(route.query.sortDirection === 'asc' ? 'asc' : 'desc')
+const sortBy = ref(route.query.sortBy ? String(route.query.sortBy) : '')
+const sortDirection = ref(sortBy.value && route.query.sortDirection === 'asc' ? 'asc' : sortBy.value ? 'desc' : '')
 const page = ref(Math.max(0, Number(route.query.page) || 0))
+const pageSize = ref([10, 20, 50].includes(Number(route.query.size)) ? Number(route.query.size) : 20)
 const summary = ref(null)
 const rankings = ref([])
 const total = ref(0)
 const loading = ref(false)
 const loadError = ref('')
 const dateRangePicker = ref(null)
-const pageSize = 20
 let requestSequence = 0
 const seconds = (value) => `${((Number(value) || 0) / 1000).toFixed(1)} 秒`
 const time = (value) => value ? new Intl.DateTimeFormat('zh-CN', {
@@ -85,10 +85,14 @@ async function changeDateRange(range) {
   if (taskId.value) await search(true)
 }
 async function changeSort(field) {
-  if (sortBy.value === field) sortDirection.value = sortDirection.value === 'desc' ? 'asc' : 'desc'
-  else {
+  if (sortBy.value !== field) {
     sortBy.value = field
     sortDirection.value = 'desc'
+  } else if (sortDirection.value === 'desc') {
+    sortDirection.value = 'asc'
+  } else {
+    sortBy.value = ''
+    sortDirection.value = ''
   }
   page.value = 0
   await search(true)
@@ -106,9 +110,9 @@ function syncQuery() {
     query: {
       taskId: taskId.value,
       ...reportParams.value,
-      sortBy: sortBy.value,
-      sortDirection: sortDirection.value,
+      ...(sortBy.value ? { sortBy: sortBy.value, sortDirection: sortDirection.value } : {}),
       page: page.value || undefined,
+      size: pageSize.value === 20 ? undefined : pageSize.value,
     },
   })
 }
@@ -123,10 +127,9 @@ async function search(refresh = false) {
       reportApi.tasks({ taskId: taskId.value, ...reportParams.value }),
       reportApi.taskCollectors(taskId.value, {
         ...reportParams.value,
-        sortBy: sortBy.value,
-        sortDirection: sortDirection.value,
+        ...(sortBy.value ? { sortBy: sortBy.value, sortDirection: sortDirection.value } : {}),
         page: page.value,
-        size: pageSize,
+        size: pageSize.value,
       }),
     ])
     if (requestId !== requestSequence) return
@@ -142,6 +145,7 @@ async function search(refresh = false) {
   }
 }
 async function changePage(value) { page.value = value; await search(true) }
+async function changePageSize(value) { pageSize.value = value; page.value = 0; await search(true) }
 const ariaSort = field => sortBy.value === field
   ? (sortDirection.value === 'asc' ? 'ascending' : 'descending')
   : 'none'
@@ -154,9 +158,9 @@ function openCollector(row) {
     params: { taskId: taskId.value, collectorId: row.collectorId },
     query: {
       ...reportParams.value,
-      sortBy: sortBy.value,
-      sortDirection: sortDirection.value,
+      ...(sortBy.value ? { sortBy: sortBy.value, sortDirection: sortDirection.value } : {}),
       page: page.value || undefined,
+      size: pageSize.value === 20 ? undefined : pageSize.value,
     },
   })
 }
@@ -195,14 +199,17 @@ onMounted(() => { if (taskId.value) search() })
           <DateRangePicker ref="dateRangePicker" :from-date="fromDate" :to-date="toDate"
             :today="today" @change="changeDateRange" />
         </div>
-        <span v-if="loading && summary" class="report-refreshing">正在更新统计…</span>
       </div>
     </section>
     <AsyncState :loading="loading && !summary" :error="loadError" :empty="!summary"
       empty-text="请选择任务，选择后将自动加载统计" @retry="search">
-      <StageSummaryPanel :summary="summary" />
-      <SubmissionHourDistribution :values="summary?.submissionHourDistribution" />
-      <section class="business-card report-section">
+      <div class="report-content">
+        <div v-if="loading && summary" class="report-loading-overlay" role="status" aria-label="正在更新统计">
+          <span class="report-loading-spinner"></span>
+        </div>
+        <StageSummaryPanel :summary="summary" />
+        <SubmissionHourDistribution :values="summary?.submissionHourDistribution" />
+        <section class="business-card report-section">
         <div class="business-heading"><div><h3>任务内采集员</h3><p>点击人员进入独立详情页，查看每日统计与两套明细。</p></div><span>共 {{ total }} 人</span></div>
         <div class="business-table-wrap">
           <table class="business-table report-table">
@@ -237,12 +244,13 @@ onMounted(() => { if (taskId.value) search() })
           </table>
         </div>
         <p v-if="!rankings.length" class="business-note">当前范围内暂无采集员统计。</p>
-        <PaginationControls :page="page" :size="pageSize" :total="total" @change="changePage" />
-      </section>
+        <PaginationControls :page="page" :size="pageSize" :total="total" @change="changePage" @size-change="changePageSize" />
+        </section>
+      </div>
     </AsyncState>
   </section>
 </template>
 
 <style scoped>
-.collector-report-page{display:grid;gap:18px}.report-control-card{padding:18px}.report-controls{display:grid;gap:15px}.report-controls>.task-search-select{max-width:720px}.date-toolbar{display:flex;align-items:center;gap:12px}.date-presets{display:flex;gap:7px;flex-wrap:wrap}.date-presets button{border:1px solid var(--border);border-radius:999px;background:var(--card);color:var(--muted-foreground);padding:7px 13px;cursor:pointer}.date-presets button.is-active{border-color:color-mix(in srgb,var(--primary) 45%,var(--border));background:color-mix(in srgb,var(--primary) 10%,var(--card));color:var(--primary)}.date-toolbar>.date-range-picker{margin-left:auto}.report-refreshing{color:var(--primary);font-size:13px}.report-section{margin-top:0}.report-table{min-width:1480px}.report-table thead tr:first-child th{text-align:center;background:color-mix(in srgb,var(--primary) 5%,var(--card))}.sort-header{display:inline-flex;align-items:center;justify-content:center;gap:5px;width:100%;padding:4px;background:transparent;color:inherit;font:inherit;font-weight:700;white-space:nowrap;cursor:pointer}.sort-header span{color:var(--primary);font-size:12px}.clickable-row{cursor:pointer}.clickable-row:hover{background:color-mix(in srgb,var(--primary) 7%,var(--card))}.clickable-row small{display:block;margin-top:3px;color:var(--muted-foreground)}@media(max-width:900px){.date-toolbar{align-items:stretch;flex-direction:column}.date-toolbar>.date-range-picker{width:100%;margin-left:0}}@media(max-width:720px){.report-control-card{padding:14px}.date-presets{gap:6px}.date-presets button{padding:7px 11px}}
+.collector-report-page{display:grid;gap:18px}.report-control-card{padding:18px}.report-controls{display:grid;gap:15px}.report-controls>.task-search-select{max-width:720px}.date-toolbar{display:flex;align-items:center;gap:12px}.date-presets{display:flex;align-items:center;gap:7px;flex-wrap:wrap}.date-presets button{min-height:42px;border:1px solid var(--border);border-radius:999px;background:var(--card);color:var(--muted-foreground);padding:7px 13px;cursor:pointer}.date-presets button.is-active{border-color:color-mix(in srgb,var(--primary) 45%,var(--border));background:color-mix(in srgb,var(--primary) 10%,var(--card));color:var(--primary)}.date-toolbar>.date-range-picker{margin-left:auto}.report-content{position:relative;display:grid;gap:18px}.report-loading-overlay{position:absolute;z-index:12;inset:0;display:grid;place-items:center;border-radius:var(--radius);background:color-mix(in srgb,var(--background) 58%,transparent);backdrop-filter:blur(1px)}.report-loading-spinner{width:34px;height:34px;border:5px solid color-mix(in srgb,var(--primary) 24%,var(--card));border-top-color:var(--primary);border-radius:50%;animation:report-spin .75s linear infinite}@keyframes report-spin{to{transform:rotate(360deg)}}.report-section{margin-top:0}.report-table{min-width:1480px}.report-table thead tr:first-child th{text-align:center;background:color-mix(in srgb,var(--primary) 5%,var(--card))}.sort-header{display:inline-flex;align-items:center;justify-content:center;gap:5px;width:100%;padding:4px;background:transparent;color:inherit;font:inherit;font-weight:700;white-space:nowrap;cursor:pointer}.sort-header span{color:var(--primary);font-size:12px}.clickable-row{cursor:pointer}.clickable-row:hover{background:color-mix(in srgb,var(--primary) 7%,var(--card))}.clickable-row small{display:block;margin-top:3px;color:var(--muted-foreground)}@media(prefers-reduced-motion:reduce){.report-loading-spinner{animation-duration:1.5s}}@media(max-width:900px){.date-toolbar{align-items:stretch;flex-direction:column}.date-toolbar>.date-range-picker{width:100%;margin-left:0}}@media(max-width:720px){.report-control-card{padding:14px}.date-presets{gap:6px}.date-presets button{padding:7px 11px}}
 </style>

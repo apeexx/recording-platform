@@ -32,12 +32,12 @@ describe('用户管理类型页签', () => {
 
     expect(wrapper.text()).toContain('Web 端账号')
     expect(wrapper.text()).toContain('小程序端账号')
-    expect(userApi.search).toHaveBeenLastCalledWith({ query: '', userType: 'WEB', page: 0, size: 100 })
+    expect(userApi.search).toHaveBeenLastCalledWith({ query: '', userType: 'WEB', page: 0, size: 20 })
 
     await wrapper.get('[data-user-type="MINIPROGRAM"]').trigger('click')
     await flushPromises()
 
-    expect(userApi.search).toHaveBeenLastCalledWith({ query: '', userType: 'MINIPROGRAM', page: 0, size: 100 })
+    expect(userApi.search).toHaveBeenLastCalledWith({ query: '', userType: 'MINIPROGRAM', page: 0, size: 20 })
     expect(wrapper.text()).not.toContain('创建后台账号')
     wrapper.unmount()
   })

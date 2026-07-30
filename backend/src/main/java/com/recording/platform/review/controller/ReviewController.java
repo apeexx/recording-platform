@@ -64,6 +64,12 @@ public class ReviewController {
 		@AuthenticationPrincipal PlatformPrincipal actor
 	) { return reviews.tasks(actor); }
 
+	@GetMapping("/tasks/{taskId}/summary")
+	public com.recording.platform.review.service.ReviewTaskSummary taskSummary(
+		@PathVariable String taskId,
+		@AuthenticationPrincipal PlatformPrincipal actor
+	) { return reviews.taskSummary(taskId, actor); }
+
 	@GetMapping("/tasks/{taskId}/pool")
 	public PageResponse<com.recording.platform.review.service.ReviewPoolItemView> pool(
 		@PathVariable String taskId,

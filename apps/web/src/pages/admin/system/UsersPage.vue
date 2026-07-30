@@ -2,6 +2,7 @@
 import { nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import PageActions from '../../../components/admin/PageActions.vue'
 import AsyncState from '../../../components/admin/AsyncState.vue'
+import PaginationControls from '../../../components/admin/PaginationControls.vue'
 import BaseSelect from '../../../components/form/BaseSelect.vue'
 import { useNotifications } from '../../../composables/useNotifications.js'
 import { statusLabel } from '../../../lib/statusLabels.js'
@@ -13,6 +14,9 @@ const loading = ref(false)
 const error = ref('')
 const query = ref('')
 const view = ref('WEB')
+const page = ref(0)
+const size = ref(20)
+const total = ref(0)
 const createOpen = ref(false)
 const creating = ref(false)
 const createTrigger = ref(null)
@@ -29,8 +33,11 @@ async function load(showToast = false) {
   loading.value = true
   error.value = ''
   try {
-    const response = await userApi.search({query:query.value,userType:view.value,page:0,size:100})
-    if (sequence === loadSequence) rows.value = response.content || []
+    const response = await userApi.search({query:query.value,userType:view.value,page:page.value,size:size.value})
+    if (sequence === loadSequence) {
+      rows.value = response.content || []
+      total.value = Number(response.totalElements) || 0
+    }
   } catch (exception) {
     if (sequence === loadSequence) {
       if (showToast || rows.value.length) notifications.error(exception.message)
@@ -46,9 +53,14 @@ function switchView(next) {
   closeCreate()
   view.value = next
   query.value = ''
+  page.value = 0
   rows.value = []
   load()
 }
+
+async function search() { page.value = 0; await load(true) }
+async function changePage(value) { page.value = value; await load(true) }
+async function changeSize(value) { size.value = value; page.value = 0; await load(true) }
 
 function sourceLabel(row) {
   if (row.userType === 'WEB') return '后台创建'
@@ -182,8 +194,8 @@ onBeforeUnmount(() => {
       <button data-user-type="MINIPROGRAM" :class="['tab', view === 'MINIPROGRAM' && 'active']" @click="switchView('MINIPROGRAM')">小程序端账号</button>
     </PageActions>
     <div class="toolbar">
-      <input v-model="query" placeholder="按姓名、完整用户 ID 或登录名搜索" @keyup.enter="load(true)">
-      <button class="primary" @click="load(true)">搜索</button>
+      <input v-model="query" placeholder="按姓名、完整用户 ID 或登录名搜索" @keyup.enter="search">
+      <button class="primary" @click="search">搜索</button>
       <button v-if="view === 'WEB'" ref="createTrigger" data-testid="open-create-user" class="primary create-trigger" @click="openCreate">创建后台账号</button>
     </div>
     <AsyncState :loading="loading" :error="error" :empty="!rows.length">
@@ -204,6 +216,7 @@ onBeforeUnmount(() => {
             </tr>
           </tbody>
         </table>
+        <PaginationControls :page="page" :size="size" :total="total" @change="changePage" @size-change="changeSize" />
       </div>
     </AsyncState>
     <Teleport to="body">

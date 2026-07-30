@@ -15,7 +15,8 @@ const props = defineProps({
 })
 
 const route = useRoute()
-const isActive = computed(() => route.path === props.item.path)
+const isActive = computed(() => route.path === props.item.path
+  || props.item.activePrefixes?.some(prefix => route.path.startsWith(prefix)))
 </script>
 
 <template>

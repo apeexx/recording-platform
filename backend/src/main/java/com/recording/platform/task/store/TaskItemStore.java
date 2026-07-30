@@ -6,6 +6,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import java.util.List;
 import java.util.Collection;
+import java.time.Instant;
 
 public interface TaskItemStore {
 	TaskItem save(TaskItem item);
@@ -22,6 +23,9 @@ public interface TaskItemStore {
 	default Optional<TaskItem> claimReview(ReviewClaimMutation mutation) { return Optional.empty(); }
 	default Optional<TaskItem> claimReviewItem(ReviewItemClaimMutation mutation) { return Optional.empty(); }
 	default long countReviewPendingByTaskId(String taskId) { return 0; }
+	default List<ReviewTaskMetrics> reviewTaskMetrics(
+		Collection<String> taskIds, Instant todayStart, Instant tomorrowStart
+	) { return List.of(); }
 	default Page<TaskItem> findReviewPoolByTaskId(String taskId, boolean includeAssigned, String reviewerId, Pageable pageable) {
 		return Page.empty(pageable);
 	}

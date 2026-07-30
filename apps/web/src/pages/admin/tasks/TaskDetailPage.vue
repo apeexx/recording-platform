@@ -17,7 +17,7 @@ import { defaultTaskItemFilters, selectionFilters } from '../../../lib/taskItemF
 const notifications = useNotifications()
 const route = useRoute()
 const router = useRouter()
-const itemPageSize = ref(10)
+const itemPageSize = ref(20)
 const task = ref(null)
 const items = ref([])
 const page = ref(0)
@@ -464,7 +464,7 @@ onBeforeUnmount(() => { stopImportTracking(); clearBatchPoll() })
                 </tr></tbody>
               </table>
             </div>
-            <PaginationControls numbered :page="page" :size="itemPageSize" :page-sizes="[5, 10, 20]" :total="total" @change="changePage" @size-change="changePageSize" />
+            <PaginationControls :page="page" :size="itemPageSize" :page-sizes="[10, 20, 50]" :total="total" @change="changePage" @size-change="changePageSize" />
           </AsyncState>
         </div>
       </div>

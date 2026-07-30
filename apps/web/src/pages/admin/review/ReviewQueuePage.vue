@@ -24,7 +24,9 @@ const error = ref('')
 const count = ref(5)
 const notice = ref('')
 const page = ref(0)
+const size = ref(20)
 const total = ref(0)
+const summary = ref(null)
 const reviewerId = ref('')
 const preview = ref(null)
 const batchJob = ref(null)
@@ -42,9 +44,13 @@ async function load(showToast = false) {
   loading.value = true
   error.value = ''
   try {
-    const result = await reviewApi.pool(route.params.taskId, page.value, 20, filters.value)
+    const [result, nextSummary] = await Promise.all([
+      reviewApi.pool(route.params.taskId, page.value, size.value, filters.value),
+      reviewApi.taskSummary(route.params.taskId),
+    ])
     rows.value = result.items || []
     total.value = result.total || 0
+    summary.value = nextSummary
   } catch (exception) {
     if (showToast || rows.value.length) notifications.error(exception.message)
     else error.value = exception.message
@@ -152,12 +158,25 @@ async function changePage(value) {
   selection.clearPageMode()
   await load()
 }
+async function changeSize(value) {
+  size.value = value
+  page.value = 0
+  selection.clear()
+  await load(true)
+}
 async function changeFilters(value) {
   filters.value = value
   page.value = 0
   selection.clear()
   preview.value = null
   await load()
+}
+async function clearFilters() {
+  filters.value = defaultReviewFilters()
+  page.value = 0
+  selection.clear()
+  preview.value = null
+  await load(true)
 }
 function clearPoll() {
   if (pollTimer.value) window.clearTimeout(pollTimer.value)
@@ -193,23 +212,33 @@ onBeforeUnmount(clearPoll)
 
 <template>
   <section class="admin-page">
-    <PageActions title="任务审核池" description="已提交数据需先领取或分配，进入待审核后才能作出决定。">
+    <PageActions :title="summary?.taskName || '任务审核池'" :description="`${summary?.taskCode || ''} · 已提交数据需先领取或分配，进入待审核后才能作出决定。`">
       <router-link class="button-secondary" to="/admin/review">返回选择任务</router-link>
       <router-link v-if="isAdmin" class="button-secondary" :to="`/admin/review/tasks/${route.params.taskId}/ai-settings`">AI 审核设置</router-link>
       <button class="button-secondary" @click="load(true)">刷新</button>
       <button v-if="isReviewer" class="button-primary" @click="claim">领取一条</button>
     </PageActions>
+    <section class="review-summary-grid">
+      <article><span>当前积压</span><strong>{{ summary?.pendingCount || 0 }}</strong></article>
+      <article><span>待领取</span><strong>{{ summary?.submittedCount || 0 }}</strong></article>
+      <article><span>审核中</span><strong>{{ summary?.reviewPendingCount || 0 }}</strong></article>
+      <article><span>今日完成</span><strong>{{ summary?.todayCompletedCount || 0 }}</strong></article>
+    </section>
     <div class="business-card">
-      <div class="business-inline">
+      <section class="review-filter-toolbar">
+        <div class="business-heading"><div><h3>审核池筛选</h3><p>按条目、采集员、审核员、状态和成果类型组合筛选。</p></div><button class="button-secondary" @click="clearFilters">清除筛选</button></div>
+        <div class="review-filter-grid">
+          <TaskItemFilters review-mode kind="code" :task-id="route.params.taskId" :model-value="filters" @change="changeFilters"/>
+          <TaskItemFilters review-mode kind="collector" :task-id="route.params.taskId" :model-value="filters" @change="changeFilters"/>
+          <TaskItemFilters review-mode kind="reviewer" :task-id="route.params.taskId" :model-value="filters" @change="changeFilters"/>
+          <TaskItemFilters review-mode kind="status" :model-value="filters" @change="changeFilters"/>
+          <TaskItemFilters review-mode kind="result" :model-value="filters" @change="changeFilters"/>
+        </div>
+      </section>
+      <div v-if="isReviewer" class="business-inline review-claim-tools">
         <template v-if="isReviewer">
           <label>批量领取数量 <input v-model.number="count" type="number" min="1" max="100"/></label>
           <button class="button-secondary" @click="claimBatch">批量领取</button>
-        </template>
-        <button class="button-secondary" :disabled="!actionCount('REVIEW_CLAIM') || processing" @click="batchClaimSelected">批量领取审核（{{ actionCount('REVIEW_CLAIM') }}）</button>
-        <template v-if="isAdmin">
-          <UserSearchSelect v-model="reviewerId" role="REVIEWER" user-type="WEB" placeholder="选择审核员"/>
-          <button class="button-secondary" :disabled="!actionCount('REVIEW_ASSIGN') || !reviewerId || processing" @click="batchAssign">批量分配（{{ actionCount('REVIEW_ASSIGN') }}）</button>
-          <button class="button-secondary" :disabled="!actionCount('REVIEW_APPROVE') || processing" @click="batchApprove">批量通过（{{ actionCount('REVIEW_APPROVE') }}）</button>
         </template>
       </div>
       <div v-if="selection.selectedCount.value" class="batch-selection-bar">
@@ -217,6 +246,12 @@ onBeforeUnmount(clearPoll)
         <button v-if="selection.mode.value === 'PAGE' && total > selection.selectedCount.value" class="button-link" @click="selectAllMatching">选择全部 {{ total }} 条筛选结果</button>
         <strong v-else-if="selection.mode.value === 'ALL'">已跨页全选</strong>
         <button class="button-link" @click="selection.clear(); preview = null">清除选择</button>
+        <button class="button-secondary" :disabled="!actionCount('REVIEW_CLAIM') || processing" @click="batchClaimSelected">批量领取审核（{{ actionCount('REVIEW_CLAIM') }}）</button>
+        <template v-if="isAdmin">
+          <UserSearchSelect v-model="reviewerId" role="REVIEWER" user-type="WEB" placeholder="选择审核员"/>
+          <button class="button-secondary" :disabled="!actionCount('REVIEW_ASSIGN') || !reviewerId || processing" @click="batchAssign">批量分配（{{ actionCount('REVIEW_ASSIGN') }}）</button>
+          <button class="button-secondary" :disabled="!actionCount('REVIEW_APPROVE') || processing" @click="batchApprove">批量通过（{{ actionCount('REVIEW_APPROVE') }}）</button>
+        </template>
       </div>
       <div v-if="batchJob" class="batch-job-card" aria-live="polite">
         <strong>{{ processing ? '批处理中' : '最近批处理' }}</strong>
@@ -229,11 +264,9 @@ onBeforeUnmount(clearPoll)
           <table class="business-table">
             <thead><tr>
               <th><input type="checkbox" :checked="selection.pageAllSelected.value" aria-label="选择当前页面" @change="selection.togglePage"/></th>
-              <th><TaskItemFilters review-mode kind="code" :task-id="route.params.taskId" :model-value="filters" @change="changeFilters"/></th>
-              <th>采集员 ID</th><th><TaskItemFilters review-mode kind="collector" :task-id="route.params.taskId" :model-value="filters" @change="changeFilters"/></th>
-              <th>审核员 ID</th><th><TaskItemFilters review-mode kind="reviewer" :task-id="route.params.taskId" :model-value="filters" @change="changeFilters"/></th>
-              <th><TaskItemFilters review-mode kind="status" :model-value="filters" @change="changeFilters"/></th>
-              <th><TaskItemFilters review-mode kind="result" :model-value="filters" @change="changeFilters"/></th><th>时长</th><th>操作</th>
+              <th>条目编号</th><th>采集员 ID</th><th>采集员</th>
+              <th>审核员 ID</th><th>审核员</th><th>状态</th>
+              <th>成果类型</th><th>时长</th><th>操作</th>
             </tr></thead>
             <tbody><tr v-for="r in rows" :key="r.id">
               <td><input type="checkbox" :checked="selection.isSelected(r)" :aria-label="`选择 ${r.itemCode}`" @change="selection.toggle(r)"/></td>
@@ -250,8 +283,12 @@ onBeforeUnmount(clearPoll)
             </tr></tbody>
           </table>
         </div>
-        <PaginationControls :page="page" :total="total" :size="20" @change="changePage"/>
+        <PaginationControls :page="page" :total="total" :size="size" @change="changePage" @size-change="changeSize"/>
       </AsyncState>
     </div>
   </section>
 </template>
+
+<style scoped>
+.review-summary-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:18px}.review-summary-grid article{display:grid;gap:7px;padding:18px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}.review-summary-grid span{color:var(--muted-foreground)}.review-summary-grid strong{font-size:28px}.review-filter-toolbar{display:grid;gap:14px;padding-bottom:18px;border-bottom:1px solid var(--border)}.review-filter-toolbar h3,.review-filter-toolbar p{margin:0}.review-filter-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}.review-claim-tools{margin-top:16px}@media(max-width:1100px){.review-filter-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:720px){.review-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.review-filter-grid{grid-template-columns:1fr}}
+</style>

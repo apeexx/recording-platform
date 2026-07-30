@@ -53,7 +53,7 @@
           <audio-player src="{{audioPath}}" label="录制音频" duration-millis="{{audioDuration}}" binderror="audioPlaybackError" />
           <view class="recording-result-actions">
             <button class="rerecord-button" bindtap="startRecord">重新录制</button>
-            <button class="delete-recording-button" bindtap="deleteRecording"><image src="../../assets/icons/iconfont/trash.svg" mode="aspectFit" />删除录音</button>
+              <button class="delete-recording-button" bindtap="deleteRecording">删除录音</button>
           </view>
         </view>
       </view>

@@ -80,7 +80,27 @@ describe('采集员统计筛选控件', () => {
     wrapper.unmount()
   })
 
-  it('选择任务立即查询且表头重复点击切换升降序', async () => {
+  it('选择开始日后悬停实时预览范围并可按 Esc 取消', async () => {
+    const wrapper = mount(DateRangePicker, {
+      props: { fromDate: '2026-07-30', toDate: '2026-07-30', today: '2026-07-30' },
+      attachTo: document.body,
+    })
+    await wrapper.get('.date-range-trigger').trigger('click')
+    await wrapper.get('[data-date="2026-07-20"]').trigger('click')
+    await wrapper.get('[data-date="2026-07-12"]').trigger('pointerenter')
+
+    expect(wrapper.get('[data-date="2026-07-12"]').classes()).toContain('is-start')
+    expect(wrapper.get('[data-date="2026-07-15"]').classes()).toContain('is-in-range')
+    expect(wrapper.get('[data-date="2026-07-20"]').classes()).toContain('is-end')
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await flushPromises()
+    expect(wrapper.find('.date-range-popover').exists()).toBe(false)
+    expect(wrapper.emitted('change')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('选择任务立即查询且表头按降序、升序、默认三态循环', async () => {
     const wrapper = mount(CollectorStatisticsPage, {
       global: {
         stubs: {
@@ -98,10 +118,8 @@ describe('采集员统计筛选控件', () => {
     wrapper.getComponent({ name: 'TaskSearchSelect' }).vm.$emit('update:modelValue', 'task-1')
     await flushPromises()
     expect(reportApi.tasks).toHaveBeenCalledTimes(1)
-    expect(reportApi.taskCollectors).toHaveBeenLastCalledWith('task-1', expect.objectContaining({
-      sortBy: 'completionCount',
-      sortDirection: 'desc',
-    }))
+    expect(reportApi.taskCollectors.mock.calls.at(-1)[1]).not.toHaveProperty('sortBy')
+    expect(reportApi.taskCollectors.mock.calls.at(-1)[1]).not.toHaveProperty('sortDirection')
 
     await wrapper.findAll('button').find(button => button.text() === '昨天').trigger('click')
     await flushPromises()
@@ -124,6 +142,12 @@ describe('采集员统计筛选控件', () => {
       sortBy: 'submissionCount',
       sortDirection: 'asc',
     }))
+    await wrapper.get('[data-sort="submissionCount"]').trigger('click')
+    await flushPromises()
+    expect(reportApi.taskCollectors.mock.calls.at(-1)[1]).not.toHaveProperty('sortBy')
+    expect(reportApi.taskCollectors.mock.calls.at(-1)[1]).not.toHaveProperty('sortDirection')
+    expect(router.replace.mock.calls.at(-1)[0].query).not.toHaveProperty('sortBy')
+    expect(router.replace.mock.calls.at(-1)[0].query).not.toHaveProperty('sortDirection')
     expect(wrapper.text()).not.toContain('查询统计')
     wrapper.unmount()
   })

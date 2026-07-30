@@ -6,8 +6,7 @@ const props=defineProps({
   page:{type:Number,default:0},
   size:{type:Number,default:20},
   total:{type:Number,default:0},
-  numbered:{type:Boolean,default:false},
-  pageSizes:{type:Array,default:()=>[]}
+  pageSizes:{type:Array,default:()=>[10,20,50]}
 })
 const emit=defineEmits(['change','size-change'])
 const totalPages=computed(()=>Math.max(Math.ceil(props.total/props.size),1))
@@ -34,7 +33,8 @@ function changeSize(value){const next=Number(value);if(next!==props.size&&props.
 </script>
 
 <template>
-  <nav v-if="numbered" class="pagination pagination-numbered" aria-label="分页">
+  <nav class="pagination pagination-numbered" aria-label="分页">
+    <span class="pagination-total">共 {{ total }} 条</span>
     <BaseSelect class="pagination-size" :model-value="size" :options="sizeOptions" aria-label="每页条数" @update:model-value="changeSize" />
     <span class="pagination-pages">
       <button class="pagination-arrow" :disabled="page===0" aria-label="上一页" @click="go(page-1)">‹</button>
@@ -45,5 +45,4 @@ function changeSize(value){const next=Number(value);if(next!==props.size&&props.
       <button class="pagination-arrow" :disabled="page+1>=totalPages" aria-label="下一页" @click="go(page+1)">›</button>
     </span>
   </nav>
-  <nav v-else-if="total>size" class="pagination" aria-label="分页"><button class="button-secondary" :disabled="page===0" @click="go(page-1)">上一页</button><span>第 {{page+1}} / {{Math.ceil(total/size)}} 页，共 {{total}} 条</span><button class="button-secondary" :disabled="(page+1)*size>=total" @click="go(page+1)">下一页</button></nav>
 </template>
