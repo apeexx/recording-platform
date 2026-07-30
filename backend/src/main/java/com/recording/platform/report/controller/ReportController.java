@@ -63,11 +63,14 @@ public class ReportController {
 		@RequestParam(required = false) LocalDate fromDate,
 		@RequestParam(required = false) LocalDate toDate,
 		@RequestParam(defaultValue = "completionCount") String sortBy,
+		@RequestParam(defaultValue = "desc") String sortDirection,
 		@RequestParam(defaultValue = "0") int page,
 		@RequestParam(defaultValue = "20") int size,
 		@AuthenticationPrincipal PlatformPrincipal actor
 	) {
-		return reports.taskCollectors(taskId, fromDate, toDate, sortBy, page, size, actor);
+		return reports.taskCollectors(
+			taskId, fromDate, toDate, sortBy, sortDirection, page, size, actor
+		);
 	}
 
 	@GetMapping("/collectors/{collectorId}/tasks/{taskId}")

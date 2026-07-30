@@ -54,6 +54,8 @@ test('作业页区分可编辑和只读状态并使用本地 SVG 图标', () => 
 	assert.match(page, /assets\/icons\/iconfont\/stop\.svg/)
 	assert.doesNotMatch(page, /🎙|🗑|Ⅱ|■/)
 	assert.match(page, /点击开始录音/)
+	assert.match(page, /bindtap="deleteRecording"/)
+	assert.match(page, /删除录音/)
 	assert.match(page, /录音中/)
 	assert.match(page, /已暂停/)
 	assert.match(style, /\.recorder-stage\{[^}]*min-height:460rpx;[^}]*padding:28rpx/)

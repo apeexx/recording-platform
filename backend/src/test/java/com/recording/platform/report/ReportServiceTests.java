@@ -3,6 +3,7 @@ package com.recording.platform.report;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.recording.platform.identity.model.SessionType;
@@ -20,6 +21,7 @@ import com.recording.platform.task.store.TaskItemStore;
 import com.recording.platform.report.store.ReportQueryStore;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -84,6 +86,70 @@ class ReportServiceTests {
 			"task-1", LocalDate.of(2026, 7, 28), LocalDate.of(2026, 7, 27), admin()
 		)).isInstanceOfSatisfying(com.recording.platform.api.ApiException.class,
 			error -> assertThat(error.getCode()).isEqualTo("INVALID_REPORT_DATE_RANGE"));
+	}
+
+	@Test
+	void taskCollectorRankingPassesAscendingDirectionToStore() {
+		TaskItemStore items = mock(TaskItemStore.class);
+		ReportQueryStore queries = mock(ReportQueryStore.class);
+		Instant from = Instant.parse("2026-07-26T16:00:00Z");
+		Instant to = Instant.parse("2026-07-27T16:00:00Z");
+		when(queries.findCollectorRankings(
+			"task-1", from, to, "submissionCount", Sort.Direction.ASC, PageRequest.of(0, 20)
+		)).thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
+		ReportService service = new ReportService(items, queries);
+
+		service.taskCollectors(
+			"task-1", LocalDate.of(2026, 7, 27), LocalDate.of(2026, 7, 27),
+			"submissionCount", "asc", 0, 20, admin()
+		);
+
+		verify(queries).findCollectorRankings(
+			"task-1", from, to, "submissionCount", Sort.Direction.ASC, PageRequest.of(0, 20)
+		);
+	}
+
+	@Test
+	void taskCollectorRankingAcceptsEveryDocumentedSortField() {
+		ReportQueryStore queries = mock(ReportQueryStore.class);
+		ReportService service = new ReportService(mock(TaskItemStore.class), queries);
+		PageRequest pageable = PageRequest.of(0, 20);
+		List<String> fields = List.of(
+			"submissionCount",
+			"submissionRecordingDurationMillis",
+			"submissionReferenceAudioDurationMillis",
+			"submissionReferenceVideoDurationMillis",
+			"completionCount",
+			"completionRecordingDurationMillis",
+			"completionReferenceAudioDurationMillis",
+			"completionReferenceVideoDurationMillis",
+			"firstSubmissionAt",
+			"latestSubmissionAt"
+		);
+
+		for (String field : fields) {
+			when(queries.findCollectorRankings(
+				"task-1", null, null, field, Sort.Direction.DESC, pageable
+			)).thenReturn(new PageImpl<>(List.of(), pageable, 0));
+
+			service.taskCollectors("task-1", null, null, field, "desc", 0, 20, admin());
+
+			verify(queries).findCollectorRankings(
+				"task-1", null, null, field, Sort.Direction.DESC, pageable
+			);
+		}
+	}
+
+	@Test
+	void taskCollectorRankingRejectsUnknownSortDirection() {
+		ReportService service = new ReportService(mock(TaskItemStore.class), mock(ReportQueryStore.class));
+
+		assertThatThrownBy(() -> service.taskCollectors(
+			"task-1", null, null, "completionCount", "sideways", 0, 20, admin()
+		)).isInstanceOfSatisfying(com.recording.platform.api.ApiException.class, error -> {
+			assertThat(error.getStatus()).isEqualTo(org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY);
+			assertThat(error.getCode()).isEqualTo("INVALID_REPORT_SORT_DIRECTION");
+		});
 	}
 
 	@Test

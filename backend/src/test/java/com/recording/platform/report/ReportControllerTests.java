@@ -108,12 +108,12 @@ class ReportControllerTests {
 			)), 0, 20, 1
 		);
 		when(service.taskStages("task-1", date, date, admin)).thenReturn(work);
-		when(service.taskCollectors("task-1", date, date, "completionCount", 0, 20, admin()))
+		when(service.taskCollectors("task-1", date, date, "completionCount", "asc", 0, 20, admin()))
 			.thenReturn(ranking);
 
 		assertThat(controller.task("task-1", date, date, admin)).isSameAs(work);
 		assertThat(controller.taskCollectors(
-			"task-1", date, date, "completionCount", 0, 20, admin
+			"task-1", date, date, "completionCount", "asc", 0, 20, admin
 		)).isSameAs(ranking);
 	}
 

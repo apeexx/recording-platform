@@ -467,7 +467,8 @@ public class MongoReportQueryStore implements ReportQueryStore {
 
 	@Override
 	public Page<CollectorRankingRow> findCollectorRankings(
-		String taskId, Instant fromInclusive, Instant toExclusive, String sortField, Pageable pageable
+		String taskId, Instant fromInclusive, Instant toExclusive, String sortField,
+		org.springframework.data.domain.Sort.Direction sortDirection, Pageable pageable
 	) {
 		Map<String, RankingAccumulator> values = new HashMap<>();
 		Document submissionMatch = stageMatch(
@@ -519,14 +520,20 @@ public class MongoReportQueryStore implements ReportQueryStore {
 		}
 		List<CollectorRankingRow> allRows = values.entrySet().stream()
 			.map(entry -> entry.getValue().toRow(entry.getKey()))
-			.sorted(rankingComparator(sortField))
+			.sorted(rankingComparator(sortField, sortDirection))
 			.toList();
 		int from = (int) Math.min(pageable.getOffset(), allRows.size());
 		int to = Math.min(from + pageable.getPageSize(), allRows.size());
 		return new PageImpl<>(List.copyOf(allRows.subList(from, to)), pageable, allRows.size());
 	}
 
-	private java.util.Comparator<CollectorRankingRow> rankingComparator(String field) {
+	private java.util.Comparator<CollectorRankingRow> rankingComparator(
+		String field, org.springframework.data.domain.Sort.Direction direction
+	) {
+		java.util.Comparator<java.time.Instant> timestampOrder =
+			direction == org.springframework.data.domain.Sort.Direction.ASC
+				? java.util.Comparator.naturalOrder()
+				: java.util.Comparator.reverseOrder();
 		java.util.Comparator<CollectorRankingRow> comparator = switch (field) {
 			case "submissionCount" -> java.util.Comparator.comparingLong(row -> row.submissions().count());
 			case "submissionRecordingDurationMillis" -> java.util.Comparator.comparingLong(
@@ -549,16 +556,18 @@ public class MongoReportQueryStore implements ReportQueryStore {
 			);
 			case "firstSubmissionAt" -> java.util.Comparator.comparing(
 				CollectorRankingRow::firstSubmissionAt,
-				java.util.Comparator.nullsLast(java.util.Comparator.reverseOrder())
+				java.util.Comparator.nullsLast(timestampOrder)
 			);
 			case "latestSubmissionAt" -> java.util.Comparator.comparing(
 				CollectorRankingRow::latestSubmissionAt,
-				java.util.Comparator.nullsLast(java.util.Comparator.reverseOrder())
+				java.util.Comparator.nullsLast(timestampOrder)
 			);
 			default -> java.util.Comparator.comparingLong(row -> row.completions().count());
 		};
 		boolean timestampSort = "firstSubmissionAt".equals(field) || "latestSubmissionAt".equals(field);
-		return (timestampSort ? comparator : comparator.reversed())
+		boolean descendingMetrics = !timestampSort
+			&& direction == org.springframework.data.domain.Sort.Direction.DESC;
+		return (descendingMetrics ? comparator.reversed() : comparator)
 			.thenComparing(CollectorRankingRow::collectorId);
 	}
 

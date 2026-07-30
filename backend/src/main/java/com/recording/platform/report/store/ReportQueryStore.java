@@ -34,7 +34,8 @@ public interface ReportQueryStore {
 		String collectorId, String taskId, Instant fromInclusive, Instant toExclusive, Pageable pageable
 	);
 	Page<CollectorRankingRow> findCollectorRankings(
-		String taskId, Instant fromInclusive, Instant toExclusive, String sortField, Pageable pageable
+		String taskId, Instant fromInclusive, Instant toExclusive, String sortField,
+		org.springframework.data.domain.Sort.Direction sortDirection, Pageable pageable
 	);
 	StageReportSummary aggregateAdminStages(
 		String taskId, String collectorId, Instant fromInclusive, Instant toExclusive

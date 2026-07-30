@@ -488,11 +488,11 @@ Web 数据大屏使用仅 ADMIN 可访问的 `GET /api/reports/dashboard`，返�
 ```text
 请求方法：GET
 请求路径：/api/reports/tasks、/api/reports/tasks/{taskId}/collectors、/api/reports/collectors、/api/reports/collectors/{collectorId}/tasks/{taskId}、/api/reports/collectors/{collectorId}/tasks/{taskId}/submissions、/api/reports/collectors/{collectorId}/tasks/{taskId}/completions
-请求参数：任务和指定采集员任务汇总支持可选 fromDate、toDate；旧采集员汇总支持 userId、可选 taskId、fromDate、toDate；任务采集员排名另支持 sortBy=completedCount|submissionCount|recordingDurationMillis|referenceAudioDurationMillis|referenceVideoDurationMillis、page、size；完整提交明细另支持 page、size
+请求参数：任务和指定采集员任务汇总支持可选 fromDate、toDate；旧采集员汇总支持 userId、可选 taskId、fromDate、toDate；任务采集员排名另支持 sortBy=submissionCount|submissionRecordingDurationMillis|submissionReferenceAudioDurationMillis|submissionReferenceVideoDurationMillis|completionCount|completionRecordingDurationMillis|completionReferenceAudioDurationMillis|completionReferenceVideoDurationMillis|firstSubmissionAt|latestSubmissionAt、sortDirection=asc|desc、page、size，其中排序方向省略时默认 desc；完整提交明细另支持 page、size
 响应结构：管理员任务与人员详情使用独立双阶段 DTO；StageMetrics 固定含 count、recordingDurationMillis、referenceAudioDurationMillis、referenceVideoDurationMillis，StageReportSummary 固定含 submissions、completions 和 0–23 点完整 submissionHourDistribution；排行返回两阶段八项指标、firstSubmissionAt、latestSubmissionAt、peakSubmissionHour；人员详情返回双阶段汇总及两阶段每日统计，提交和完成明细均为分页结构。`/api/reports/me/**` 保持原小程序契约
-错误码：403 ACCESS_DENIED；422 INVALID_REPORT_DATE_RANGE
+错误码：403 ACCESS_DENIED；422 INVALID_REPORT_DATE_RANGE/INVALID_REPORT_SORT_DIRECTION
 权限要求：任务、指定采集员汇总、排名与下钻仅 ADMIN；不再提供审核统计端点，`/api/reports/me` 仅 COLLECTOR 可读
-数据一致性要求：日期使用 Asia/Shanghai 自然日闭区间，允许单边日期；fromDate 晚于 toDate 返回 422；提交按 firstSubmittedAt、完成按 firstCompletedAt 独立筛选，返修/覆盖及再次完成不改变首次归属；完成阶段只统计当前 COMPLETED，提交阶段排除 AVAILABLE/DISCARDED；废弃保留时间字段但暂时退出统计，恢复后按原日期恢复；真正释放清除首次提交与首次完成归属；小时高峰并列时取较早小时；时长均取条目当前有效结果，缺失按 0；姓名通过身份目录批量补全，不冗余写入任务条目
+数据一致性要求：日期使用 Asia/Shanghai 自然日闭区间，允许单边日期；fromDate 晚于 toDate 返回 422；提交按 firstSubmittedAt、完成按 firstCompletedAt 独立筛选，返修/覆盖及再次完成不改变首次归属；完成阶段只统计当前 COMPLETED，提交阶段排除 AVAILABLE/DISCARDED；废弃保留时间字段但暂时退出统计，恢复后按原日期恢复；真正释放清除首次提交与首次完成归属；小时高峰并列时取较早小时；时长均取条目当前有效结果，缺失按 0；姓名通过身份目录批量补全，不冗余写入任务条目；排行先按指定字段对全量人员升序或降序排列再分页，空时间固定置后，相同指标按 collectorId 升序稳定排序
 前端调用位置：apps/web/src/lib/reportApi.js、apps/web/src/pages/admin/reports/*
 ```
 

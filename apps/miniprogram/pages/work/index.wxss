@@ -35,8 +35,7 @@
 .stop-control{border-color:#f3b0a1}
 .processing-ring{width:68rpx;height:68rpx;border:6rpx solid #fee2dc;border-top-color:#d95f45;border-radius:50%;animation:spin .8s linear infinite}
 .completed-state{align-items:stretch}
-.rerecord-button{width:100%;height:84rpx;margin:24rpx 0 0;padding:0;border:1rpx solid #c7d7f7;border-radius:18rpx;background:#f3f7ff;color:#2563eb;font-size:28rpx;line-height:84rpx}
-.rerecord-button::after{border:none}
+.recording-result-actions{display:grid;grid-template-columns:1fr 1fr;gap:18rpx;margin-top:24rpx}.rerecord-button,.delete-recording-button{display:flex;align-items:center;justify-content:center;width:100%;height:84rpx;margin:0;padding:0;border-radius:18rpx;font-size:28rpx;line-height:84rpx}.rerecord-button{border:1rpx solid #c7d7f7;background:#f3f7ff;color:#2563eb}.delete-recording-button{border:1rpx solid #fecdd3;background:#fff1f2;color:#be123c}.delete-recording-button image{width:30rpx;height:30rpx;margin-right:10rpx}.rerecord-button::after,.delete-recording-button::after{border:none}
 @keyframes spin{to{transform:rotate(360deg)}}
 
 .readonly-result{padding:28rpx}

@@ -167,7 +167,8 @@ class MongoReportQueryStoreTests {
 		when(completionCursor.next()).thenReturn(new Document("_id", "completion-only").append("count", 1));
 
 		var result = new MongoReportQueryStore(template).findCollectorRankings(
-			"task-1", null, null, "latestSubmissionAt", PageRequest.of(0, 20)
+			"task-1", null, null, "latestSubmissionAt",
+			org.springframework.data.domain.Sort.Direction.DESC, PageRequest.of(0, 20)
 		);
 
 		assertEquals(List.of("collector-with-time", "completion-only"),

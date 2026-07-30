@@ -45,6 +45,7 @@ function detailQuery() {
   return {
     ...reportParams.value,
     sortBy: route.query.sortBy || undefined,
+    sortDirection: route.query.sortDirection || undefined,
     page: route.query.page || undefined,
     tab: activeTab.value === 'completions' ? 'completions' : undefined,
     submissionPage: submissionPage.value || undefined,
@@ -97,6 +98,7 @@ function goBack() {
     query: {
       taskId, ...reportParams.value,
       sortBy: route.query.sortBy || undefined,
+      sortDirection: route.query.sortDirection || undefined,
       page: route.query.page || undefined,
     },
   })

@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AsyncState from '../../../components/admin/AsyncState.vue'
-import BaseSelect from '../../../components/form/BaseSelect.vue'
+import DateRangePicker from '../../../components/form/DateRangePicker.vue'
 import PageActions from '../../../components/admin/PageActions.vue'
 import PaginationControls from '../../../components/admin/PaginationControls.vue'
 import StageSummaryPanel from '../../../components/admin/StageSummaryPanel.vue'
@@ -29,13 +29,16 @@ const fromDate = ref(String(route.query.fromDate ?? today))
 const toDate = ref(String(route.query.toDate ?? today))
 const activePreset = ref(route.query.fromDate || route.query.toDate ? 'custom' : 'today')
 const sortBy = ref(String(route.query.sortBy || 'completionCount'))
+const sortDirection = ref(route.query.sortDirection === 'asc' ? 'asc' : 'desc')
 const page = ref(Math.max(0, Number(route.query.page) || 0))
 const summary = ref(null)
 const rankings = ref([])
 const total = ref(0)
 const loading = ref(false)
 const loadError = ref('')
+const dateRangePicker = ref(null)
 const pageSize = 20
+let requestSequence = 0
 const seconds = (value) => `${((Number(value) || 0) / 1000).toFixed(1)} 秒`
 const time = (value) => value ? new Intl.DateTimeFormat('zh-CN', {
   timeZone: 'Asia/Shanghai', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
@@ -48,32 +51,47 @@ const presets = [
   ['today', '今天'], ['yesterday', '昨天'], ['seven-days', '近 7 日'],
   ['month', '本月'], ['all', '全部'], ['custom', '自定义范围'],
 ]
-const sortOptions = [
-  { value: 'completionCount', label: '完成条数' },
-  { value: 'submissionCount', label: '提交条数' },
-  { value: 'completionRecordingDurationMillis', label: '完成·最终录音' },
-  { value: 'submissionRecordingDurationMillis', label: '提交·最终录音' },
-  { value: 'completionReferenceAudioDurationMillis', label: '完成·参考音频' },
-  { value: 'submissionReferenceAudioDurationMillis', label: '提交·参考音频' },
-  { value: 'completionReferenceVideoDurationMillis', label: '完成·参考视频' },
-  { value: 'submissionReferenceVideoDurationMillis', label: '提交·参考视频' },
-  { value: 'firstSubmissionAt', label: '首次提交时间' },
-  { value: 'latestSubmissionAt', label: '最近提交时间' },
-]
-
-function applyPreset(key) {
+async function applyPreset(key) {
   activePreset.value = key
+  if (key === 'custom') {
+    await dateRangePicker.value?.openPicker()
+    return
+  }
   if (key === 'today') fromDate.value = toDate.value = today
   if (key === 'yesterday') fromDate.value = toDate.value = shiftDate(today, -1)
   if (key === 'seven-days') { fromDate.value = shiftDate(today, -6); toDate.value = today }
   if (key === 'month') { fromDate.value = `${today.slice(0, 7)}-01`; toDate.value = today }
   if (key === 'all') fromDate.value = toDate.value = ''
+  page.value = 0
+  if (taskId.value) await search(true)
 }
-function changeTask(value) {
+async function changeTask(value) {
   taskId.value = value
-  summary.value = null
-  rankings.value = []
-  total.value = 0
+  page.value = 0
+  if (taskId.value) await search(true)
+  else {
+    requestSequence += 1
+    summary.value = null
+    rankings.value = []
+    total.value = 0
+    loading.value = false
+  }
+}
+async function changeDateRange(range) {
+  fromDate.value = range.fromDate
+  toDate.value = range.toDate
+  activePreset.value = 'custom'
+  page.value = 0
+  if (taskId.value) await search(true)
+}
+async function changeSort(field) {
+  if (sortBy.value === field) sortDirection.value = sortDirection.value === 'desc' ? 'asc' : 'desc'
+  else {
+    sortBy.value = field
+    sortDirection.value = 'desc'
+  }
+  page.value = 0
+  await search(true)
 }
 function validate() {
   if (!taskId.value) { notifications.error('请选择任务'); return false }
@@ -85,11 +103,18 @@ function validate() {
 function syncQuery() {
   return router.replace({
     name: 'collector-statistics',
-    query: { taskId: taskId.value, ...reportParams.value, sortBy: sortBy.value, page: page.value || undefined },
+    query: {
+      taskId: taskId.value,
+      ...reportParams.value,
+      sortBy: sortBy.value,
+      sortDirection: sortDirection.value,
+      page: page.value || undefined,
+    },
   })
 }
 async function search(refresh = false) {
   if (!validate()) return
+  const requestId = ++requestSequence
   loading.value = true
   if (!summary.value) loadError.value = ''
   try {
@@ -97,24 +122,42 @@ async function search(refresh = false) {
     const [nextSummary, rankingPage] = await Promise.all([
       reportApi.tasks({ taskId: taskId.value, ...reportParams.value }),
       reportApi.taskCollectors(taskId.value, {
-        ...reportParams.value, sortBy: sortBy.value, page: page.value, size: pageSize,
+        ...reportParams.value,
+        sortBy: sortBy.value,
+        sortDirection: sortDirection.value,
+        page: page.value,
+        size: pageSize,
       }),
     ])
+    if (requestId !== requestSequence) return
     summary.value = nextSummary
     rankings.value = rankingPage.items || []
     total.value = Number(rankingPage.total) || 0
   } catch (error) {
+    if (requestId !== requestSequence) return
     if (refresh || summary.value) notifications.error(error.message)
     else loadError.value = error.message
-  } finally { loading.value = false }
+  } finally {
+    if (requestId === requestSequence) loading.value = false
+  }
 }
-async function submitSearch() { page.value = 0; await search() }
 async function changePage(value) { page.value = value; await search(true) }
+const ariaSort = field => sortBy.value === field
+  ? (sortDirection.value === 'asc' ? 'ascending' : 'descending')
+  : 'none'
+const sortArrow = field => sortBy.value === field
+  ? (sortDirection.value === 'asc' ? '↑' : '↓')
+  : '↕'
 function openCollector(row) {
   router.push({
     name: 'collector-statistics-detail',
     params: { taskId: taskId.value, collectorId: row.collectorId },
-    query: { ...reportParams.value, sortBy: sortBy.value, page: page.value || undefined },
+    query: {
+      ...reportParams.value,
+      sortBy: sortBy.value,
+      sortDirection: sortDirection.value,
+      page: page.value || undefined,
+    },
   })
 }
 function startDownload(url) {
@@ -142,23 +185,21 @@ onMounted(() => { if (taskId.value) search() })
       <button class="button-secondary" :disabled="!taskId" @click="exportCsv">导出当前对表 CSV</button>
     </PageActions>
     <section class="business-card report-control-card">
-      <form class="report-controls" novalidate @submit.prevent="submitSearch">
+      <div class="report-controls">
         <TaskSearchSelect :model-value="taskId" @update:model-value="changeTask" />
-        <div class="date-presets" aria-label="日期快捷选择">
+        <div class="date-toolbar">
+          <div class="date-presets" aria-label="日期快捷选择">
           <button v-for="[key,label] in presets" :key="key" type="button"
             :class="{ 'is-active': activePreset === key }" @click="applyPreset(key)">{{ label }}</button>
+          </div>
+          <DateRangePicker ref="dateRangePicker" :from-date="fromDate" :to-date="toDate"
+            :today="today" @change="changeDateRange" />
         </div>
-        <div class="date-range">
-          <label>开始日期 <input v-model="fromDate" type="date" @input="activePreset = 'custom'" /></label>
-          <span>至</span>
-          <label>结束日期 <input v-model="toDate" type="date" @input="activePreset = 'custom'" /></label>
-        </div>
-        <BaseSelect v-model="sortBy" :options="sortOptions" aria-label="采集员排序指标" />
-        <button class="button-primary" :disabled="loading">{{ loading ? '查询中…' : '查询统计' }}</button>
-      </form>
+        <span v-if="loading && summary" class="report-refreshing">正在更新统计…</span>
+      </div>
     </section>
     <AsyncState :loading="loading && !summary" :error="loadError" :empty="!summary"
-      empty-text="请选择任务并查询统计" @retry="search">
+      empty-text="请选择任务，选择后将自动加载统计" @retry="search">
       <StageSummaryPanel :summary="summary" />
       <SubmissionHourDistribution :values="summary?.submissionHourDistribution" />
       <section class="business-card report-section">
@@ -166,8 +207,23 @@ onMounted(() => { if (taskId.value) search() })
         <div class="business-table-wrap">
           <table class="business-table report-table">
             <thead>
-              <tr><th rowspan="2">排名</th><th rowspan="2">采集员</th><th colspan="4">提交统计</th><th colspan="4">完成统计</th><th rowspan="2">首次提交</th><th rowspan="2">最近提交</th><th rowspan="2">高峰时段</th></tr>
-              <tr><th>条数</th><th>最终录音</th><th>参考音频</th><th>参考视频</th><th>条数</th><th>最终录音</th><th>参考音频</th><th>参考视频</th></tr>
+              <tr>
+                <th rowspan="2">排名</th><th rowspan="2">采集员</th>
+                <th colspan="4">提交统计</th><th colspan="4">完成统计</th>
+                <th rowspan="2" :aria-sort="ariaSort('firstSubmissionAt')"><button type="button" class="sort-header" data-sort="firstSubmissionAt" @click="changeSort('firstSubmissionAt')">首次提交 <span>{{ sortArrow('firstSubmissionAt') }}</span></button></th>
+                <th rowspan="2" :aria-sort="ariaSort('latestSubmissionAt')"><button type="button" class="sort-header" data-sort="latestSubmissionAt" @click="changeSort('latestSubmissionAt')">最近提交 <span>{{ sortArrow('latestSubmissionAt') }}</span></button></th>
+                <th rowspan="2">高峰时段</th>
+              </tr>
+              <tr>
+                <th :aria-sort="ariaSort('submissionCount')"><button type="button" class="sort-header" data-sort="submissionCount" @click="changeSort('submissionCount')">条数 <span>{{ sortArrow('submissionCount') }}</span></button></th>
+                <th :aria-sort="ariaSort('submissionRecordingDurationMillis')"><button type="button" class="sort-header" data-sort="submissionRecordingDurationMillis" @click="changeSort('submissionRecordingDurationMillis')">最终录音 <span>{{ sortArrow('submissionRecordingDurationMillis') }}</span></button></th>
+                <th :aria-sort="ariaSort('submissionReferenceAudioDurationMillis')"><button type="button" class="sort-header" data-sort="submissionReferenceAudioDurationMillis" @click="changeSort('submissionReferenceAudioDurationMillis')">参考音频 <span>{{ sortArrow('submissionReferenceAudioDurationMillis') }}</span></button></th>
+                <th :aria-sort="ariaSort('submissionReferenceVideoDurationMillis')"><button type="button" class="sort-header" data-sort="submissionReferenceVideoDurationMillis" @click="changeSort('submissionReferenceVideoDurationMillis')">参考视频 <span>{{ sortArrow('submissionReferenceVideoDurationMillis') }}</span></button></th>
+                <th :aria-sort="ariaSort('completionCount')"><button type="button" class="sort-header" data-sort="completionCount" @click="changeSort('completionCount')">条数 <span>{{ sortArrow('completionCount') }}</span></button></th>
+                <th :aria-sort="ariaSort('completionRecordingDurationMillis')"><button type="button" class="sort-header" data-sort="completionRecordingDurationMillis" @click="changeSort('completionRecordingDurationMillis')">最终录音 <span>{{ sortArrow('completionRecordingDurationMillis') }}</span></button></th>
+                <th :aria-sort="ariaSort('completionReferenceAudioDurationMillis')"><button type="button" class="sort-header" data-sort="completionReferenceAudioDurationMillis" @click="changeSort('completionReferenceAudioDurationMillis')">参考音频 <span>{{ sortArrow('completionReferenceAudioDurationMillis') }}</span></button></th>
+                <th :aria-sort="ariaSort('completionReferenceVideoDurationMillis')"><button type="button" class="sort-header" data-sort="completionReferenceVideoDurationMillis" @click="changeSort('completionReferenceVideoDurationMillis')">参考视频 <span>{{ sortArrow('completionReferenceVideoDurationMillis') }}</span></button></th>
+              </tr>
             </thead>
             <tbody>
               <tr v-for="(row,index) in rankings" :key="row.collectorId" class="clickable-row" @click="openCollector(row)">
@@ -188,5 +244,5 @@ onMounted(() => { if (taskId.value) search() })
 </template>
 
 <style scoped>
-.collector-report-page{display:grid;gap:18px}.report-control-card{padding:18px}.report-controls{display:grid;grid-template-columns:minmax(320px,1fr) auto auto auto;gap:14px;align-items:end}.date-presets{grid-column:1/-1;display:flex;gap:7px;flex-wrap:wrap}.date-presets button{border:1px solid var(--border);border-radius:999px;background:var(--card);color:var(--muted-foreground);padding:7px 13px;cursor:pointer}.date-presets button.is-active{border-color:color-mix(in srgb,var(--primary) 45%,var(--border));background:color-mix(in srgb,var(--primary) 10%,var(--card));color:var(--primary)}.date-range{display:flex;align-items:end;gap:8px}.date-range label{display:grid;gap:6px;color:var(--muted-foreground);font-size:12px}.date-range span{padding-bottom:10px;color:var(--muted-foreground)}.report-section{margin-top:0}.report-table{min-width:1420px}.report-table thead tr:first-child th{text-align:center;background:color-mix(in srgb,var(--primary) 5%,var(--card))}.clickable-row{cursor:pointer}.clickable-row:hover{background:color-mix(in srgb,var(--primary) 7%,var(--card))}.clickable-row small{display:block;margin-top:3px;color:var(--muted-foreground)}@media(max-width:1100px){.report-controls{grid-template-columns:1fr 1fr}.date-presets{grid-column:1/-1}}@media(max-width:720px){.report-controls{grid-template-columns:1fr}.date-range{align-items:stretch;flex-direction:column}.date-range span{display:none}}
+.collector-report-page{display:grid;gap:18px}.report-control-card{padding:18px}.report-controls{display:grid;gap:15px}.report-controls>.task-search-select{max-width:720px}.date-toolbar{display:flex;align-items:center;gap:12px}.date-presets{display:flex;gap:7px;flex-wrap:wrap}.date-presets button{border:1px solid var(--border);border-radius:999px;background:var(--card);color:var(--muted-foreground);padding:7px 13px;cursor:pointer}.date-presets button.is-active{border-color:color-mix(in srgb,var(--primary) 45%,var(--border));background:color-mix(in srgb,var(--primary) 10%,var(--card));color:var(--primary)}.date-toolbar>.date-range-picker{margin-left:auto}.report-refreshing{color:var(--primary);font-size:13px}.report-section{margin-top:0}.report-table{min-width:1480px}.report-table thead tr:first-child th{text-align:center;background:color-mix(in srgb,var(--primary) 5%,var(--card))}.sort-header{display:inline-flex;align-items:center;justify-content:center;gap:5px;width:100%;padding:4px;background:transparent;color:inherit;font:inherit;font-weight:700;white-space:nowrap;cursor:pointer}.sort-header span{color:var(--primary);font-size:12px}.clickable-row{cursor:pointer}.clickable-row:hover{background:color-mix(in srgb,var(--primary) 7%,var(--card))}.clickable-row small{display:block;margin-top:3px;color:var(--muted-foreground)}@media(max-width:900px){.date-toolbar{align-items:stretch;flex-direction:column}.date-toolbar>.date-range-picker{width:100%;margin-left:0}}@media(max-width:720px){.report-control-card{padding:14px}.date-presets{gap:6px}.date-presets button{padding:7px 11px}}
 </style>

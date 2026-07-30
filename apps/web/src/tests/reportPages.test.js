@@ -20,10 +20,10 @@ describe('统计与操作记录 API', () => {
     httpRequest.mockResolvedValue({ items: [] })
     await reportApi.taskCollectors('task-1', {
       fromDate: '2026-07-01', toDate: '2026-07-27',
-      sortBy: 'referenceAudioDurationMillis', page: 1, size: 20
+      sortBy: 'submissionReferenceAudioDurationMillis', sortDirection: 'asc', page: 1, size: 20
     })
     expect(httpRequest).toHaveBeenCalledWith(
-      '/api/reports/tasks/task-1/collectors?fromDate=2026-07-01&toDate=2026-07-27&sortBy=referenceAudioDurationMillis&page=1&size=20'
+      '/api/reports/tasks/task-1/collectors?fromDate=2026-07-01&toDate=2026-07-27&sortBy=submissionReferenceAudioDurationMillis&sortDirection=asc&page=1&size=20'
     )
   })
 
@@ -56,6 +56,7 @@ describe('统计与操作记录 API', () => {
     const cards = readFileSync(join(process.cwd(), 'src/components/admin/StageSummaryPanel.vue'), 'utf8')
     const hours = readFileSync(join(process.cwd(), 'src/components/admin/SubmissionHourDistribution.vue'), 'utf8')
     expect(collector).toContain('TaskSearchSelect')
+    expect(collector).toContain('DateRangePicker')
     expect(collector).not.toContain('UserSearchSelect')
     expect(collector).toContain('今天')
     expect(collector).toContain('昨天')
@@ -68,9 +69,13 @@ describe('统计与操作记录 API', () => {
     expect(collector).toContain('collector-statistics-detail')
     expect(collector).toContain('首次提交')
     expect(collector).toContain('高峰时段')
+    expect(collector).toContain('sortDirection')
+    expect(collector).toContain('requestSequence')
+    expect(collector).not.toContain('查询统计')
     expect(detail).toContain('reportApi.collectorTask')
     expect(detail).toContain('reportApi.collectorTaskSubmissions')
     expect(detail).toContain('reportApi.collectorTaskCompletions')
+    expect(detail).toContain('sortDirection')
     expect(detail).toContain('提交明细')
     expect(detail).toContain('完成明细')
     expect(cards).toContain('提交统计')

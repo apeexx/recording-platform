@@ -29,7 +29,7 @@ function dateTimeText(value) {
 Page({
   data: {
     item: {}, configuration: {}, loading: true, loadError: '', referenceAudioPath: '', referenceVideoPath: '',
-    audioPath: '', audioDuration: 0, recordingDurationText: '00:00', text: '', recordState: 'idle',
+    audioPath: '', audioDuration: 0, audioOrigin: '', recordingDurationText: '00:00', text: '', recordState: 'idle',
     referenceAudioDurationMillis: 0, referenceVideoDurationMillis: 0,
     levelBars: waveformBars(0), submitting: false, releasing: false, discarding: false, restoring: false,
     statusText: '待录制', editable: true, readOnly: false, canRelease: true, canDiscard: true,
@@ -51,10 +51,15 @@ Page({
       onLevel: level => this.setData({ levelBars: waveformBars(level) }),
       onDuration: duration => this.setData({ audioDuration: duration, recordingDurationText: durationText(duration) }),
       onState: recordState => this.setData({ recordState }),
-      onComplete: result => this.setData({ audioPath: result.filePath, audioDuration: result.durationMillis }),
+      onComplete: result => this.setData({
+        audioPath: result.filePath, audioDuration: result.durationMillis, audioOrigin: 'local',
+      }),
       onError: error => {
         const message = error.message || '录音保存失败'
-        this.setData({ audioPath: '', audioDuration: 0, recordingDurationText: '00:00', levelBars: waveformBars(0) })
+        this.setData({
+          audioPath: '', audioDuration: 0, audioOrigin: '',
+          recordingDurationText: '00:00', levelBars: waveformBars(0),
+        })
         feedback.error(message)
       },
     })
@@ -93,6 +98,7 @@ Page({
       const resultDuration = item.currentResult?.audio?.durationMillis || 0
       this.setData({
         referenceAudioPath, referenceVideoPath, audioPath: resultAudioPath,
+        audioOrigin: resultAudioPath ? 'existing' : '',
         audioDuration: resultDuration, recordingDurationText: durationText(resultDuration),
         recordState: resultAudioPath ? 'stopped' : 'idle',
       })
@@ -109,8 +115,35 @@ Page({
   },
   startRecord() {
     if (!this.data.editable || !this.session) return
-    this.setData({ audioPath: '', audioDuration: 0, recordingDurationText: '00:00', levelBars: waveformBars(0) })
+    this.clearRecording()
     this.session.start()
+  },
+  clearRecording() {
+    const { audioPath, audioOrigin } = this.data
+    if (audioPath && audioOrigin === 'local') {
+      try { wx.getFileSystemManager().unlinkSync(audioPath) } catch {}
+    }
+    this.setData({
+      audioPath: '', audioDuration: 0, audioOrigin: '',
+      recordingDurationText: '00:00', recordState: 'idle', levelBars: waveformBars(0),
+    })
+  },
+  deleteRecording() {
+    if (!this.data.editable || !this.data.audioPath || this.data.recordState !== 'stopped') return
+    const existing = this.data.audioOrigin === 'existing'
+    wx.showModal({
+      title: '删除录音',
+      content: existing
+        ? '删除后需点击“保存修改”才会同步移除已提交录音。'
+        : '删除后可重新录制，文本结果不会被清空。',
+      confirmText: '删除',
+      confirmColor: '#be123c',
+      success: result => {
+        if (!result.confirm) return
+        this.clearRecording()
+        feedback.success('录音已删除')
+      },
+    })
   },
   pauseRecord() {
     if (!this.data.editable) return
@@ -125,7 +158,9 @@ Page({
     if (!this.data.editable || !this.session) return
     try {
       const result = await this.session.stop()
-      this.setData({ audioPath: result.filePath, audioDuration: result.durationMillis })
+      this.setData({
+        audioPath: result.filePath, audioDuration: result.durationMillis, audioOrigin: 'local',
+      })
     } catch (error) { feedback.error(error.message || '录音保存失败') }
   },
   textInput(event) { if (this.data.editable) this.setData({ text: event.detail.value }) },

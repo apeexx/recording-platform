@@ -100,11 +100,21 @@ public class ReportService {
 	}
 
 	public PageResponse<CollectorRankingRow> taskCollectors(
-		String taskId, LocalDate fromDate, LocalDate toDate, String sortBy,
+		String taskId, LocalDate fromDate, LocalDate toDate, String sortBy, String sortDirection,
 		int page, int size, PlatformPrincipal actor
 	) {
 		requireAdmin(actor);
 		ReportDateRange range = ReportDateRange.of(fromDate, toDate);
+		org.springframework.data.domain.Sort.Direction direction;
+		try {
+			direction = org.springframework.data.domain.Sort.Direction.fromString(sortDirection);
+		} catch (IllegalArgumentException exception) {
+			throw new com.recording.platform.api.ApiException(
+				org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY,
+				"INVALID_REPORT_SORT_DIRECTION",
+				"统计排序方向只支持 asc 或 desc"
+			);
+		}
 		String sortField = switch (sortBy == null ? "" : sortBy) {
 			case "submissionCount",
 				"submissionRecordingDurationMillis",
@@ -121,7 +131,8 @@ public class ReportService {
 		int safePage = Math.max(page, 0);
 		int safeSize = Math.min(Math.max(size, 1), 100);
 		var result = queries.findCollectorRankings(
-			taskId, range.fromInclusive(), range.toExclusive(), sortField, PageRequest.of(safePage, safeSize)
+			taskId, range.fromInclusive(), range.toExclusive(), sortField, direction,
+			PageRequest.of(safePage, safeSize)
 		);
 		Map<String, IdentityUser> identities = users == null ? Map.of() : users.findAllByIdIn(
 			result.getContent().stream().map(CollectorRankingRow::collectorId).toList()

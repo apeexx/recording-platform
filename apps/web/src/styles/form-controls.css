@@ -86,6 +86,218 @@
   opacity: .6;
 }
 
+.task-search-select,
+.date-range-picker {
+  position: relative;
+}
+
+.task-search-select input,
+.date-range-trigger {
+  width: 100%;
+  min-height: 46px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--background);
+  color: var(--foreground);
+  transition: border-color .18s, box-shadow .18s;
+}
+
+.task-search-select input {
+  padding: 0 42px;
+}
+
+.task-search-select input:focus,
+.task-search-select.is-open input,
+.date-range-trigger:focus-visible,
+.date-range-picker:has(.date-range-popover) .date-range-trigger {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 16%, transparent);
+}
+
+.task-search-icon {
+  position: absolute;
+  z-index: 2;
+  top: 14px;
+  left: 14px;
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: var(--muted-foreground);
+  stroke-width: 1.8;
+}
+
+.task-search-chevron {
+  position: absolute;
+  top: 17px;
+  right: 17px;
+  width: 9px;
+  height: 9px;
+  border-right: 1.5px solid var(--muted-foreground);
+  border-bottom: 1.5px solid var(--muted-foreground);
+  transform: rotate(45deg);
+}
+
+.task-search-menu,
+.date-range-popover {
+  position: absolute;
+  z-index: 1250;
+  top: calc(100% + 8px);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--card);
+  box-shadow: 0 18px 44px rgba(15, 23, 42, .16);
+}
+
+.task-search-menu {
+  left: 0;
+  width: 100%;
+  max-height: 300px;
+  overflow: auto;
+  padding: 8px;
+}
+
+.task-search-menu button {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--foreground);
+  text-align: left;
+  cursor: pointer;
+}
+
+.task-search-menu button:hover,
+.task-search-menu button.is-active {
+  background: var(--accent);
+}
+
+.task-search-menu button.is-selected {
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 10%, var(--card));
+}
+
+.task-search-menu p {
+  margin: 12px;
+  color: var(--muted-foreground);
+}
+
+.date-range-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-width: 260px;
+  padding: 0 14px;
+  cursor: pointer;
+}
+
+.date-range-trigger svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: var(--muted-foreground);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.date-range-popover {
+  right: 0;
+  width: 310px;
+  padding: 14px;
+}
+
+.date-range-month {
+  display: grid;
+  grid-template-columns: 36px 1fr 36px;
+  align-items: center;
+  text-align: center;
+}
+
+.date-range-month button {
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+  color: var(--foreground);
+  cursor: pointer;
+}
+
+.date-range-weekdays,
+.date-range-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+}
+
+.date-range-weekdays {
+  margin-top: 12px;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  text-align: center;
+}
+
+.date-range-weekdays span {
+  padding: 6px 0;
+}
+
+.date-range-grid button {
+  position: relative;
+  height: 36px;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--foreground);
+  cursor: pointer;
+}
+
+.date-range-grid button:hover {
+  background: var(--accent);
+}
+
+.date-range-grid button.is-outside {
+  color: color-mix(in srgb, var(--muted-foreground) 55%, transparent);
+}
+
+.date-range-grid button.is-in-range {
+  border-radius: 0;
+  background: color-mix(in srgb, var(--primary) 10%, var(--card));
+}
+
+.date-range-grid button.is-start,
+.date-range-grid button.is-end {
+  border-radius: 9px;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font-weight: 700;
+}
+
+.date-range-grid button.is-today:not(.is-start):not(.is-end) {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 60%, var(--border));
+  color: var(--primary);
+}
+
+.date-range-popover > p {
+  margin: 10px 4px 0;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  text-align: center;
+}
+
+@media (max-width: 720px) {
+  .date-range-trigger {
+    min-width: 0;
+  }
+
+  .date-range-popover {
+    right: auto;
+    left: 0;
+    width: min(310px, calc(100vw - 64px));
+  }
+}
+
 .toggle-switch {
   display: inline-flex;
   align-items: center;
