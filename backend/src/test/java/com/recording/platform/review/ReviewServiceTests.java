@@ -116,6 +116,7 @@ class ReviewServiceTests {
 		TaskItemStore items = mock(TaskItemStore.class);
 		TaskStore tasks = mock(TaskStore.class);
 		TaskItem existing = assigned("item-1", 7);
+		existing.setFirstCompletedAt(Instant.parse("2026-07-01T02:00:00Z"));
 		when(items.findById("item-1")).thenReturn(Optional.of(existing));
 		stubTask(tasks, reviewVersion());
 		TaskItem approved = assigned("item-1", 8);
@@ -135,7 +136,11 @@ class ReviewServiceTests {
 		assertThat(result.getCurrentResult().text()).isEqualTo("普通话文本");
 		assertThat(result.getCurrentResult().audio()).isNotNull();
 		assertThat(result.getReviewFinalAnswer()).isEqualTo("审核修订文本");
-		verify(items).decideReviewIfCurrent(any(ReviewDecisionMutation.class));
+		org.mockito.ArgumentCaptor<ReviewDecisionMutation> mutation =
+			org.mockito.ArgumentCaptor.forClass(ReviewDecisionMutation.class);
+		verify(items).decideReviewIfCurrent(mutation.capture());
+		assertThat(mutation.getValue().firstCompletedAt())
+			.isEqualTo(Instant.parse("2026-07-01T02:00:00Z"));
 	}
 
 	@Test

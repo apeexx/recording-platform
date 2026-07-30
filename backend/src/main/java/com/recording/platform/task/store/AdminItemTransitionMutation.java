@@ -15,9 +15,22 @@ public record AdminItemTransitionMutation(
 	String collectorId,
 	String assignmentId,
 	Instant occurredAt,
+	Instant firstCompletedAt,
 	String reason,
 	UserRole actorRole
 ) {
+	public AdminItemTransitionMutation(
+		String itemId, String actorUserId, String actorUsername, long expectedRevision,
+		String operationId, TaskItemStatus sourceStatus, TaskItemStatus targetStatus,
+		String collectorId, String assignmentId, Instant occurredAt, String reason, UserRole actorRole
+	) {
+		this(
+			itemId, actorUserId, actorUsername, expectedRevision, operationId, sourceStatus,
+			targetStatus, collectorId, assignmentId, occurredAt,
+			targetStatus == TaskItemStatus.COMPLETED ? occurredAt : null, reason, actorRole
+		);
+	}
+
 	public AdminItemTransitionMutation(
 		String itemId, String actorUserId, String actorUsername, long expectedRevision,
 		String operationId, TaskItemStatus sourceStatus, TaskItemStatus targetStatus,
@@ -25,7 +38,8 @@ public record AdminItemTransitionMutation(
 	) {
 		this(
 			itemId, actorUserId, actorUsername, expectedRevision, operationId, sourceStatus,
-			targetStatus, collectorId, assignmentId, occurredAt, null, UserRole.ADMIN
+			targetStatus, collectorId, assignmentId, occurredAt,
+			targetStatus == TaskItemStatus.COMPLETED ? occurredAt : null, null, UserRole.ADMIN
 		);
 	}
 }

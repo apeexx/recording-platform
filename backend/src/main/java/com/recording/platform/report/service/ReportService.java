@@ -8,6 +8,9 @@ import com.recording.platform.report.dto.CollectorReportTaskList;
 import com.recording.platform.report.dto.CollectorTaskReport;
 import com.recording.platform.report.dto.CollectorTaskReportItem;
 import com.recording.platform.report.dto.CollectorRankingRow;
+import com.recording.platform.report.dto.AdminCollectorReportItem;
+import com.recording.platform.report.dto.AdminCollectorTaskReport;
+import com.recording.platform.report.dto.StageReportSummary;
 import com.recording.platform.api.PageResponse;
 import com.recording.platform.security.PlatformPrincipal;
 import com.recording.platform.task.model.OperationHistory;
@@ -88,6 +91,14 @@ public class ReportService {
 		return queries.aggregateWork(null, taskId, range.fromInclusive(), range.toExclusive());
 	}
 
+	public StageReportSummary taskStages(
+		String taskId, LocalDate fromDate, LocalDate toDate, PlatformPrincipal actor
+	) {
+		requireAdmin(actor);
+		ReportDateRange range = ReportDateRange.of(fromDate, toDate);
+		return queries.aggregateAdminStages(taskId, null, range.fromInclusive(), range.toExclusive());
+	}
+
 	public PageResponse<CollectorRankingRow> taskCollectors(
 		String taskId, LocalDate fromDate, LocalDate toDate, String sortBy,
 		int page, int size, PlatformPrincipal actor
@@ -95,11 +106,17 @@ public class ReportService {
 		requireAdmin(actor);
 		ReportDateRange range = ReportDateRange.of(fromDate, toDate);
 		String sortField = switch (sortBy == null ? "" : sortBy) {
-			case "submissionCount" -> "submissionCount";
-			case "recordingDurationMillis" -> "recordingDurationMillis";
-			case "referenceAudioDurationMillis" -> "referenceAudioDurationMillis";
-			case "referenceVideoDurationMillis" -> "referenceVideoDurationMillis";
-			default -> "completedCount";
+			case "submissionCount",
+				"submissionRecordingDurationMillis",
+				"submissionReferenceAudioDurationMillis",
+				"submissionReferenceVideoDurationMillis",
+				"completionCount",
+				"completionRecordingDurationMillis",
+				"completionReferenceAudioDurationMillis",
+				"completionReferenceVideoDurationMillis",
+				"firstSubmissionAt",
+				"latestSubmissionAt" -> sortBy;
+			default -> "completionCount";
 		};
 		int safePage = Math.max(page, 0);
 		int safeSize = Math.min(Math.max(size, 1), 100);
@@ -137,7 +154,21 @@ public class ReportService {
 		));
 	}
 
-	public PageResponse<CollectorTaskReportItem> collectorTaskSubmissions(
+	public AdminCollectorTaskReport adminCollectorTask(
+		String collectorId, String taskId, LocalDate fromDate, LocalDate toDate, PlatformPrincipal actor
+	) {
+		requireAdmin(actor);
+		ReportDateRange range = ReportDateRange.of(fromDate, toDate);
+		AdminCollectorTaskReport report = queries.adminCollectorTaskReport(
+			collectorId, taskId, range.fromInclusive(), range.toExclusive()
+		).orElseThrow(() -> new ApiException(
+			HttpStatus.NOT_FOUND, "REPORT_TASK_NOT_FOUND", "没有可统计的任务数据"
+		));
+		IdentityUser identity = users == null ? null : users.findById(collectorId).orElse(null);
+		return report.withCollectorName(identity == null ? null : identity.name());
+	}
+
+	public PageResponse<AdminCollectorReportItem> collectorTaskCompletions(
 		String collectorId, String taskId, LocalDate fromDate, LocalDate toDate,
 		int page, int size, PlatformPrincipal actor
 	) {
@@ -145,7 +176,22 @@ public class ReportService {
 		ReportDateRange range = ReportDateRange.of(fromDate, toDate);
 		int safePage = Math.max(page, 0);
 		int safeSize = Math.min(Math.max(size, 1), 100);
-		var result = queries.findCollectorTaskSubmissions(
+		var result = queries.findAdminCollectorTaskCompletions(
+			collectorId, taskId, range.fromInclusive(), range.toExclusive(),
+			PageRequest.of(safePage, safeSize)
+		);
+		return new PageResponse<>(result.getContent(), result.getNumber(), result.getSize(), result.getTotalElements());
+	}
+
+	public PageResponse<AdminCollectorReportItem> collectorTaskSubmissions(
+		String collectorId, String taskId, LocalDate fromDate, LocalDate toDate,
+		int page, int size, PlatformPrincipal actor
+	) {
+		requireAdmin(actor);
+		ReportDateRange range = ReportDateRange.of(fromDate, toDate);
+		int safePage = Math.max(page, 0);
+		int safeSize = Math.min(Math.max(size, 1), 100);
+		var result = queries.findAdminCollectorTaskSubmissions(
 			collectorId, taskId, range.fromInclusive(), range.toExclusive(),
 			PageRequest.of(safePage, safeSize)
 		);

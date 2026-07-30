@@ -12,5 +12,17 @@ public record AdminReviewApproveMutation(
 	TaskItemResult result,
 	String reviewFinalAnswer,
 	String reviewedSubmissionOperationId,
+	Instant firstCompletedAt,
 	Instant occurredAt
-) { }
+) {
+	public AdminReviewApproveMutation(
+		String itemId, String actorUserId, String actorUsername, long expectedRevision,
+		String operationId, TaskItemResult result, String reviewFinalAnswer,
+		String reviewedSubmissionOperationId, Instant occurredAt
+	) {
+		this(
+			itemId, actorUserId, actorUsername, expectedRevision, operationId, result,
+			reviewFinalAnswer, reviewedSubmissionOperationId, occurredAt, occurredAt
+		);
+	}
+}

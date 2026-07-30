@@ -231,10 +231,15 @@ public class ReviewService {
 					|| item.getRevision() != command.expectedRevision()) throw stale();
 				TaskItemResult current = item.getCurrentResult();
 				String finalAnswer = reviewFinalAnswer(requireConfiguration(item), current, command.text());
+				Instant occurredAt = Instant.now(clock);
 				AdminReviewApproveMutation mutation = new AdminReviewApproveMutation(
 					item.getId(), actor.userId(), actorName(actor), command.expectedRevision(),
 					batchId + ":" + index, current, finalAnswer,
-					latestSubmissionOperationId(item), Instant.now(clock)
+					latestSubmissionOperationId(item),
+					com.recording.platform.task.service.FirstCompletionTimePolicy.resolve(
+						item.getFirstCompletedAt(), TaskItemStatus.COMPLETED, occurredAt
+					),
+					occurredAt
 				);
 				TaskItem updated = items.adminApproveReviewIfCurrent(mutation).orElseThrow(this::stale);
 				results.add(BatchReviewResult.success(item.getId(), updated.getRevision()));
@@ -385,18 +390,22 @@ public class ReviewService {
 		TaskItem item, String operationId, PlatformPrincipal actor, TaskItemStatus target,
 		TaskItemResult result, String reviewFinalAnswer, String conclusion, CurrentRejection currentRejection
 	) {
+		Instant occurredAt = Instant.now(clock);
+		Instant firstCompletedAt = com.recording.platform.task.service.FirstCompletionTimePolicy.resolve(
+			item.getFirstCompletedAt(), target, occurredAt
+		);
 		if (actor.role() == UserRole.ADMIN) {
 			AdminReviewDecisionMutation mutation = new AdminReviewDecisionMutation(
 				item.getId(), actor.userId(), actorName(actor), item.getRevision(),
 				requiredOperationId(operationId), target, result, reviewFinalAnswer, conclusion,
-				currentRejection, latestSubmissionOperationId(item), Instant.now(clock)
+				currentRejection, latestSubmissionOperationId(item), firstCompletedAt, occurredAt
 			);
 			return items.adminDecideReviewIfCurrent(mutation).orElseThrow(this::stale);
 		}
 		ReviewDecisionMutation mutation = new ReviewDecisionMutation(
 			item.getId(), actor.userId(), actorName(actor), item.getReviewAssignmentId(), item.getRevision(),
 			requiredOperationId(operationId), target, result, reviewFinalAnswer, conclusion, currentRejection,
-			latestSubmissionOperationId(item), Instant.now(clock)
+			latestSubmissionOperationId(item), firstCompletedAt, occurredAt
 		);
 		return items.decideReviewIfCurrent(mutation).orElseThrow(this::stale);
 	}

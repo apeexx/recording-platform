@@ -6,6 +6,9 @@ import com.recording.platform.report.dto.WorkSummary;
 import com.recording.platform.report.dto.CollectorReportTaskList;
 import com.recording.platform.report.dto.CollectorTaskReport;
 import com.recording.platform.report.dto.CollectorTaskReportItem;
+import com.recording.platform.report.dto.AdminCollectorReportItem;
+import com.recording.platform.report.dto.AdminCollectorTaskReport;
+import com.recording.platform.report.dto.StageReportSummary;
 import com.recording.platform.report.service.ReportService;
 import com.recording.platform.security.PlatformPrincipal;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -30,13 +33,13 @@ public class ReportController {
 	}
 
 	@GetMapping("/tasks")
-	public WorkSummary task(
+	public StageReportSummary task(
 		@RequestParam String taskId,
 		@RequestParam(required = false) LocalDate fromDate,
 		@RequestParam(required = false) LocalDate toDate,
 		@AuthenticationPrincipal PlatformPrincipal actor
 	) {
-		return reports.task(taskId, fromDate, toDate, actor);
+		return reports.taskStages(taskId, fromDate, toDate, actor);
 	}
 
 	public WorkSummary task(String taskId, PlatformPrincipal actor) { return reports.task(taskId, actor); }
@@ -59,7 +62,7 @@ public class ReportController {
 		@org.springframework.web.bind.annotation.PathVariable String taskId,
 		@RequestParam(required = false) LocalDate fromDate,
 		@RequestParam(required = false) LocalDate toDate,
-		@RequestParam(defaultValue = "completedCount") String sortBy,
+		@RequestParam(defaultValue = "completionCount") String sortBy,
 		@RequestParam(defaultValue = "0") int page,
 		@RequestParam(defaultValue = "20") int size,
 		@AuthenticationPrincipal PlatformPrincipal actor
@@ -68,18 +71,33 @@ public class ReportController {
 	}
 
 	@GetMapping("/collectors/{collectorId}/tasks/{taskId}")
-	public CollectorTaskReport collectorTask(
+	public AdminCollectorTaskReport collectorTask(
 		@org.springframework.web.bind.annotation.PathVariable String collectorId,
 		@org.springframework.web.bind.annotation.PathVariable String taskId,
 		@RequestParam(required = false) LocalDate fromDate,
 		@RequestParam(required = false) LocalDate toDate,
 		@AuthenticationPrincipal PlatformPrincipal actor
 	) {
-		return reports.collectorTask(collectorId, taskId, fromDate, toDate, actor);
+		return reports.adminCollectorTask(collectorId, taskId, fromDate, toDate, actor);
+	}
+
+	@GetMapping("/collectors/{collectorId}/tasks/{taskId}/completions")
+	public PageResponse<AdminCollectorReportItem> collectorTaskCompletions(
+		@org.springframework.web.bind.annotation.PathVariable String collectorId,
+		@org.springframework.web.bind.annotation.PathVariable String taskId,
+		@RequestParam(required = false) LocalDate fromDate,
+		@RequestParam(required = false) LocalDate toDate,
+		@RequestParam(defaultValue = "0") int page,
+		@RequestParam(defaultValue = "20") int size,
+		@AuthenticationPrincipal PlatformPrincipal actor
+	) {
+		return reports.collectorTaskCompletions(
+			collectorId, taskId, fromDate, toDate, page, size, actor
+		);
 	}
 
 	@GetMapping("/collectors/{collectorId}/tasks/{taskId}/submissions")
-	public PageResponse<CollectorTaskReportItem> collectorTaskSubmissions(
+	public PageResponse<AdminCollectorReportItem> collectorTaskSubmissions(
 		@org.springframework.web.bind.annotation.PathVariable String collectorId,
 		@org.springframework.web.bind.annotation.PathVariable String taskId,
 		@RequestParam(required = false) LocalDate fromDate,

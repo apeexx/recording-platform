@@ -156,6 +156,9 @@ public class MongoTaskItemStore implements TaskItemStore {
 			.inc("revision", 1L)
 			.push("submissions", SubmissionHistory.from(mutation))
 			.push("operations", OperationHistory.submission(mutation, snapshot));
+		if (mutation.targetStatus() == TaskItemStatus.COMPLETED) {
+			update.set("firstCompletedAt", mutation.firstCompletedAt());
+		}
 		update.unset("currentRejection").unset("reviewFinalAnswer");
 		return modify(criteria, update);
 	}
@@ -266,6 +269,9 @@ public class MongoTaskItemStore implements TaskItemStore {
 				mutation.operationId(), type, mutation.reviewerId(), mutation.actorUsername(), content,
 				mutation.occurredAt(), snapshot
 			));
+		if (mutation.targetStatus() == TaskItemStatus.COMPLETED) {
+			update.set("firstCompletedAt", mutation.firstCompletedAt());
+		}
 		applyReviewFinalAnswer(update, mutation.targetStatus(), mutation.reviewFinalAnswer());
 		if (mutation.targetStatus() == TaskItemStatus.REWORK_PENDING) {
 			update.set("currentRejection", mutation.currentRejection());
@@ -317,6 +323,7 @@ public class MongoTaskItemStore implements TaskItemStore {
 		);
 		Update update = new Update()
 			.set("status", TaskItemStatus.COMPLETED)
+			.set("firstCompletedAt", mutation.firstCompletedAt())
 			.unset("reviewerId")
 			.unset("reviewAssignmentId")
 			.set("updatedAt", mutation.occurredAt())
@@ -360,6 +367,9 @@ public class MongoTaskItemStore implements TaskItemStore {
 				mutation.occurredAt(), snapshot
 			));
 		applyReviewFinalAnswer(update, mutation.targetStatus(), mutation.reviewFinalAnswer());
+		if (mutation.targetStatus() == TaskItemStatus.COMPLETED) {
+			update.set("firstCompletedAt", mutation.firstCompletedAt());
+		}
 		if (mutation.targetStatus() == TaskItemStatus.REWORK_PENDING) {
 			update.set("currentRejection", mutation.currentRejection());
 		} else {
@@ -376,6 +386,9 @@ public class MongoTaskItemStore implements TaskItemStore {
 		Criteria criteria = adminCriteria(mutation).and("status").ne(TaskItemStatus.DISCARDED);
 		Update update = adminUpdate(mutation, "ADMIN_STATUS_CHANGE", "将该任务调整到" + mutation.targetStatus());
 		update.set("status", mutation.targetStatus());
+		if (mutation.targetStatus() == TaskItemStatus.COMPLETED) {
+			update.set("firstCompletedAt", mutation.firstCompletedAt());
+		}
 		applyOwnership(update, mutation);
 		return modify(criteria, update);
 	}
@@ -498,6 +511,7 @@ public class MongoTaskItemStore implements TaskItemStore {
 			.unset("reviewFinalAnswer")
 			.unset("firstSubmittedAt")
 			.unset("latestSubmittedAt")
+			.unset("firstCompletedAt")
 			.set("updatedAt", mutation.occurredAt())
 			.inc("revision", 1L)
 			.push("operations", OperationHistory.release(mutation, snapshot));
@@ -531,13 +545,16 @@ public class MongoTaskItemStore implements TaskItemStore {
 		}
 		if (normalized.firstSubmittedFrom() != null || normalized.firstSubmittedTo() != null) {
 			Criteria submitted = Criteria.where("firstSubmittedAt");
+			Criteria completed = Criteria.where("firstCompletedAt");
 			if (normalized.firstSubmittedFrom() != null) {
 				submitted = submitted.gte(normalized.firstSubmittedFrom());
+				completed = completed.gte(normalized.firstSubmittedFrom());
 			}
 			if (normalized.firstSubmittedTo() != null) {
 				submitted = submitted.lt(normalized.firstSubmittedTo());
+				completed = completed.lt(normalized.firstSubmittedTo());
 			}
-			filters.add(submitted);
+			filters.add(new Criteria().orOperator(submitted, completed));
 		}
 		if (!normalized.groups().isEmpty()) {
 			filters.add(Criteria.where("status").in(normalized.groups().stream()

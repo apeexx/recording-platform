@@ -35,18 +35,26 @@ describe('统计与操作记录 API', () => {
     await reportApi.collectorTaskSubmissions('collector-1', 'task-1', {
       fromDate: '2026-07-01', toDate: '2026-07-27', page: 2, size: 20,
     })
+    await reportApi.collectorTaskCompletions('collector-1', 'task-1', {
+      fromDate: '2026-07-01', toDate: '2026-07-27', page: 1, size: 20,
+    })
     expect(httpRequest).toHaveBeenNthCalledWith(
       1, '/api/reports/collectors/collector-1/tasks/task-1?fromDate=2026-07-01&toDate=2026-07-27'
     )
     expect(httpRequest).toHaveBeenNthCalledWith(
       2, '/api/reports/collectors/collector-1/tasks/task-1/submissions?fromDate=2026-07-01&toDate=2026-07-27&page=2&size=20'
     )
+    expect(httpRequest).toHaveBeenNthCalledWith(
+      3, '/api/reports/collectors/collector-1/tasks/task-1/completions?fromDate=2026-07-01&toDate=2026-07-27&page=1&size=20'
+    )
     expect(reportApi.reviewers).toBeUndefined()
   })
 
-  it('统计只保留采集员运营页，并支持任务总表、快捷日期、同页下钻与导出', () => {
+  it('统计列表和独立详情展示双阶段、小时分布与两套明细', () => {
     const collector = readFileSync(join(process.cwd(), 'src/pages/admin/reports/CollectorStatisticsPage.vue'), 'utf8')
-    const cards = readFileSync(join(process.cwd(), 'src/components/admin/WorkSummaryCards.vue'), 'utf8')
+    const detail = readFileSync(join(process.cwd(), 'src/pages/admin/reports/CollectorStatisticsDetailPage.vue'), 'utf8')
+    const cards = readFileSync(join(process.cwd(), 'src/components/admin/StageSummaryPanel.vue'), 'utf8')
+    const hours = readFileSync(join(process.cwd(), 'src/components/admin/SubmissionHourDistribution.vue'), 'utf8')
     expect(collector).toContain('TaskSearchSelect')
     expect(collector).not.toContain('UserSearchSelect')
     expect(collector).toContain('今天')
@@ -55,15 +63,18 @@ describe('统计与操作记录 API', () => {
     expect(collector).toContain('本月')
     expect(collector).toContain('全部')
     expect(collector).toContain('reportApi.taskCollectors')
-    expect(collector).toContain('reportApi.collectorTask')
-    expect(collector).toContain('reportApi.collectorTaskSubmissions')
     expect(collector).toContain('taskApi.exportItems')
     expect(collector).toContain('await taskApi.prepareExport')
-    expect(collector).toContain('detailRequestId')
-    expect(collector).toContain('requestId !== detailRequestId')
-    expect(collector).toContain('每日当前完成数')
-    expect(cards).toContain('工作量')
-    expect(cards).toContain('最终结果')
-    expect(cards).toContain('参考来源')
+    expect(collector).toContain('collector-statistics-detail')
+    expect(collector).toContain('首次提交')
+    expect(collector).toContain('高峰时段')
+    expect(detail).toContain('reportApi.collectorTask')
+    expect(detail).toContain('reportApi.collectorTaskSubmissions')
+    expect(detail).toContain('reportApi.collectorTaskCompletions')
+    expect(detail).toContain('提交明细')
+    expect(detail).toContain('完成明细')
+    expect(cards).toContain('提交统计')
+    expect(cards).toContain('完成统计')
+    expect(hours).toContain('24 小时首次提交分布')
   })
 })

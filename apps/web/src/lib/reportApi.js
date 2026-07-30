@@ -11,6 +11,9 @@ export const reportApi = {
   collectorTaskSubmissions(collectorId, taskId, params = {}) {
     return httpRequest(`/api/reports/collectors/${encodeURIComponent(collectorId)}/tasks/${encodeURIComponent(taskId)}/submissions${queryString(params)}`)
   },
+  collectorTaskCompletions(collectorId, taskId, params = {}) {
+    return httpRequest(`/api/reports/collectors/${encodeURIComponent(collectorId)}/tasks/${encodeURIComponent(taskId)}/completions${queryString(params)}`)
+  },
   me(params = {}) { return httpRequest(`/api/reports/me${queryString(params)}`) },
   submissions(params = {}) { return httpRequest(`/api/reports/me/submissions${queryString(params)}`) },
   operations(params = {}) { return httpRequest(`/api/operations${queryString(params)}`) },

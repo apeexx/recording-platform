@@ -40,6 +40,7 @@ class TaskItemCsvExportServiceTests {
 		TaskItem completed = item(1, TaskItemStatus.COMPLETED, "=source-1", "=原始文本");
 		completed.setReviewFinalAnswer("+审核最终文本");
 		completed.setCollectorId("MINI-1");
+		completed.setFirstCompletedAt(Instant.parse("2026-07-30T03:00:00Z"));
 		when(tasks.findById("task-1")).thenReturn(Optional.of(task));
 		when(items.findAllByTaskId(eq("task-1"), any(TaskItemFilter.class), any(Pageable.class)))
 			.thenReturn(new PageImpl<>(List.of(completed)));
@@ -53,10 +54,10 @@ class TaskItemCsvExportServiceTests {
 		assertThat(bytes).startsWith((byte) 0xef, (byte) 0xbb, (byte) 0xbf);
 		String csv = new String(bytes, StandardCharsets.UTF_8);
 		assertThat(csv).contains(
-			"taskCode,taskName,itemCode,sourcePlatform,sourceItemId,status,statusLabel",
+			"任务编号,任务名称,条目编号,来源平台,脚本来源 ID,状态代码,状态名称",
 			"T000001", "普通话录音", "T000001-0000001", "BYTEDANCE_AIDP",
 			"'=source-1", "采集员一", "'=原始文本", "'+审核最终文本",
-			"true", "12000", "30000"
+			"2026-07-30T03:00:00Z", "是", "12000", "30000"
 		);
 		assertThat(csv).contains(
 			"https://cdn.example.com/reference.wav",

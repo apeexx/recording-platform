@@ -197,13 +197,13 @@ class ReportServiceTests {
 			new com.recording.platform.report.dto.CollectorTaskReportSummary(2, 1, 12_000, 0, 30_000),
 			List.of(), List.of()
 		);
-		var row = new com.recording.platform.report.dto.CollectorTaskReportItem(
-			"item-1", "T000001-0000001", from, from, TaskItemStatus.COMPLETED,
+		var row = new com.recording.platform.report.dto.AdminCollectorReportItem(
+			"item-1", "T000001-0000001", from, from, from, TaskItemStatus.COMPLETED,
 			12_000, 0, 30_000, false, true
 		);
 		when(queries.collectorTaskReport("collector-1", "task-1", from, to))
 			.thenReturn(Optional.of(report));
-		when(queries.findCollectorTaskSubmissions(
+		when(queries.findAdminCollectorTaskSubmissions(
 			"collector-1", "task-1", from, to, PageRequest.of(0, 20)
 		)).thenReturn(new PageImpl<>(List.of(row), PageRequest.of(0, 20), 1));
 		ReportService service = new ReportService(items, queries);
@@ -217,6 +217,40 @@ class ReportServiceTests {
 			LocalDate.of(2026, 7, 27), LocalDate.of(2026, 7, 28),
 			0, 20, admin()
 		).items()).containsExactly(row);
+	}
+
+	@Test
+	void adminReportsExposeIndependentSubmissionAndCompletionStages() {
+		TaskItemStore items = mock(TaskItemStore.class);
+		ReportQueryStore queries = mock(ReportQueryStore.class);
+		Instant from = Instant.parse("2026-07-26T16:00:00Z");
+		Instant to = Instant.parse("2026-07-28T16:00:00Z");
+		var submissions = new com.recording.platform.report.dto.StageMetrics(3, 12_000, 30_000, 8_000);
+		var completions = new com.recording.platform.report.dto.StageMetrics(2, 9_000, 20_000, 4_000);
+		var summary = new com.recording.platform.report.dto.StageReportSummary(
+			submissions, completions,
+			java.util.stream.IntStream.range(0, 24)
+				.mapToObj(hour -> new com.recording.platform.report.dto.SubmissionHourBucket(
+					hour, hour == 9 ? 2 : 0
+				)).toList()
+		);
+		var completionRow = new com.recording.platform.report.dto.AdminCollectorReportItem(
+			"item-1", "T000001-0000001", from, from, Instant.parse("2026-07-27T01:00:00Z"),
+			TaskItemStatus.COMPLETED, 9_000, 10_000, 2_000, true, true
+		);
+		when(queries.aggregateAdminStages("task-1", null, from, to)).thenReturn(summary);
+		when(queries.findAdminCollectorTaskCompletions(
+			"collector-1", "task-1", from, to, PageRequest.of(0, 20)
+		)).thenReturn(new PageImpl<>(List.of(completionRow), PageRequest.of(0, 20), 1));
+		ReportService service = new ReportService(items, queries);
+
+		assertThat(service.taskStages(
+			"task-1", LocalDate.of(2026, 7, 27), LocalDate.of(2026, 7, 28), admin()
+		)).isEqualTo(summary);
+		assertThat(service.collectorTaskCompletions(
+			"collector-1", "task-1", LocalDate.of(2026, 7, 27), LocalDate.of(2026, 7, 28),
+			0, 20, admin()
+		).items()).containsExactly(completionRow);
 	}
 
 	@Test

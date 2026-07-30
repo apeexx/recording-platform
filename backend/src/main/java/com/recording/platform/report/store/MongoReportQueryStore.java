@@ -8,6 +8,12 @@ import com.recording.platform.report.dto.CollectorTaskReport;
 import com.recording.platform.report.dto.CollectorTaskReportItem;
 import com.recording.platform.report.dto.CollectorTaskReportSummary;
 import com.recording.platform.report.dto.CollectorRankingRow;
+import com.recording.platform.report.dto.AdminCollectorReportItem;
+import com.recording.platform.report.dto.AdminCollectorTaskReport;
+import com.recording.platform.report.dto.StageDaySummary;
+import com.recording.platform.report.dto.StageMetrics;
+import com.recording.platform.report.dto.StageReportSummary;
+import com.recording.platform.report.dto.SubmissionHourBucket;
 import com.recording.platform.report.dto.DashboardItemCounts;
 import com.recording.platform.report.dto.DashboardReport;
 import com.recording.platform.report.dto.DashboardTaskCounts;
@@ -463,43 +469,319 @@ public class MongoReportQueryStore implements ReportQueryStore {
 	public Page<CollectorRankingRow> findCollectorRankings(
 		String taskId, Instant fromInclusive, Instant toExclusive, String sortField, Pageable pageable
 	) {
-		Document match = new Document("taskId", taskId)
-			.append("collectorId", new Document("$ne", null))
-			.append("firstSubmittedAt", new Document("$exists", true))
-			.append("status", new Document("$nin", List.of("AVAILABLE", "DISCARDED")));
-		appendDateRange(match, "firstSubmittedAt", fromInclusive, toExclusive);
-		Document group = new Document("_id", "$collectorId")
-			.append("submissionCount", new Document("$sum", 1))
-			.append("completedCount", new Document("$sum", new Document("$cond", List.of(
-				new Document("$eq", List.of("$status", "COMPLETED")), 1, 0
-			))))
+		Map<String, RankingAccumulator> values = new HashMap<>();
+		Document submissionMatch = stageMatch(
+			taskId, null, "firstSubmittedAt", false, fromInclusive, toExclusive
+		);
+		Document submissionGroup = stageGroup("$collectorId")
+			.append("firstSubmissionAt", new Document("$min", "$firstSubmittedAt"))
+			.append("latestSubmissionAt", new Document("$max", "$latestSubmittedAt"));
+		for (Document row : items.aggregate(List.of(
+			new Document("$match", submissionMatch),
+			new Document("$group", submissionGroup)
+		))) {
+			RankingAccumulator value = values.computeIfAbsent(
+				row.getString("_id"), ignored -> new RankingAccumulator()
+			);
+			value.submissions = stageMetrics(row);
+			value.firstSubmissionAt = instant(row.get("firstSubmissionAt"));
+			value.latestSubmissionAt = instant(row.get("latestSubmissionAt"));
+		}
+		for (Document row : items.aggregate(List.of(
+			new Document("$match", submissionMatch),
+			new Document("$group", new Document("_id", new Document(
+				"collectorId", "$collectorId"
+			).append("hour", new Document("$hour", new Document(
+				"date", "$firstSubmittedAt"
+			).append("timezone", "Asia/Shanghai"))))
+				.append("count", new Document("$sum", 1))),
+			new Document("$sort", new Document("count", -1).append("_id.hour", 1))
+		))) {
+			Document id = row.get("_id", Document.class);
+			if (id == null) continue;
+			RankingAccumulator value = values.computeIfAbsent(
+				id.getString("collectorId"), ignored -> new RankingAccumulator()
+			);
+			if (value.peakSubmissionHour == null) {
+				value.peakSubmissionHour = ((Number) id.get("hour")).intValue();
+			}
+		}
+		Document completionMatch = stageMatch(
+			taskId, null, "firstCompletedAt", true, fromInclusive, toExclusive
+		);
+		for (Document row : items.aggregate(List.of(
+			new Document("$match", completionMatch),
+			new Document("$group", stageGroup("$collectorId"))
+		))) {
+			values.computeIfAbsent(
+				row.getString("_id"), ignored -> new RankingAccumulator()
+			).completions = stageMetrics(row);
+		}
+		List<CollectorRankingRow> allRows = values.entrySet().stream()
+			.map(entry -> entry.getValue().toRow(entry.getKey()))
+			.sorted(rankingComparator(sortField))
+			.toList();
+		int from = (int) Math.min(pageable.getOffset(), allRows.size());
+		int to = Math.min(from + pageable.getPageSize(), allRows.size());
+		return new PageImpl<>(List.copyOf(allRows.subList(from, to)), pageable, allRows.size());
+	}
+
+	private java.util.Comparator<CollectorRankingRow> rankingComparator(String field) {
+		java.util.Comparator<CollectorRankingRow> comparator = switch (field) {
+			case "submissionCount" -> java.util.Comparator.comparingLong(row -> row.submissions().count());
+			case "submissionRecordingDurationMillis" -> java.util.Comparator.comparingLong(
+				row -> row.submissions().recordingDurationMillis()
+			);
+			case "submissionReferenceAudioDurationMillis" -> java.util.Comparator.comparingLong(
+				row -> row.submissions().referenceAudioDurationMillis()
+			);
+			case "submissionReferenceVideoDurationMillis" -> java.util.Comparator.comparingLong(
+				row -> row.submissions().referenceVideoDurationMillis()
+			);
+			case "completionRecordingDurationMillis" -> java.util.Comparator.comparingLong(
+				row -> row.completions().recordingDurationMillis()
+			);
+			case "completionReferenceAudioDurationMillis" -> java.util.Comparator.comparingLong(
+				row -> row.completions().referenceAudioDurationMillis()
+			);
+			case "completionReferenceVideoDurationMillis" -> java.util.Comparator.comparingLong(
+				row -> row.completions().referenceVideoDurationMillis()
+			);
+			case "firstSubmissionAt" -> java.util.Comparator.comparing(
+				CollectorRankingRow::firstSubmissionAt,
+				java.util.Comparator.nullsLast(java.util.Comparator.reverseOrder())
+			);
+			case "latestSubmissionAt" -> java.util.Comparator.comparing(
+				CollectorRankingRow::latestSubmissionAt,
+				java.util.Comparator.nullsLast(java.util.Comparator.reverseOrder())
+			);
+			default -> java.util.Comparator.comparingLong(row -> row.completions().count());
+		};
+		boolean timestampSort = "firstSubmissionAt".equals(field) || "latestSubmissionAt".equals(field);
+		return (timestampSort ? comparator : comparator.reversed())
+			.thenComparing(CollectorRankingRow::collectorId);
+	}
+
+	private static final class RankingAccumulator {
+		private StageMetrics submissions = StageMetrics.empty();
+		private StageMetrics completions = StageMetrics.empty();
+		private Instant firstSubmissionAt;
+		private Instant latestSubmissionAt;
+		private Integer peakSubmissionHour;
+
+		private CollectorRankingRow toRow(String collectorId) {
+			return new CollectorRankingRow(
+				collectorId, null, submissions, completions,
+				firstSubmissionAt, latestSubmissionAt, peakSubmissionHour
+			);
+		}
+	}
+
+	@Override
+	public StageReportSummary aggregateAdminStages(
+		String taskId, String collectorId, Instant fromInclusive, Instant toExclusive
+	) {
+		StageMetrics submissions = aggregateStage(
+			stageMatch(taskId, collectorId, "firstSubmittedAt", false, fromInclusive, toExclusive)
+		);
+		StageMetrics completions = aggregateStage(
+			stageMatch(taskId, collectorId, "firstCompletedAt", true, fromInclusive, toExclusive)
+		);
+		long[] hours = new long[24];
+		List<Document> hourPipeline = List.of(
+			new Document("$match", stageMatch(
+				taskId, collectorId, "firstSubmittedAt", false, fromInclusive, toExclusive
+			)),
+			new Document("$group", new Document(
+				"_id", new Document("$hour", new Document("date", "$firstSubmittedAt")
+					.append("timezone", "Asia/Shanghai"))
+			).append("count", new Document("$sum", 1)))
+		);
+		for (Document row : items.aggregate(hourPipeline)) {
+			int hour = row.get("_id") instanceof Number number ? number.intValue() : -1;
+			if (hour >= 0 && hour < 24) hours[hour] = number(row, "count");
+		}
+		List<SubmissionHourBucket> distribution = new ArrayList<>(24);
+		for (int hour = 0; hour < 24; hour++) {
+			distribution.add(new SubmissionHourBucket(hour, hours[hour]));
+		}
+		return new StageReportSummary(submissions, completions, List.copyOf(distribution));
+	}
+
+	@Override
+	public Optional<AdminCollectorTaskReport> adminCollectorTaskReport(
+		String collectorId, String taskId, Instant fromInclusive, Instant toExclusive
+	) {
+		Document task = findTask(taskId);
+		if (task == null) return Optional.empty();
+		StageReportSummary summary = aggregateAdminStages(
+			taskId, collectorId, fromInclusive, toExclusive
+		);
+		Map<LocalDate, StageMetrics[]> byDate = new HashMap<>();
+		aggregateDailyStage(
+			stageMatch(taskId, collectorId, "firstSubmittedAt", false, fromInclusive, toExclusive),
+			"firstSubmittedAt"
+		).forEach((date, metrics) -> byDate.computeIfAbsent(
+			date, ignored -> new StageMetrics[] { StageMetrics.empty(), StageMetrics.empty() }
+		)[0] = metrics);
+		aggregateDailyStage(
+			stageMatch(taskId, collectorId, "firstCompletedAt", true, fromInclusive, toExclusive),
+			"firstCompletedAt"
+		).forEach((date, metrics) -> byDate.computeIfAbsent(
+			date, ignored -> new StageMetrics[] { StageMetrics.empty(), StageMetrics.empty() }
+		)[1] = metrics);
+		List<StageDaySummary> days = byDate.entrySet().stream()
+			.sorted(Map.Entry.<LocalDate, StageMetrics[]>comparingByKey().reversed())
+			.map(entry -> new StageDaySummary(
+				entry.getKey(), entry.getValue()[0], entry.getValue()[1]
+			)).toList();
+		if (summary.submissions().count() == 0 && summary.completions().count() == 0
+			&& items.countDocuments(new Document("taskId", taskId).append("collectorId", collectorId)) == 0) {
+			return Optional.empty();
+		}
+		return Optional.of(new AdminCollectorTaskReport(
+			taskId, task.getString("taskCode"), task.getString("name"), collectorId, null,
+			summary, days
+		));
+	}
+
+	@Override
+	public Page<AdminCollectorReportItem> findAdminCollectorTaskSubmissions(
+		String collectorId, String taskId, Instant fromInclusive, Instant toExclusive, Pageable pageable
+	) {
+		return findAdminCollectorItems(
+			stageMatch(taskId, collectorId, "firstSubmittedAt", false, fromInclusive, toExclusive),
+			"firstSubmittedAt", pageable
+		);
+	}
+
+	@Override
+	public Page<AdminCollectorReportItem> findAdminCollectorTaskCompletions(
+		String collectorId, String taskId, Instant fromInclusive, Instant toExclusive, Pageable pageable
+	) {
+		return findAdminCollectorItems(
+			stageMatch(taskId, collectorId, "firstCompletedAt", true, fromInclusive, toExclusive),
+			"firstCompletedAt", pageable
+		);
+	}
+
+	private Page<AdminCollectorReportItem> findAdminCollectorItems(
+		Document match, String sortField, Pageable pageable
+	) {
+		List<Document> pipeline = new ArrayList<>();
+		pipeline.add(new Document("$match", match));
+		pipeline.add(new Document("$sort", new Document(sortField, -1).append("itemCode", 1)));
+		pipeline.add(new Document("$skip", pageable.getOffset()));
+		pipeline.add(new Document("$limit", pageable.getPageSize()));
+		pipeline.add(new Document("$project", adminItemProjection()));
+		List<AdminCollectorReportItem> rows = new ArrayList<>();
+		for (Document row : items.aggregate(pipeline)) rows.add(adminCollectorItem(row));
+		Document count = items.aggregate(List.of(
+			new Document("$match", match), new Document("$count", "total")
+		)).first();
+		return new PageImpl<>(rows, pageable, count == null ? 0 : number(count, "total"));
+	}
+
+	private Document adminItemProjection() {
+		return new Document("itemId", "$_id")
+			.append("itemCode", 1)
+			.append("firstSubmittedAt", 1)
+			.append("latestSubmittedAt", 1)
+			.append("firstCompletedAt", 1)
+			.append("currentItemStatus", "$status")
+			.append("recordingDurationMillis", new Document(
+				"$ifNull", List.of("$currentResult.audio.durationMillis", 0)
+			))
+			.append("referenceAudioDurationMillis", new Document(
+				"$ifNull", List.of("$referenceAudioDurationMillis", 0)
+			))
+			.append("referenceVideoDurationMillis", new Document(
+				"$ifNull", List.of("$referenceVideoDurationMillis", 0)
+			))
+			.append("textPresent", new Document("$and", List.of(
+				new Document("$ne", java.util.Arrays.asList(
+					new Document("$ifNull", java.util.Arrays.asList("$currentResult.text", null)), null
+				)),
+				new Document("$ne", List.of("$currentResult.text", ""))
+			)))
+			.append("audioPresent", new Document("$ne", java.util.Arrays.asList(
+				new Document("$ifNull", java.util.Arrays.asList("$currentResult.audio", null)), null
+			)));
+	}
+
+	private AdminCollectorReportItem adminCollectorItem(Document row) {
+		return new AdminCollectorReportItem(
+			String.valueOf(row.get("itemId")), row.getString("itemCode"),
+			instant(row.get("firstSubmittedAt")), instant(row.get("latestSubmittedAt")),
+			instant(row.get("firstCompletedAt")),
+			TaskItemStatus.valueOf(row.getString("currentItemStatus")),
+			number(row, "recordingDurationMillis"), number(row, "referenceAudioDurationMillis"),
+			number(row, "referenceVideoDurationMillis"),
+			Boolean.TRUE.equals(row.getBoolean("textPresent")),
+			Boolean.TRUE.equals(row.getBoolean("audioPresent"))
+		);
+	}
+
+	private StageMetrics aggregateStage(Document match) {
+		Document row = items.aggregate(List.of(
+			new Document("$match", match),
+			new Document("$group", stageGroup(null))
+		)).first();
+		return stageMetrics(row);
+	}
+
+	private Map<LocalDate, StageMetrics> aggregateDailyStage(Document match, String dateField) {
+		List<Document> pipeline = List.of(
+			new Document("$match", match),
+			new Document("$project", new Document("date", new Document(
+				"$dateToString", new Document("format", "%Y-%m-%d")
+					.append("date", "$" + dateField).append("timezone", "Asia/Shanghai")
+			)).append("recordingDurationMillis", new Document(
+				"$ifNull", List.of("$currentResult.audio.durationMillis", 0)
+			)).append("referenceAudioDurationMillis", new Document(
+				"$ifNull", List.of("$referenceAudioDurationMillis", 0)
+			)).append("referenceVideoDurationMillis", new Document(
+				"$ifNull", List.of("$referenceVideoDurationMillis", 0)
+			))),
+			new Document("$group", stageGroup("$date"))
+		);
+		Map<LocalDate, StageMetrics> result = new HashMap<>();
+		for (Document row : items.aggregate(pipeline)) {
+			result.put(LocalDate.parse(row.getString("_id")), stageMetrics(row));
+		}
+		return result;
+	}
+
+	private Document stageGroup(Object id) {
+		return new Document("_id", id)
+			.append("count", new Document("$sum", 1))
 			.append("recordingDurationMillis", new Document("$sum",
-				new Document("$ifNull", List.of("$currentResult.audio.durationMillis", 0))))
+				new Document("$ifNull", List.of("$recordingDurationMillis",
+					new Document("$ifNull", List.of("$currentResult.audio.durationMillis", 0))))))
 			.append("referenceAudioDurationMillis", new Document("$sum",
 				new Document("$ifNull", List.of("$referenceAudioDurationMillis", 0))))
 			.append("referenceVideoDurationMillis", new Document("$sum",
 				new Document("$ifNull", List.of("$referenceVideoDurationMillis", 0))));
-		List<Document> base = List.of(
-			new Document("$match", match),
-			new Document("$group", group)
+	}
+
+	private StageMetrics stageMetrics(Document row) {
+		return row == null ? StageMetrics.empty() : new StageMetrics(
+			number(row, "count"), number(row, "recordingDurationMillis"),
+			number(row, "referenceAudioDurationMillis"), number(row, "referenceVideoDurationMillis")
 		);
-		List<Document> rowsPipeline = new ArrayList<>(base);
-		rowsPipeline.add(new Document("$sort", new Document(sortField, -1).append("_id", 1)));
-		rowsPipeline.add(new Document("$skip", pageable.getOffset()));
-		rowsPipeline.add(new Document("$limit", pageable.getPageSize()));
-		List<CollectorRankingRow> rows = new ArrayList<>();
-		for (Document row : items.aggregate(rowsPipeline)) {
-			rows.add(new CollectorRankingRow(
-				row.getString("_id"), null,
-				number(row, "submissionCount"), number(row, "completedCount"),
-				number(row, "recordingDurationMillis"), number(row, "referenceAudioDurationMillis"),
-				number(row, "referenceVideoDurationMillis")
-			));
-		}
-		List<Document> countPipeline = new ArrayList<>(base);
-		countPipeline.add(new Document("$count", "total"));
-		Document count = items.aggregate(countPipeline).first();
-		return new PageImpl<>(rows, pageable, count == null ? 0 : number(count, "total"));
+	}
+
+	private Document stageMatch(
+		String taskId, String collectorId, String dateField, boolean completedOnly,
+		Instant fromInclusive, Instant toExclusive
+	) {
+		Document match = new Document("taskId", taskId)
+			.append("collectorId", collectorId == null ? new Document("$ne", null) : collectorId)
+			.append(dateField, new Document("$exists", true).append("$ne", null));
+		if (completedOnly) match.append("status", "COMPLETED");
+		else match.append("status", new Document("$nin", List.of("AVAILABLE", "DISCARDED")));
+		appendDateRange(match, dateField, fromInclusive, toExclusive);
+		return match;
 	}
 
 	private Document findTask(String taskId) {

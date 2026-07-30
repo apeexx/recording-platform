@@ -227,7 +227,7 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 ## 7. 接口说明
 
 当前后端提供身份、会话、后台用户管理、语音生成、任务配置、授权、任务池、人工审核、任务级 AI 辅助转写、动态状态、软废弃恢复、录音媒体、导入及外部完成结果读取 API；不提供机器自动通过或自动驳回。
-当前同时提供操作记录与统计 API：条目操作记录按权限读取，全局操作记录仅 ADMIN/REVIEWER；任务汇总、任务内采集员排行及指定采集员任务下钻仅 ADMIN；采集员按最近提交任务查看当前 assignment 汇总、每日分段及倒序提交明细。审核统计接口已移除，REVIEWER 调用 `/api/reports/me` 固定返回 `403 ACCESS_DENIED`。
+当前同时提供操作记录与统计 API：条目操作记录按权限读取，全局操作记录仅 ADMIN/REVIEWER；管理员统计按首次提交与首次完成拆成两个阶段，提供任务汇总、24 小时提交分布、任务内采集员排行、独立人员详情及提交/完成两套分页明细；小程序继续按最近提交任务查看原有 current assignment 汇总、每日分段及倒序提交明细。审核统计接口已移除，REVIEWER 调用 `/api/reports/me` 固定返回 `403 ACCESS_DENIED`。
 Web 数据大屏使用仅 ADMIN 可访问的 `GET /api/reports/dashboard`，返回 `generatedAt`、真实任务生命周期数量、条目状态数量、当前采集人数、Asia/Shanghai 当日及最近 7 日首次提交统计和最多 8 个任务排行；最近操作仍复用 `/api/operations`。
 
 所有 API 响应必须带 `X-Request-Id`；错误响应统一为 `{ code, message, requestId, details? }`。未预期异常只能返回脱敏摘要，不得返回堆栈、数据库内部消息、密钥或完整第三方 payload。统一状态至少覆盖 400、401、403、404、409、413、415、422、429、500 和 503。
@@ -487,12 +487,12 @@ Web 数据大屏使用仅 ADMIN 可访问的 `GET /api/reports/dashboard`，返�
 
 ```text
 请求方法：GET
-请求路径：/api/reports/tasks、/api/reports/tasks/{taskId}/collectors、/api/reports/collectors、/api/reports/collectors/{collectorId}/tasks/{taskId}、/api/reports/collectors/{collectorId}/tasks/{taskId}/submissions
+请求路径：/api/reports/tasks、/api/reports/tasks/{taskId}/collectors、/api/reports/collectors、/api/reports/collectors/{collectorId}/tasks/{taskId}、/api/reports/collectors/{collectorId}/tasks/{taskId}/submissions、/api/reports/collectors/{collectorId}/tasks/{taskId}/completions
 请求参数：任务和指定采集员任务汇总支持可选 fromDate、toDate；旧采集员汇总支持 userId、可选 taskId、fromDate、toDate；任务采集员排名另支持 sortBy=completedCount|submissionCount|recordingDurationMillis|referenceAudioDurationMillis|referenceVideoDurationMillis、page、size；完整提交明细另支持 page、size
-响应结构：汇总保留 cumulativeSubmissions、cumulativeDurationMillis、currentCompletedCount、currentDurationMillis、releaseCount、discardCount，并增加 submissionCount、completedCount、recordingDurationMillis、referenceAudioDurationMillis、referenceVideoDurationMillis；排名分页返回采集员 ID、姓名及五项统计；指定采集员任务下钻返回五项汇总、含 completedCount 的每日分段及最近 3 条提交，完整明细接口返回分页结构
+响应结构：管理员任务与人员详情使用独立双阶段 DTO；StageMetrics 固定含 count、recordingDurationMillis、referenceAudioDurationMillis、referenceVideoDurationMillis，StageReportSummary 固定含 submissions、completions 和 0–23 点完整 submissionHourDistribution；排行返回两阶段八项指标、firstSubmissionAt、latestSubmissionAt、peakSubmissionHour；人员详情返回双阶段汇总及两阶段每日统计，提交和完成明细均为分页结构。`/api/reports/me/**` 保持原小程序契约
 错误码：403 ACCESS_DENIED；422 INVALID_REPORT_DATE_RANGE
 权限要求：任务、指定采集员汇总、排名与下钻仅 ADMIN；不再提供审核统计端点，`/api/reports/me` 仅 COLLECTOR 可读
-数据一致性要求：日期使用 Asia/Shanghai 自然日闭区间，允许单边日期；fromDate 晚于 toDate 返回 422；统计直接聚合当前有效 task_items，按 firstSubmittedAt 计提交/完成，AVAILABLE 与 DISCARDED 不计入当前五项统计，时长缺失按 0；姓名通过身份目录批量补全，不冗余写入任务条目
+数据一致性要求：日期使用 Asia/Shanghai 自然日闭区间，允许单边日期；fromDate 晚于 toDate 返回 422；提交按 firstSubmittedAt、完成按 firstCompletedAt 独立筛选，返修/覆盖及再次完成不改变首次归属；完成阶段只统计当前 COMPLETED，提交阶段排除 AVAILABLE/DISCARDED；废弃保留时间字段但暂时退出统计，恢复后按原日期恢复；真正释放清除首次提交与首次完成归属；小时高峰并列时取较早小时；时长均取条目当前有效结果，缺失按 0；姓名通过身份目录批量补全，不冗余写入任务条目
 前端调用位置：apps/web/src/lib/reportApi.js、apps/web/src/pages/admin/reports/*
 ```
 
@@ -500,10 +500,10 @@ Web 数据大屏使用仅 ADMIN 可访问的 `GET /api/reports/dashboard`，返�
 请求方法：GET
 请求路径：/api/tasks/{taskId}/items/export.csv/ready、/api/tasks/{taskId}/items/export.csv
 请求参数：继承管理列表的 itemCode、itemCodeQuery、sourceItemIdQuery、group、collectorId、includeUnassigned、result，并可选 fromDate、toDate；不接收 page、size
-响应结构：ready 预检成功返回 204；导出返回 UTF-8 BOM CSV；固定英文表头为 taskCode、taskName、itemCode、sourcePlatform、sourceItemId、status、statusLabel、collectorId、collectorName、reviewerId、reviewerName、referenceText、referenceAudioUrl、referenceVideoUrl、firstSubmittedAt、latestSubmittedAt、createdAt、updatedAt、currentResultText、finalResultText、resultAudioPresent、recordingDurationMillis、referenceAudioDurationMillis、referenceVideoDurationMillis
+响应结构：ready 预检成功返回 204；导出返回 UTF-8 BOM CSV；固定中文表头依次为任务编号、任务名称、条目编号、来源平台、脚本来源 ID、状态代码、状态名称、采集员 ID、采集员姓名、审核员 ID、审核员姓名、参考文本、参考音频地址、参考视频地址、首次提交时间、最新提交时间、首次完成时间、创建时间、更新时间、当前结果文本、最终结果文本、是否包含结果录音、最终录音时长（毫秒）、参考音频时长（毫秒）、参考视频时长（毫秒）；布尔值固定输出“是/否”
 错误码：403 ACCESS_DENIED；404 TASK_NOT_FOUND；422 INVALID_REPORT_DATE_RANGE
 权限要求：仅 ADMIN
-数据一致性要求：Web 必须先通过统一 httpClient 调用 ready，以处理会话替换、权限、任务和日期错误，成功后再由浏览器原生发起流式下载；导出全部匹配结果并按 sequence 升序稳定分页流式写出；空结果仍返回表头；字段使用标准 CSV 转义和公式注入保护；finalResultText 仅 COMPLETED 输出，优先 reviewFinalAnswer，否则回退 currentResult.text；referenceAudioUrl、referenceVideoUrl 只保留协议、主机、端口和路径，必须移除查询参数与片段，避免导出签名参数；不输出媒体 ID、结果录音链接、磁盘路径、格式、大小、采样率、声道、凭证、完整签名 URL 或完整操作历史
+数据一致性要求：Web 必须先通过统一 httpClient 调用 ready，以处理会话替换、权限、任务和日期错误，成功后再由浏览器原生发起流式下载；统计页传入日期范围时，首次提交或首次完成任一阶段命中范围即纳入 CSV，确保两阶段均可对表；导出全部匹配结果并按 sequence 升序稳定分页流式写出；空结果仍返回表头；字段使用标准 CSV 转义和公式注入保护；finalResultText 仅 COMPLETED 输出，优先 reviewFinalAnswer，否则回退 currentResult.text；referenceAudioUrl、referenceVideoUrl 只保留协议、主机、端口和路径，必须移除查询参数与片段，避免导出签名参数；不输出媒体 ID、结果录音链接、磁盘路径、格式、大小、采样率、声道、凭证、完整签名 URL 或完整操作历史
 前端调用位置：apps/web/src/lib/taskApi.js、任务详情数据池、独立任务数据池、采集员统计
 ```
 
@@ -739,13 +739,13 @@ Web 数据大屏使用仅 ADMIN 可访问的 `GET /api/reports/dashboard`，返�
 
 ```text
 集合名称：task_items
-字段名称：taskId、sequence、itemCode、creationOperationId、status、collectorId、reviewerId、assignmentId、reviewAssignmentId、revision、参考字段、referenceAudioDurationMillis、referenceVideoDurationMillis、firstSubmittedAt、latestSubmittedAt、currentResult、currentRejection、currentDiscard、submissions（含提交时 collectorId）、operations、discardedPreviousStatus、createdAt、updatedAt
+字段名称：taskId、sequence、itemCode、creationOperationId、status、collectorId、reviewerId、assignmentId、reviewAssignmentId、revision、参考字段、referenceAudioDurationMillis、referenceVideoDurationMillis、firstSubmittedAt、latestSubmittedAt、firstCompletedAt、currentResult、currentRejection、currentDiscard、submissions（含提交时 collectorId）、operations、discardedPreviousStatus、createdAt、updatedAt
 字段类型：字符串、枚举、数值、嵌套文档、数组、UTC Instant
 默认值：新条目 AVAILABLE、revision=0、历史数组为空
 唯一约束：(taskId,itemCode)；creationOperationId 存在时任务内唯一；普通 RECORDING_PENDING 与 REWORK_PENDING 均不设采集员持有数量唯一约束
 索引：上述业务唯一索引；(taskId,status,sequence) 领取索引；(collectorId,status)；普通查询索引 (collectorId,taskId,status)
-数据兼容策略：条目通过 taskId 读取已冻结任务配置；currentDiscard 只表示当前废弃标记，恢复后清除，历史缺失时安全占位；当前结果可替换/清除，提交与操作历史只追加；个人统计只读当前 assignment 字段，不回扫历史 submissions；采集员废弃次数与管理员废弃次数均计入流程统计
-迁移步骤：本轮按已确认方案不兼容旧统计数据，更新后重置数据库；应用启动时仍先确保普通索引 `collector_task_status` 创建成功，再幂等删除旧 `unique_collector_recording_pending` 与 `unique_collector_task_recording_pending`，失败则终止启动
+数据兼容策略：条目通过 taskId 读取已冻结任务配置；currentDiscard 只表示当前废弃标记，恢复后清除，历史缺失时安全占位；当前结果可替换/清除，提交与操作历史只追加；firstCompletedAt 第一次进入 COMPLETED 时写入，管理员退回、废弃与恢复不覆盖，再次完成仍保留首次值，真正释放才清除；小程序个人统计只读原 current assignment 字段，不改变接口；采集员废弃次数与管理员废弃次数均计入流程统计
+迁移步骤：应用启动时幂等回填缺失 firstCompletedAt，只使用最早的 REVIEW_APPROVE、ADMIN_BATCH_APPROVE、结果为 COMPLETED 的 SUBMIT 或 ADMIN_STATUS_CHANGE 操作时间，忽略废弃恢复；无法可靠判断的条目保持为空并只记录脱敏数量。继续确保普通索引 `collector_task_status` 及双阶段统计索引创建成功，再幂等删除旧 `unique_collector_recording_pending` 与 `unique_collector_task_recording_pending`，失败则终止启动
 回滚方式：备份集合与本地媒体；恢复任一旧唯一索引前必须先处理与其口径冲突的多条普通 RECORDING_PENDING，否则索引无法重建；不得只回滚 Mongo 或只回滚文件
 ```
 

@@ -6,6 +6,9 @@ import com.recording.platform.report.dto.CollectorReportTask;
 import com.recording.platform.report.dto.CollectorTaskReport;
 import com.recording.platform.report.dto.CollectorTaskReportItem;
 import com.recording.platform.report.dto.CollectorRankingRow;
+import com.recording.platform.report.dto.AdminCollectorReportItem;
+import com.recording.platform.report.dto.AdminCollectorTaskReport;
+import com.recording.platform.report.dto.StageReportSummary;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -32,6 +35,18 @@ public interface ReportQueryStore {
 	);
 	Page<CollectorRankingRow> findCollectorRankings(
 		String taskId, Instant fromInclusive, Instant toExclusive, String sortField, Pageable pageable
+	);
+	StageReportSummary aggregateAdminStages(
+		String taskId, String collectorId, Instant fromInclusive, Instant toExclusive
+	);
+	Optional<AdminCollectorTaskReport> adminCollectorTaskReport(
+		String collectorId, String taskId, Instant fromInclusive, Instant toExclusive
+	);
+	Page<AdminCollectorReportItem> findAdminCollectorTaskSubmissions(
+		String collectorId, String taskId, Instant fromInclusive, Instant toExclusive, Pageable pageable
+	);
+	Page<AdminCollectorReportItem> findAdminCollectorTaskCompletions(
+		String collectorId, String taskId, Instant fromInclusive, Instant toExclusive, Pageable pageable
 	);
 	com.recording.platform.report.dto.DashboardReport dashboard(LocalDate fromDate, LocalDate today);
 }

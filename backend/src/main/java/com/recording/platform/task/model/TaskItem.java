@@ -24,6 +24,14 @@ import org.springframework.data.mongodb.core.mapping.Document;
 	@CompoundIndex(name = "task_item_claim", def = "{'taskId': 1, 'status': 1, 'sequence': 1}"),
 	@CompoundIndex(name = "collector_item_status", def = "{'collectorId': 1, 'status': 1}"),
 	@CompoundIndex(
+		name = "task_collector_submission_report",
+		def = "{'taskId': 1, 'collectorId': 1, 'status': 1, 'firstSubmittedAt': 1}"
+	),
+	@CompoundIndex(
+		name = "task_collector_completion_report",
+		def = "{'taskId': 1, 'collectorId': 1, 'status': 1, 'firstCompletedAt': 1}"
+	),
+	@CompoundIndex(
 		name = "unique_task_item_creation_operation",
 		def = "{'taskId': 1, 'creationOperationId': 1}",
 		unique = true,
@@ -66,6 +74,7 @@ public class TaskItem {
 	private String reviewFinalAnswer;
 	private Instant firstSubmittedAt;
 	private Instant latestSubmittedAt;
+	private Instant firstCompletedAt;
 	private Long referenceAudioDurationMillis;
 	private Long referenceVideoDurationMillis;
 	private CurrentRejection currentRejection;

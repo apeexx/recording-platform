@@ -18,5 +18,20 @@ public record ReviewDecisionMutation(
 	String conclusion,
 	CurrentRejection currentRejection,
 	String reviewedSubmissionOperationId,
+	Instant firstCompletedAt,
 	Instant occurredAt
-) { }
+) {
+	public ReviewDecisionMutation(
+		String itemId, String reviewerId, String actorUsername, String reviewAssignmentId,
+		long expectedRevision, String operationId, TaskItemStatus targetStatus, TaskItemResult result,
+		String reviewFinalAnswer, String conclusion, CurrentRejection currentRejection,
+		String reviewedSubmissionOperationId, Instant occurredAt
+	) {
+		this(
+			itemId, reviewerId, actorUsername, reviewAssignmentId, expectedRevision, operationId,
+			targetStatus, result, reviewFinalAnswer, conclusion, currentRejection,
+			reviewedSubmissionOperationId,
+			targetStatus == TaskItemStatus.COMPLETED ? occurredAt : null, occurredAt
+		);
+	}
+}

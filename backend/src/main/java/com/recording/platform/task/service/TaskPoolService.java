@@ -109,6 +109,7 @@ public class TaskPoolService {
 			target,
 			occurredAt,
 			item.getFirstSubmittedAt() == null ? occurredAt : item.getFirstSubmittedAt(),
+			FirstCompletionTimePolicy.resolve(item.getFirstCompletedAt(), target, occurredAt),
 			command.referenceAudioDurationMillis(),
 			command.referenceVideoDurationMillis()
 		);

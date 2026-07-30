@@ -11,6 +11,9 @@ import com.recording.platform.task.model.OperationHistory;
 import com.recording.platform.task.model.TaskItemResult;
 import com.recording.platform.task.model.TaskItemStatus;
 import com.recording.platform.task.store.ClaimMutation;
+import com.recording.platform.task.store.AdminItemTransitionMutation;
+import com.recording.platform.task.store.AdminReviewApproveMutation;
+import com.recording.platform.task.store.AdminReviewDecisionMutation;
 import com.recording.platform.task.store.ReleaseMutation;
 import com.recording.platform.task.store.RejectMutation;
 import com.recording.platform.task.store.ReviewClaimMutation;
@@ -60,7 +63,44 @@ class MongoTaskItemStoreTests {
 		);
 		Document set = (Document) update.getValue().getUpdateObject().get("$set");
 		assertThat(set).containsEntry("reviewFinalAnswer", "审核最终答案");
+		assertThat(set).containsEntry("firstCompletedAt", Instant.parse("2026-07-28T08:00:00Z"));
 		assertThat(set).doesNotContainKey("currentResult");
+	}
+
+	@Test
+	void everyAdministratorCompletionPathPersistsTheOriginalCompletionTime() {
+		SpringDataTaskItemRepository repository = org.mockito.Mockito.mock(SpringDataTaskItemRepository.class);
+		MongoTemplate template = org.mockito.Mockito.mock(MongoTemplate.class);
+		when(template.findAndModify(any(Query.class), any(Update.class), any(FindAndModifyOptions.class), eq(TaskItem.class)))
+			.thenReturn(new TaskItem());
+		MongoTaskItemStore store = new MongoTaskItemStore(repository, template);
+		Instant firstCompletedAt = Instant.parse("2026-07-01T02:00:00Z");
+		Instant occurredAt = Instant.parse("2026-07-03T04:00:00Z");
+
+		store.adminApproveReviewIfCurrent(new AdminReviewApproveMutation(
+			"item-1", "admin-1", "管理员", 1, "batch-approve", new TaskItemResult(null, "文本"),
+			"最终文本", "submit-1", firstCompletedAt, occurredAt
+		));
+		store.adminDecideReviewIfCurrent(new AdminReviewDecisionMutation(
+			"item-2", "admin-1", "管理员", 2, "approve", TaskItemStatus.COMPLETED,
+			new TaskItemResult(null, "文本"), "最终文本", "审核通过", null,
+			"submit-2", firstCompletedAt, occurredAt
+		));
+		store.adminTransitionIfCurrent(new AdminItemTransitionMutation(
+			"item-3", "admin-1", "管理员", 3, "status-complete",
+			TaskItemStatus.REWORK_PENDING, TaskItemStatus.COMPLETED,
+			"collector-1", "assignment-1", occurredAt, firstCompletedAt, null,
+			com.recording.platform.identity.model.UserRole.ADMIN
+		));
+
+		ArgumentCaptor<Update> updates = ArgumentCaptor.forClass(Update.class);
+		verify(template, org.mockito.Mockito.times(3)).findAndModify(
+			any(Query.class), updates.capture(), any(FindAndModifyOptions.class), eq(TaskItem.class)
+		);
+		assertThat(updates.getAllValues()).allSatisfy(update -> {
+			Document set = (Document) update.getUpdateObject().get("$set");
+			assertThat(set).containsEntry("firstCompletedAt", firstCompletedAt);
+		});
 	}
 
 	@Test
@@ -124,7 +164,7 @@ class MongoTaskItemStoreTests {
 			"T000001-0000001", "T000001-0000002", "000001",
 			"RECORDING_PENDING", "REWORK_PENDING", "SUBMITTED",
 			"MINI-1", "MINI-2", "currentResult.text", "currentResult.audio", "$or",
-			"sourceItemId", "^\\Qsource.+\\E", "firstSubmittedAt"
+			"sourceItemId", "^\\Qsource.+\\E", "firstSubmittedAt", "firstCompletedAt"
 		);
 	}
 
@@ -264,7 +304,7 @@ class MongoTaskItemStoreTests {
 
 		store.submitIfCurrent(new SubmitMutation(
 			"item-1", "collector-1", "张三", "assignment-1", 7, "submit-1",
-			new TaskItemResult(null, "文本"), TaskItemStatus.REVIEW_PENDING, Instant.parse("2026-07-11T12:00:00Z")
+			new TaskItemResult(null, "文本"), TaskItemStatus.COMPLETED, Instant.parse("2026-07-11T12:00:00Z")
 		));
 
 		ArgumentCaptor<Query> query = ArgumentCaptor.forClass(Query.class);
@@ -284,7 +324,7 @@ class MongoTaskItemStoreTests {
 		assertThat((Document) query.getValue().getQueryObject().get("operations.operationId"))
 			.containsEntry("$ne", "submit-1");
 		assertThat(update.getValue().getUpdateObject().toString())
-			.contains("firstSubmittedAt", "latestSubmittedAt", "reviewFinalAnswer");
+			.contains("firstSubmittedAt", "latestSubmittedAt", "firstCompletedAt", "reviewFinalAnswer");
 	}
 
 	@Test
@@ -313,7 +353,7 @@ class MongoTaskItemStoreTests {
 			.extracting("$in")
 			.isEqualTo(List.of(TaskItemStatus.RECORDING_PENDING, TaskItemStatus.REWORK_PENDING));
 		assertThat(update.getValue().getUpdateObject().toString())
-			.contains("firstSubmittedAt", "latestSubmittedAt", "reviewFinalAnswer");
+			.contains("firstSubmittedAt", "latestSubmittedAt", "firstCompletedAt", "reviewFinalAnswer");
 	}
 
 	@Test

@@ -34,12 +34,12 @@ public class TaskItemCsvExportService {
 		(byte) 0xef, (byte) 0xbb, (byte) 0xbf
 	};
 	private static final String[] HEADERS = {
-		"taskCode", "taskName", "itemCode", "sourcePlatform", "sourceItemId",
-		"status", "statusLabel", "collectorId", "collectorName", "reviewerId", "reviewerName",
-		"referenceText", "referenceAudioUrl", "referenceVideoUrl",
-		"firstSubmittedAt", "latestSubmittedAt", "createdAt", "updatedAt",
-		"currentResultText", "finalResultText", "resultAudioPresent",
-		"recordingDurationMillis", "referenceAudioDurationMillis", "referenceVideoDurationMillis"
+		"任务编号", "任务名称", "条目编号", "来源平台", "脚本来源 ID",
+		"状态代码", "状态名称", "采集员 ID", "采集员姓名", "审核员 ID", "审核员姓名",
+		"参考文本", "参考音频地址", "参考视频地址",
+		"首次提交时间", "最新提交时间", "首次完成时间", "创建时间", "更新时间",
+		"当前结果文本", "最终结果文本", "是否包含结果录音",
+		"最终录音时长（毫秒）", "参考音频时长（毫秒）", "参考视频时长（毫秒）"
 	};
 
 	private final TaskStore tasks;
@@ -121,11 +121,12 @@ public class TaskItemCsvExportService {
 			cell(safeReferenceUrl(item.getReferenceVideoUrl())),
 			cell(instant(item.getFirstSubmittedAt())),
 			cell(instant(item.getLatestSubmittedAt())),
+			cell(instant(item.getFirstCompletedAt())),
 			cell(instant(item.getCreatedAt())),
 			cell(instant(item.getUpdatedAt())),
 			cell(currentText),
 			cell(finalText),
-			result != null && result.audio() != null,
+			result != null && result.audio() != null ? "是" : "否",
 			result == null || result.audio() == null ? 0 : result.audio().durationMillis(),
 			item.getReferenceAudioDurationMillis() == null ? 0 : item.getReferenceAudioDurationMillis(),
 			item.getReferenceVideoDurationMillis() == null ? 0 : item.getReferenceVideoDurationMillis()

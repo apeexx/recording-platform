@@ -188,9 +188,12 @@ public class TaskItemAdministrationService {
 		TaskItem item, TaskItemStatus target, String collectorId, String assignmentId,
 		String operationId, String reason, PlatformPrincipal actor
 	) {
+		Instant occurredAt = Instant.now(clock);
 		return new AdminItemTransitionMutation(
 			item.getId(), actor.userId(), actorName(actor), item.getRevision(), required(operationId),
-			item.getStatus(), target, collectorId, assignmentId, Instant.now(clock), reason, actor.role()
+			item.getStatus(), target, collectorId, assignmentId, occurredAt,
+			FirstCompletionTimePolicy.resolve(item.getFirstCompletedAt(), target, occurredAt),
+			reason, actor.role()
 		);
 	}
 
