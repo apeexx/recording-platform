@@ -6,6 +6,9 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verify;
 
+import com.mongodb.client.AggregateIterable;
+import com.mongodb.client.MongoCollection;
+import com.mongodb.client.MongoCursor;
 import com.recording.platform.task.model.TaskItem;
 import com.recording.platform.task.model.OperationHistory;
 import com.recording.platform.task.model.TaskItemResult;
@@ -42,6 +45,32 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 
 class MongoTaskItemStoreTests {
+	@Test
+	@SuppressWarnings({"unchecked", "rawtypes"})
+	void reviewMetricsPipelineCanRepresentMissingFirstSubmissionWithoutExternalMongo() {
+		SpringDataTaskItemRepository repository = org.mockito.Mockito.mock(SpringDataTaskItemRepository.class);
+		MongoTemplate template = org.mockito.Mockito.mock(MongoTemplate.class);
+		MongoCollection<Document> collection = org.mockito.Mockito.mock(MongoCollection.class);
+		AggregateIterable<Document> aggregate = org.mockito.Mockito.mock(AggregateIterable.class);
+		MongoCursor<Document> cursor = org.mockito.Mockito.mock(MongoCursor.class);
+		when(template.getCollection("task_items")).thenReturn(collection);
+		when(collection.aggregate(any(List.class))).thenReturn(aggregate);
+		when(aggregate.iterator()).thenReturn(cursor);
+		when(cursor.hasNext()).thenReturn(false);
+		MongoTaskItemStore store = new MongoTaskItemStore(repository, template);
+
+		store.reviewTaskMetrics(
+			List.of("task-1"),
+			Instant.parse("2026-07-29T16:00:00Z"),
+			Instant.parse("2026-07-30T16:00:00Z")
+		);
+
+		ArgumentCaptor<List<Document>> pipeline = ArgumentCaptor.forClass(List.class);
+		verify(collection).aggregate(pipeline.capture());
+		assertThat(pipeline.getValue().get(1).toJson())
+			.contains("$firstSubmittedAt", "$ne", "null", "AVAILABLE", "DISCARDED");
+	}
+
 	@Test
 	void reviewApprovalStoresFinalAnswerWithoutReplacingCollectedResult() {
 		SpringDataTaskItemRepository repository = org.mockito.Mockito.mock(SpringDataTaskItemRepository.class);
