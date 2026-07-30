@@ -6,10 +6,10 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import org.springframework.http.HttpStatus;
 
-record ReportDateRange(Instant fromInclusive, Instant toExclusive) {
+public record ReportDateRange(Instant fromInclusive, Instant toExclusive) {
 	private static final ZoneId REPORT_ZONE = ZoneId.of("Asia/Shanghai");
 
-	static ReportDateRange of(LocalDate fromDate, LocalDate toDate) {
+	public static ReportDateRange of(LocalDate fromDate, LocalDate toDate) {
 		if (fromDate != null && toDate != null && fromDate.isAfter(toDate)) {
 			throw new ApiException(
 				HttpStatus.UNPROCESSABLE_ENTITY,

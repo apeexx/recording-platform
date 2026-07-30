@@ -79,6 +79,32 @@ async function changeFilters(value) {
   preview.value = null
   await load()
 }
+function startDownload(url) {
+  const link = document.createElement('a')
+  link.href = url
+  link.download = ''
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+}
+async function exportCsv() {
+  if (!taskId.value) return
+  try {
+    await taskApi.prepareExport(taskId.value, filters.value)
+    startDownload(taskApi.exportItems(taskId.value, filters.value))
+    notifications.success('CSV 导出已开始')
+  } catch (error) {
+    notifications.error(error.message || 'CSV 导出失败')
+  }
+}
+async function copySourceId(value) {
+  try {
+    await navigator.clipboard.writeText(value)
+    notifications.success('脚本 ID 已复制')
+  } catch {
+    notifications.error('复制失败，请手动选择脚本 ID')
+  }
+}
 async function selectAllMatching() {
   try {
     preview.value = await batchOperationApi.preview(selection.selectionPayload(taskId.value, 'TASK_POOL', selectionFilters(filters.value)))
@@ -202,6 +228,7 @@ onBeforeUnmount(clearPoll)
       <div class="business-inline">
         <BaseSelect v-model="taskId" :options="taskOptions" placeholder="请选择任务" aria-label="选择任务" @update:model-value="choose"/>
         <button class="button-secondary" :disabled="!taskId" @click="load">刷新</button>
+        <button class="button-secondary" :disabled="!taskId" @click="exportCsv">导出 CSV</button>
         <TaskBatchActionMenu :selected-count="selection.selectedCount.value"
           :counts="{ status: applicableCount('status'), release: applicableCount('release'), discard: applicableCount('discard'), restore: applicableCount('restore') }"
           :status-options="statusOptions" :disabled="processing" @status="changeStatus" @release="batch('release')" @discard="batch('discard')" @restore="batch('restore')" />
@@ -223,11 +250,12 @@ onBeforeUnmount(clearPoll)
           <table class="business-table">
             <thead><tr>
               <th><input type="checkbox" :checked="selection.pageAllSelected.value" aria-label="选择当前页面" @change="selection.togglePage"/></th>
-              <th><TaskItemFilters kind="code" :task-id="taskId" :model-value="filters" @change="changeFilters"/></th><th><TaskItemFilters kind="status" :model-value="filters" @change="changeFilters"/></th><th>采集员 ID</th><th><TaskItemFilters kind="collector" :model-value="filters" @change="changeFilters"/></th><th>审核员 ID</th><th>审核员姓名</th><th><TaskItemFilters kind="result" :model-value="filters" @change="changeFilters"/></th><th>修订</th><th>操作</th>
+              <th><TaskItemFilters kind="code" :task-id="taskId" :model-value="filters" @change="changeFilters"/></th><th><TaskItemFilters kind="source" :model-value="filters" @change="changeFilters"/></th><th><TaskItemFilters kind="status" :model-value="filters" @change="changeFilters"/></th><th>采集员 ID</th><th><TaskItemFilters kind="collector" :model-value="filters" @change="changeFilters"/></th><th>审核员 ID</th><th>审核员姓名</th><th><TaskItemFilters kind="result" :model-value="filters" @change="changeFilters"/></th><th>修订</th><th>操作</th>
             </tr></thead>
             <tbody><tr v-for="row in rows" :key="row.id">
               <td><input type="checkbox" :checked="selection.isSelected(row)" :aria-label="`选择 ${row.itemCode}`" @change="selection.toggle(row)"/></td>
               <td>{{ row.itemCode }}</td>
+              <td><span v-if="row.sourceItemId" class="source-binding"><small>{{ row.sourcePlatform }}</small><button class="button-link" :title="row.sourceItemId" @click="copySourceId(row.sourceItemId)">{{ row.sourceItemId }}</button></span><span v-else class="business-note">平台内创建</span></td>
               <td>{{ statusLabel('item', row.status) }}</td><td>{{ row.collectorId || '-' }}</td><td>{{ row.collectorName || '-' }}</td>
               <td>{{ row.reviewerId || '-' }}</td><td>{{ row.reviewerName || '-' }}</td><td>{{ row.currentResult?.audio ? '音频' : row.currentResult?.text ? '文本' : '-' }}</td><td>{{ row.revision }}</td>
               <td class="table-row-actions">
@@ -250,4 +278,5 @@ onBeforeUnmount(clearPoll)
 
 <style scoped>
 .table-row-actions{display:flex;align-items:center;gap:3px;white-space:nowrap}
+.source-binding{display:grid;max-width:220px}.source-binding small{color:var(--muted-foreground)}.source-binding button{overflow:hidden;text-overflow:ellipsis;text-align:left}
 </style>

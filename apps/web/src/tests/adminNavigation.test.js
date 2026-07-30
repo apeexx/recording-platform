@@ -8,7 +8,7 @@ function paths(items) {
 }
 
 describe('后台角色导航', () => {
-  it('管理员显示核心业务和语音生成，审核员只显示审核、统计和账号', () => {
+  it('管理员显示采集员统计，审核员只显示审核工作台和账号', () => {
     const adminPaths = paths(sidebarForRole('ADMIN'))
     const reviewerPaths = paths(sidebarForRole('REVIEWER'))
 
@@ -17,7 +17,7 @@ describe('后台角色导航', () => {
     expect(adminPaths).toContain('/admin/pool')
     expect(adminPaths).toContain('/admin/voice-generation/workbench')
     expect(reviewerPaths).toEqual([
-	  '/admin/review', '/admin/reports/reviewers', '/admin/account'
+	  '/admin/review', '/admin/account'
     ])
     expect(adminPaths).not.toContain('/admin/basic/language-types')
     expect(adminPaths).not.toContain('/admin/system/roles')
@@ -31,6 +31,9 @@ describe('后台角色导航', () => {
     expect(routePaths).not.toContain('/admin/text/import')
     expect(routePaths).not.toContain('/admin/review/overview')
     expect(routePaths).not.toContain('/admin/system/roles')
+    expect(routePaths).not.toContain('/admin/reports/reviewers')
+    const legacyTaskReport = adminRoutes.children.find(route => route.path === 'reports/tasks')
+    expect(legacyTaskReport.redirect).toBe('/admin/dashboard')
   })
 
   it('采集权限侧边栏入口打开任务选择页而不是跳回任务列表', () => {

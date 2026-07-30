@@ -2,7 +2,6 @@ package com.recording.platform.report.service;
 
 import com.recording.platform.api.ApiException;
 import com.recording.platform.identity.model.UserRole;
-import com.recording.platform.report.dto.ReviewerSummary;
 import com.recording.platform.report.dto.WorkSummary;
 import com.recording.platform.report.dto.SubmissionView;
 import com.recording.platform.report.dto.CollectorReportTaskList;
@@ -16,10 +15,8 @@ import com.recording.platform.task.model.SubmissionHistory;
 import com.recording.platform.task.model.TaskItem;
 import com.recording.platform.task.model.TaskItemStatus;
 import com.recording.platform.task.store.TaskItemStore;
-import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -64,7 +61,7 @@ public class ReportService {
 	public com.recording.platform.report.dto.DashboardReport dashboard(PlatformPrincipal actor) {
 		requireAdmin(actor);
 		LocalDate today = LocalDate.now(clock.withZone(ZoneId.of("Asia/Shanghai")));
-		return queries.dashboard(today.minusDays(6), today);
+		return queries.dashboard(today.minusDays(6), today).withGeneratedAt(Instant.now(clock));
 	}
 
 	public WorkSummary collector(String collectorId, PlatformPrincipal actor) {
@@ -89,45 +86,6 @@ public class ReportService {
 		requireAdmin(actor);
 		ReportDateRange range = ReportDateRange.of(fromDate, toDate);
 		return queries.aggregateWork(null, taskId, range.fromInclusive(), range.toExclusive());
-	}
-
-	public ReviewerSummary reviewer(String reviewerId, PlatformPrincipal actor) {
-		if (actor == null || actor.role() != UserRole.ADMIN
-			&& (actor.role() != UserRole.REVIEWER || !actor.userId().equals(reviewerId))) throw forbidden();
-		if (queries != null) return queries.aggregateReviewer(reviewerId);
-		long claims = 0, releases = 0, approvals = 0, rejections = 0, totalMillis = 0, decisions = 0;
-		for (TaskItem item : items.findForReport(null, null)) {
-			List<OperationHistory> operations = new ArrayList<>(item.getOperations() == null ? List.of() : item.getOperations());
-			operations.sort(Comparator.comparing(OperationHistory::getOccurredAt, Comparator.nullsLast(Comparator.naturalOrder())));
-			ArrayDeque<Instant> claimedAt = new ArrayDeque<>();
-			for (OperationHistory operation : operations) {
-				if (!reviewerId.equals(operation.getActorUserId())) continue;
-				switch (operation.getType()) {
-					case "REVIEW_CLAIM" -> { claims++; if (operation.getOccurredAt() != null) claimedAt.add(operation.getOccurredAt()); }
-					case "REVIEW_RELEASE" -> releases++;
-					case "REVIEW_APPROVE", "REVIEW_REJECT" -> {
-						if ("REVIEW_APPROVE".equals(operation.getType())) approvals++; else rejections++;
-						if (!claimedAt.isEmpty() && operation.getOccurredAt() != null) {
-							totalMillis += Math.max(0, Duration.between(claimedAt.removeFirst(), operation.getOccurredAt()).toMillis());
-							decisions++;
-						}
-					}
-					default -> { }
-				}
-			}
-		}
-		return new ReviewerSummary(claims, releases, approvals, rejections, decisions == 0 ? 0 : totalMillis / decisions);
-	}
-
-	public ReviewerSummary reviewer(
-		String reviewerId, String taskId, LocalDate fromDate, LocalDate toDate, PlatformPrincipal actor
-	) {
-		if (actor == null || actor.role() != UserRole.ADMIN
-			&& (actor.role() != UserRole.REVIEWER || !actor.userId().equals(reviewerId))) throw forbidden();
-		ReportDateRange range = ReportDateRange.of(fromDate, toDate);
-		return queries.aggregateReviewer(
-			reviewerId, blankToNull(taskId), range.fromInclusive(), range.toExclusive()
-		);
 	}
 
 	public PageResponse<CollectorRankingRow> taskCollectors(
@@ -162,9 +120,36 @@ public class ReportService {
 		if (actor == null) throw forbidden();
 		return switch (actor.role()) {
 			case COLLECTOR -> collector(actor.userId(), actor);
-			case REVIEWER -> reviewer(actor.userId(), actor);
+			case REVIEWER -> throw forbidden();
 			case ADMIN -> queries == null ? work(items.findForReport(null, null)) : queries.aggregateWork(null, null);
 		};
+	}
+
+	public CollectorTaskReport collectorTask(
+		String collectorId, String taskId, LocalDate fromDate, LocalDate toDate, PlatformPrincipal actor
+	) {
+		requireAdmin(actor);
+		ReportDateRange range = ReportDateRange.of(fromDate, toDate);
+		return queries.collectorTaskReport(
+			collectorId, taskId, range.fromInclusive(), range.toExclusive()
+		).orElseThrow(() -> new ApiException(
+			HttpStatus.NOT_FOUND, "REPORT_TASK_NOT_FOUND", "没有可统计的任务数据"
+		));
+	}
+
+	public PageResponse<CollectorTaskReportItem> collectorTaskSubmissions(
+		String collectorId, String taskId, LocalDate fromDate, LocalDate toDate,
+		int page, int size, PlatformPrincipal actor
+	) {
+		requireAdmin(actor);
+		ReportDateRange range = ReportDateRange.of(fromDate, toDate);
+		int safePage = Math.max(page, 0);
+		int safeSize = Math.min(Math.max(size, 1), 100);
+		var result = queries.findCollectorTaskSubmissions(
+			collectorId, taskId, range.fromInclusive(), range.toExclusive(),
+			PageRequest.of(safePage, safeSize)
+		);
+		return new PageResponse<>(result.getContent(), result.getNumber(), result.getSize(), result.getTotalElements());
 	}
 
 	public PageResponse<SubmissionView> mySubmissions(int page, int size, PlatformPrincipal actor) {

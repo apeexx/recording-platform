@@ -524,6 +524,21 @@ public class MongoTaskItemStore implements TaskItemStore {
 				java.util.regex.Pattern.quote(normalized.itemCodeQuery()), "i"
 			));
 		}
+		if (!normalized.sourceItemIdQuery().isBlank()) {
+			filters.add(Criteria.where("sourceItemId").regex(
+				"^" + java.util.regex.Pattern.quote(normalized.sourceItemIdQuery())
+			));
+		}
+		if (normalized.firstSubmittedFrom() != null || normalized.firstSubmittedTo() != null) {
+			Criteria submitted = Criteria.where("firstSubmittedAt");
+			if (normalized.firstSubmittedFrom() != null) {
+				submitted = submitted.gte(normalized.firstSubmittedFrom());
+			}
+			if (normalized.firstSubmittedTo() != null) {
+				submitted = submitted.lt(normalized.firstSubmittedTo());
+			}
+			filters.add(submitted);
+		}
 		if (!normalized.groups().isEmpty()) {
 			filters.add(Criteria.where("status").in(normalized.groups().stream()
 				.flatMap(group -> group.statuses().stream())

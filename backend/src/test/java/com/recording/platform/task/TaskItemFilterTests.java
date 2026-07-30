@@ -9,6 +9,7 @@ import com.recording.platform.task.service.AdminTaskItemGroup;
 import com.recording.platform.task.service.TaskItemFilter;
 import com.recording.platform.task.service.TaskItemResultKind;
 import java.util.Set;
+import java.time.Instant;
 import org.junit.jupiter.api.Test;
 
 class TaskItemFilterTests {
@@ -54,7 +55,10 @@ class TaskItemFilterTests {
 			Set.of(AdminTaskItemGroup.ALL, AdminTaskItemGroup.PENDING, AdminTaskItemGroup.SUBMITTED),
 			Set.of("collector-1"),
 			false,
-			Set.of(TaskItemResultKind.ALL, TaskItemResultKind.TEXT_ONLY, TaskItemResultKind.AUDIO_ONLY)
+			Set.of(TaskItemResultKind.ALL, TaskItemResultKind.TEXT_ONLY, TaskItemResultKind.AUDIO_ONLY),
+			" source.+ ",
+			Instant.parse("2026-07-29T16:00:00Z"),
+			Instant.parse("2026-07-30T16:00:00Z")
 		);
 
 		assertThat(filter.itemCodes()).containsExactlyInAnyOrder("T000001-0000001", "T000001-0000002");
@@ -65,6 +69,9 @@ class TaskItemFilterTests {
 		assertThat(filter.results()).containsExactlyInAnyOrder(
 			TaskItemResultKind.TEXT_ONLY, TaskItemResultKind.AUDIO_ONLY
 		);
+		assertThat(filter.sourceItemIdQuery()).isEqualTo("source.+");
+		assertThat(filter.firstSubmittedFrom()).isEqualTo("2026-07-29T16:00:00Z");
+		assertThat(filter.firstSubmittedTo()).isEqualTo("2026-07-30T16:00:00Z");
 	}
 
 	private TaskItem item(String text, String mediaId) {

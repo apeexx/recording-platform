@@ -9,6 +9,7 @@ const notifications = useNotifications()
 const dashboard = ref(null)
 const operations = ref([])
 const loading = ref(false)
+const refreshing = ref(false)
 const loadError = ref('')
 const maxTrend = computed(() => Math.max(...(dashboard.value?.trend || []).map((row) => row.firstSubmissionCount), 1))
 const trendPoints = computed(() => (dashboard.value?.trend || []).map((row, index, values) => {
@@ -27,9 +28,16 @@ const itemSegments = computed(() => {
   ].map(([label, value, color]) => ({ label, value: Number(value) || 0, color }))
 })
 const seconds = (value) => `${Math.round((Number(value) || 0) / 1000)} 秒`
+const formatGeneratedAt = (value) => value
+  ? new Intl.DateTimeFormat('zh-CN', {
+      timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+    }).format(new Date(value))
+  : '-'
 
 async function load(refresh = false) {
   loading.value = !dashboard.value
+  refreshing.value = refresh && Boolean(dashboard.value)
   if (!dashboard.value) loadError.value = ''
   try {
     const [summary, recent] = await Promise.all([reportApi.dashboard(), reportApi.operations({ page: 0, size: 8 })])
@@ -40,6 +48,7 @@ async function load(refresh = false) {
     else loadError.value = error.message
   } finally {
     loading.value = false
+    refreshing.value = false
   }
 }
 onMounted(load)
@@ -48,7 +57,8 @@ onMounted(load)
 <template>
   <section class="admin-page dashboard-page">
     <PageActions title="数据大屏" description="展示录音任务平台当前真实业务数据与最近 7 日工作趋势。">
-      <button class="button-secondary" @click="load(true)">刷新数据</button>
+      <span v-if="dashboard" class="dashboard-generated-at">服务端生成：{{ formatGeneratedAt(dashboard.generatedAt) }}</span>
+      <button class="button-secondary" :disabled="refreshing" @click="load(true)">{{ refreshing ? '刷新中…' : '刷新数据' }}</button>
     </PageActions>
     <AsyncState :loading="loading" :error="loadError" :empty="!dashboard" @retry="load">
       <div class="dashboard-metrics">
@@ -95,3 +105,7 @@ onMounted(load)
     </AsyncState>
   </section>
 </template>
+
+<style scoped>
+.dashboard-generated-at{color:var(--muted-foreground);font-size:13px}
+</style>

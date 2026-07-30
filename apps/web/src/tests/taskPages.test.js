@@ -159,6 +159,33 @@ describe('任务页面 API', () => {
     expect(httpRequest).toHaveBeenNthCalledWith(2, '/api/tasks/t1/items?page=2&size=30')
 		expect(taskApi.versions).toBeUndefined()
   })
+  it('CSV 导出先经统一请求预检，再返回继承全部筛选和日期范围的原生下载地址', async () => {
+    httpRequest.mockResolvedValue(null)
+    await taskApi.prepareExport('t1', {
+      sourceItemIdQuery: 'script-',
+    }, { fromDate: '2026-07-01', toDate: '2026-07-30' })
+    const url = taskApi.exportItems('t1', {
+      itemCodes: ['T000001-0000001'],
+      groups: ['SUBMITTED'],
+      collectorIds: ['MINI-1'],
+      includeUnassigned: true,
+      results: ['TEXT_ONLY'],
+      sourceItemIdQuery: 'script-',
+    }, { fromDate: '2026-07-01', toDate: '2026-07-30' })
+    expect(url).toContain('/api/tasks/t1/items/export.csv?')
+    expect(url).toContain('itemCode=T000001-0000001')
+    expect(url).toContain('group=SUBMITTED')
+    expect(url).toContain('collectorId=MINI-1')
+    expect(url).toContain('includeUnassigned=true')
+    expect(url).toContain('result=TEXT_ONLY')
+    expect(url).toContain('sourceItemIdQuery=script-')
+    expect(url).toContain('fromDate=2026-07-01')
+    expect(url).toContain('toDate=2026-07-30')
+    expect(url).not.toContain('page=')
+    expect(httpRequest).toHaveBeenCalledWith(
+      '/api/tasks/t1/items/export.csv/ready?sourceItemIdQuery=script-&fromDate=2026-07-01&toDate=2026-07-30'
+    )
+  })
 	it('采集权限只展示带前缀的用户 ID，不使用旧用户编号字段',()=>{
 	  const source=fs.readFileSync(path.resolve('src/pages/admin/tasks/TaskPermissionsPage.vue'),'utf8')
    expect(source).toContain('user.id')

@@ -196,6 +196,31 @@ function downloadTemplate() {
   link.click()
   URL.revokeObjectURL(url)
 }
+function startDownload(url) {
+  const link = document.createElement('a')
+  link.href = url
+  link.download = ''
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+}
+async function exportCsv() {
+  try {
+    await taskApi.prepareExport(route.params.id, filters.value)
+    startDownload(taskApi.exportItems(route.params.id, filters.value))
+    notifications.success('CSV 导出已开始')
+  } catch (error) {
+    notifications.error(error.message || 'CSV 导出失败')
+  }
+}
+async function copySourceId(value) {
+  try {
+    await navigator.clipboard.writeText(value)
+    notifications.success('脚本 ID 已复制')
+  } catch {
+    notifications.error('复制失败，请手动选择脚本 ID')
+  }
+}
 
 async function deleteTask() {
   if (!confirm(`确认永久删除草稿任务 ${task.value?.taskCode}？任务编号不会复用。`)) return
@@ -402,6 +427,7 @@ onBeforeUnmount(() => { stopImportTracking(); clearBatchPoll() })
           <div class="business-heading task-pool-heading">
             <h3>数据池（共 {{ total }} 条）</h3>
             <div class="business-actions task-pool-toolbar">
+              <button class="button-secondary" @click="exportCsv">导出 CSV</button>
               <TaskBatchActionMenu :selected-count="selection.selectedCount.value"
                 :counts="{ status: applicableCount('status'), release: applicableCount('release'), discard: applicableCount('discard'), restore: applicableCount('restore') }"
                 :status-options="statusOptions" @status="changeStatus" @release="batch('release')" @discard="batch('discard')" @restore="batch('restore')" />
@@ -421,10 +447,10 @@ onBeforeUnmount(() => { stopImportTracking(); clearBatchPoll() })
           <AsyncState :loading="false" :error="''" :empty="!items.length">
             <div class="business-table-wrap">
               <table class="business-table">
-                <thead><tr><th><input type="checkbox" :checked="selection.pageAllSelected.value" aria-label="选择当前页面" @change="selection.togglePage"></th><th><TaskItemFilters kind="code" :task-id="route.params.id" :model-value="filters" @change="changeFilters"/></th><th><TaskItemFilters kind="status" :model-value="filters" @change="changeFilters"/></th><th><TaskItemFilters kind="collector" :model-value="filters" @change="changeFilters"/></th><th><TaskItemFilters kind="result" :model-value="filters" @change="changeFilters"/></th><th>操作</th></tr></thead>
+                <thead><tr><th><input type="checkbox" :checked="selection.pageAllSelected.value" aria-label="选择当前页面" @change="selection.togglePage"></th><th><TaskItemFilters kind="code" :task-id="route.params.id" :model-value="filters" @change="changeFilters"/></th><th><TaskItemFilters kind="source" :model-value="filters" @change="changeFilters"/></th><th><TaskItemFilters kind="status" :model-value="filters" @change="changeFilters"/></th><th><TaskItemFilters kind="collector" :model-value="filters" @change="changeFilters"/></th><th><TaskItemFilters kind="result" :model-value="filters" @change="changeFilters"/></th><th>操作</th></tr></thead>
                 <tbody><tr v-for="row in items" :key="row.id">
                   <td><label class="business-check colored-checkbox"><input type="checkbox" :checked="selection.isSelected(row)" :aria-label="`选择 ${row.itemCode}`" @change="selection.toggle(row)"><span class="visually-hidden">选择</span></label></td>
-                  <td>{{ row.itemCode }}</td><td>{{ statusLabel('item', row.status) }}</td><td>{{ row.collectorName || '-' }}</td>
+                  <td>{{ row.itemCode }}</td><td><span v-if="row.sourceItemId" class="source-binding"><small>{{ row.sourcePlatform }}</small><button class="button-link" :title="row.sourceItemId" @click="copySourceId(row.sourceItemId)">{{ row.sourceItemId }}</button></span><span v-else class="business-note">平台内创建</span></td><td>{{ statusLabel('item', row.status) }}</td><td>{{ row.collectorName || '-' }}</td>
                   <td>{{ row.currentResult?.audio?.durationMillis ? `${Math.round(row.currentResult.audio.durationMillis / 1000)}秒` : row.currentResult?.text ? '文本' : '-' }}</td>
                   <td class="table-row-actions">
                     <router-link class="button-link" :to="`/admin/items/${row.id}`">查看</router-link>
@@ -448,4 +474,5 @@ onBeforeUnmount(() => { stopImportTracking(); clearBatchPoll() })
 
 <style scoped>
 .table-row-actions{display:flex;align-items:center;gap:3px;white-space:nowrap}
+.source-binding{display:grid;max-width:220px}.source-binding small{color:var(--muted-foreground)}.source-binding button{overflow:hidden;text-overflow:ellipsis;text-align:left}
 </style>

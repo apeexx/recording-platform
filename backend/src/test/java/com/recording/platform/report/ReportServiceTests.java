@@ -43,14 +43,16 @@ class ReportServiceTests {
 			List.of(new com.recording.platform.report.dto.DashboardTrendPoint(
 				LocalDate.of(2026, 7, 28), 2, 8_000
 			)),
-			List.of()
+			List.of(),
+			Instant.EPOCH
 		);
 		when(queries.dashboard(
 			LocalDate.of(2026, 7, 22), LocalDate.of(2026, 7, 28)
 		)).thenReturn(expected);
 		ReportService service = new ReportService(items, queries, null, clock);
 
-		assertThat(service.dashboard(admin())).isEqualTo(expected);
+		assertThat(service.dashboard(admin()).generatedAt())
+			.isEqualTo(Instant.parse("2026-07-28T02:00:00Z"));
 		assertThatThrownBy(() -> service.dashboard(collector()))
 			.isInstanceOfSatisfying(com.recording.platform.api.ApiException.class,
 				error -> assertThat(error.getCode()).isEqualTo("ACCESS_DENIED"));
@@ -114,29 +116,6 @@ class ReportServiceTests {
 	}
 
 	@Test
-	void reviewerSummaryCountsActionsAndAverageClaimToDecisionDuration() {
-		TaskItemStore items = mock(TaskItemStore.class);
-		TaskItem item = item("item-1", TaskItemStatus.COMPLETED);
-		item.setOperations(List.of(
-			operation("REVIEW_CLAIM", "reviewer-1", "2026-07-12T08:00:00Z"),
-			operation("REVIEW_APPROVE", "reviewer-1", "2026-07-12T08:02:00Z"),
-			operation("REVIEW_CLAIM", "reviewer-1", "2026-07-12T09:00:00Z"),
-			operation("REVIEW_REJECT", "reviewer-1", "2026-07-12T09:04:00Z"),
-			operation("REVIEW_RELEASE", "reviewer-1", "2026-07-12T10:00:00Z")
-		));
-		when(items.findForReport(null, null)).thenReturn(List.of(item));
-		ReportService service = new ReportService(items);
-
-		var summary = service.reviewer("reviewer-1", admin());
-
-		assertThat(summary.claimCount()).isEqualTo(2);
-		assertThat(summary.releaseCount()).isEqualTo(1);
-		assertThat(summary.approveCount()).isEqualTo(1);
-		assertThat(summary.rejectCount()).isEqualTo(1);
-		assertThat(summary.averageProcessingMillis()).isEqualTo(180_000);
-	}
-
-	@Test
 	void collectorSubmissionHistoryKeepsEveryReworkAsASeparateRow() {
 		TaskItemStore items = mock(TaskItemStore.class);
 		TaskItem item = item("item-1", TaskItemStatus.COMPLETED);
@@ -186,7 +165,7 @@ class ReportServiceTests {
 			2, 1, 12_000, 30_000, 8_000
 		);
 		var day = new com.recording.platform.report.dto.CollectorTaskDaySummary(
-			LocalDate.of(2026, 7, 27), 2, 12_000, 30_000, 8_000
+			LocalDate.of(2026, 7, 27), 2, 1, 12_000, 30_000, 8_000
 		);
 		var row = new com.recording.platform.report.dto.CollectorTaskReportItem(
 			"item-1", "T000001-0000001",
@@ -205,6 +184,51 @@ class ReportServiceTests {
 		assertThat(service.myTasks(collector()).items()).containsExactly(task);
 		assertThat(service.myTask("task-1", collector())).isEqualTo(report);
 		assertThat(service.myTaskSubmissions("task-1", 0, 20, collector()).items()).containsExactly(row);
+	}
+
+	@Test
+	void adminCollectorTaskDetailUsesInclusiveShanghaiDateRange() {
+		TaskItemStore items = mock(TaskItemStore.class);
+		ReportQueryStore queries = mock(ReportQueryStore.class);
+		Instant from = Instant.parse("2026-07-26T16:00:00Z");
+		Instant to = Instant.parse("2026-07-28T16:00:00Z");
+		var report = new com.recording.platform.report.dto.CollectorTaskReport(
+			"task-1", "T000001", "普通话录音",
+			new com.recording.platform.report.dto.CollectorTaskReportSummary(2, 1, 12_000, 0, 30_000),
+			List.of(), List.of()
+		);
+		var row = new com.recording.platform.report.dto.CollectorTaskReportItem(
+			"item-1", "T000001-0000001", from, from, TaskItemStatus.COMPLETED,
+			12_000, 0, 30_000, false, true
+		);
+		when(queries.collectorTaskReport("collector-1", "task-1", from, to))
+			.thenReturn(Optional.of(report));
+		when(queries.findCollectorTaskSubmissions(
+			"collector-1", "task-1", from, to, PageRequest.of(0, 20)
+		)).thenReturn(new PageImpl<>(List.of(row), PageRequest.of(0, 20), 1));
+		ReportService service = new ReportService(items, queries);
+
+		assertThat(service.collectorTask(
+			"collector-1", "task-1",
+			LocalDate.of(2026, 7, 27), LocalDate.of(2026, 7, 28), admin()
+		)).isEqualTo(report);
+		assertThat(service.collectorTaskSubmissions(
+			"collector-1", "task-1",
+			LocalDate.of(2026, 7, 27), LocalDate.of(2026, 7, 28),
+			0, 20, admin()
+		).items()).containsExactly(row);
+	}
+
+	@Test
+	void personalReportRejectsReviewerAfterReviewerStatisticsRemoval() {
+		ReportService service = new ReportService(mock(TaskItemStore.class), mock(ReportQueryStore.class));
+		PlatformPrincipal reviewer = new PlatformPrincipal(
+			"s", "reviewer-1", "reviewer", "审核员", UserRole.REVIEWER, SessionType.WEB, false
+		);
+
+		assertThatThrownBy(() -> service.me(reviewer))
+			.isInstanceOfSatisfying(com.recording.platform.api.ApiException.class,
+				error -> assertThat(error.getCode()).isEqualTo("ACCESS_DENIED"));
 	}
 
 	private TaskItem item(String id, TaskItemStatus status) {

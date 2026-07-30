@@ -8,7 +8,6 @@ import com.recording.platform.api.PageResponse;
 import com.recording.platform.identity.model.SessionType;
 import com.recording.platform.identity.model.UserRole;
 import com.recording.platform.report.controller.ReportController;
-import com.recording.platform.report.dto.ReviewerSummary;
 import com.recording.platform.report.dto.SubmissionView;
 import com.recording.platform.report.dto.WorkSummary;
 import com.recording.platform.report.service.ReportService;
@@ -19,24 +18,47 @@ import org.junit.jupiter.api.Test;
 
 class ReportControllerTests {
 	@Test
-	void exposesTaskCollectorReviewerAndPersonalReports() {
+	void exposesTaskCollectorAndPersonalReports() {
 		ReportService service = mock(ReportService.class);
 		ReportController controller = new ReportController(service);
 		PlatformPrincipal admin = admin();
 		WorkSummary work = new WorkSummary(2, 3000, 1, 2000, 0, 0);
-		ReviewerSummary review = new ReviewerSummary(1, 0, 1, 0, 120000);
 		when(service.task("task-1", admin)).thenReturn(work);
 		when(service.collector("collector-1", admin)).thenReturn(work);
-		when(service.reviewer("reviewer-1", admin)).thenReturn(review);
 		when(service.me(admin)).thenReturn(work);
 		PageResponse<SubmissionView> page = new PageResponse<>(List.of(), 0, 20, 0);
 		when(service.mySubmissions(0, 20, admin)).thenReturn(page);
 
 		assertThat(controller.task("task-1", admin)).isSameAs(work);
 		assertThat(controller.collector("collector-1", admin)).isSameAs(work);
-		assertThat(controller.reviewer("reviewer-1", admin)).isSameAs(review);
 		assertThat(controller.me(admin)).isSameAs(work);
 		assertThat(controller.mySubmissions(0, 20, admin)).isSameAs(page);
+	}
+
+	@Test
+	void exposesAdminCollectorTaskDetailAndSubmissionPagination() {
+		ReportService service = mock(ReportService.class);
+		ReportController controller = new ReportController(service);
+		PlatformPrincipal admin = admin();
+		LocalDate from = LocalDate.of(2026, 7, 27);
+		LocalDate to = LocalDate.of(2026, 7, 28);
+		var report = new com.recording.platform.report.dto.CollectorTaskReport(
+			"task-1", "T000001", "普通话录音",
+			new com.recording.platform.report.dto.CollectorTaskReportSummary(0, 0, 0, 0, 0),
+			List.of(), List.of()
+		);
+		PageResponse<com.recording.platform.report.dto.CollectorTaskReportItem> page =
+			new PageResponse<>(List.of(), 0, 20, 0);
+		when(service.collectorTask("collector-1", "task-1", from, to, admin)).thenReturn(report);
+		when(service.collectorTaskSubmissions(
+			"collector-1", "task-1", from, to, 0, 20, admin
+		)).thenReturn(page);
+
+		assertThat(controller.collectorTask("collector-1", "task-1", from, to, admin))
+			.isSameAs(report);
+		assertThat(controller.collectorTaskSubmissions(
+			"collector-1", "task-1", from, to, 0, 20, admin
+		)).isSameAs(page);
 	}
 
 	@Test

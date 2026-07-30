@@ -6,6 +6,7 @@ export const defaultTaskItemFilters = () => ({
   collectorIds: [],
   includeUnassigned: false,
   results: [],
+  sourceItemIdQuery: '',
 })
 
 export function selectionFilters(filters = {}) {
@@ -17,6 +18,7 @@ export function selectionFilters(filters = {}) {
     collectorIds: clean(filters.collectorIds),
     includeUnassigned: Boolean(filters.includeUnassigned),
     results: clean(filters.results?.length ? filters.results : legacyResults),
+    sourceItemIdQuery: String(filters.sourceItemIdQuery || '').trim(),
   }
 }
 
@@ -29,5 +31,15 @@ export function buildTaskItemQuery(page, size, filters = {}) {
   normalized.collectorIds.forEach((id) => query.append('collectorId', id))
   if (normalized.includeUnassigned) query.set('includeUnassigned', 'true')
   normalized.results.forEach((result) => query.append('result', result))
+  if (normalized.sourceItemIdQuery) query.set('sourceItemIdQuery', normalized.sourceItemIdQuery)
   return `?${query}`
+}
+
+export function buildTaskItemExportQuery(filters = {}, dates = {}) {
+  const query = new URLSearchParams(buildTaskItemQuery(0, 1, filters).slice(1))
+  query.delete('page')
+  query.delete('size')
+  if (dates.fromDate) query.set('fromDate', dates.fromDate)
+  if (dates.toDate) query.set('toDate', dates.toDate)
+  return query.size ? `?${query}` : ''
 }

@@ -266,7 +266,8 @@ public class BatchOperationService {
 					selection.taskId(),
 					new com.recording.platform.task.service.TaskItemFilter(
 						selection.itemCodes(), selection.itemCodeQuery(), selection.groups(),
-						selection.collectorIds(), selection.includeUnassigned(), selection.results()
+						selection.collectorIds(), selection.includeUnassigned(), selection.results(),
+						selection.sourceItemIdQuery(), null, null
 					),
 					PageRequest.of(page++, SNAPSHOT_PAGE_SIZE)
 				);

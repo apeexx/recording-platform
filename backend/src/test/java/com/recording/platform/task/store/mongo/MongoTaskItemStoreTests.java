@@ -111,7 +111,10 @@ class MongoTaskItemStoreTests {
 			Set.of(AdminTaskItemGroup.PENDING, AdminTaskItemGroup.SUBMITTED),
 			Set.of("MINI-1", "MINI-2"),
 			true,
-			Set.of(TaskItemResultKind.TEXT_ONLY, TaskItemResultKind.AUDIO_ONLY)
+			Set.of(TaskItemResultKind.TEXT_ONLY, TaskItemResultKind.AUDIO_ONLY),
+			"source.+",
+			java.time.Instant.parse("2026-07-29T16:00:00Z"),
+			java.time.Instant.parse("2026-07-30T16:00:00Z")
 		), PageRequest.of(0, 20));
 
 		ArgumentCaptor<Query> query = ArgumentCaptor.forClass(Query.class);
@@ -120,7 +123,8 @@ class MongoTaskItemStoreTests {
 		assertThat(queryText).contains(
 			"T000001-0000001", "T000001-0000002", "000001",
 			"RECORDING_PENDING", "REWORK_PENDING", "SUBMITTED",
-			"MINI-1", "MINI-2", "currentResult.text", "currentResult.audio", "$or"
+			"MINI-1", "MINI-2", "currentResult.text", "currentResult.audio", "$or",
+			"sourceItemId", "^\\Qsource.+\\E", "firstSubmittedAt"
 		);
 	}
 

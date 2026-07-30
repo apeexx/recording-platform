@@ -2,7 +2,6 @@ package com.recording.platform.report.store;
 
 import com.recording.platform.report.dto.SubmissionView;
 import com.recording.platform.report.dto.WorkSummary;
-import com.recording.platform.report.dto.ReviewerSummary;
 import com.recording.platform.report.dto.CollectorReportTask;
 import com.recording.platform.report.dto.CollectorTaskDaySummary;
 import com.recording.platform.report.dto.CollectorTaskReport;
@@ -20,8 +19,6 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
-import java.util.ArrayDeque;
-import java.time.Duration;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.HashMap;
@@ -127,7 +124,7 @@ public class MongoReportQueryStore implements ReportQueryStore {
 				count(itemStates, "REVIEW_PENDING"), count(itemStates, "COMPLETED"),
 				count(itemStates, "DISCARDED")
 			),
-			collectors.size(), todayCount, trend, taskRanking
+			collectors.size(), todayCount, trend, taskRanking, null
 		);
 	}
 
@@ -260,51 +257,6 @@ public class MongoReportQueryStore implements ReportQueryStore {
 	}
 
 	@Override
-	public ReviewerSummary aggregateReviewer(String reviewerId) {
-		return aggregateReviewer(reviewerId, null, null, null);
-	}
-
-	@Override
-	public ReviewerSummary aggregateReviewer(
-		String reviewerId, String taskId, Instant fromInclusive, Instant toExclusive
-	) {
-		List<Document> stages = new ArrayList<>();
-		if (taskId != null) stages.add(new Document("$match", new Document("taskId", taskId)));
-		stages.add(new Document("$unwind", "$operations"));
-		Document operationMatch = new Document("operations.actorUserId", reviewerId)
-			.append("operations.type", new Document("$in", List.of(
-				"REVIEW_CLAIM", "REVIEW_RELEASE", "REVIEW_APPROVE", "REVIEW_REJECT"
-			)));
-		appendDateRange(operationMatch, "operations.occurredAt", fromInclusive, toExclusive);
-		stages.add(new Document("$match", operationMatch));
-		stages.add(new Document("$sort", new Document("operations.occurredAt", 1)));
-		stages.add(new Document("$group", new Document("_id", "$_id")
-			.append("operations", new Document("$push", "$operations"))));
-		long claims = 0, releases = 0, approvals = 0, rejections = 0, duration = 0, decisions = 0;
-		for (Document item : items.aggregate(stages)) {
-			ArrayDeque<Instant> claimedAt = new ArrayDeque<>();
-			@SuppressWarnings("unchecked") List<Document> operations = (List<Document>) item.getOrDefault("operations", List.of());
-			for (Document operation : operations) {
-				String type = operation.getString("type");
-				Instant occurredAt = instant(operation.get("occurredAt"));
-				switch (type) {
-					case "REVIEW_CLAIM" -> { claims++; if (occurredAt != null) claimedAt.add(occurredAt); }
-					case "REVIEW_RELEASE" -> releases++;
-					case "REVIEW_APPROVE", "REVIEW_REJECT" -> {
-						if ("REVIEW_APPROVE".equals(type)) approvals++; else rejections++;
-						if (!claimedAt.isEmpty() && occurredAt != null) {
-							duration += Math.max(0, Duration.between(claimedAt.removeFirst(), occurredAt).toMillis());
-							decisions++;
-						}
-					}
-					default -> { }
-				}
-			}
-		}
-		return new ReviewerSummary(claims, releases, approvals, rejections, decisions == 0 ? 0 : duration / decisions);
-	}
-
-	@Override
 	public List<CollectorReportTask> findCollectorTasks(String collectorId) {
 		List<Document> pipeline = List.of(
 			new Document("$match", collectorMatch(collectorId, null)),
@@ -334,12 +286,19 @@ public class MongoReportQueryStore implements ReportQueryStore {
 	public Optional<CollectorTaskReport> collectorTaskReport(
 		String collectorId, String taskId, LocalDate date
 	) {
-		Document task = findTask(taskId);
-		if (task == null) return Optional.empty();
 		Instant fromInclusive = date == null ? null
 			: date.atStartOfDay(java.time.ZoneId.of("Asia/Shanghai")).toInstant();
 		Instant toExclusive = date == null ? null
 			: date.plusDays(1).atStartOfDay(java.time.ZoneId.of("Asia/Shanghai")).toInstant();
+		return collectorTaskReport(collectorId, taskId, fromInclusive, toExclusive);
+	}
+
+	@Override
+	public Optional<CollectorTaskReport> collectorTaskReport(
+		String collectorId, String taskId, Instant fromInclusive, Instant toExclusive
+	) {
+		Document task = findTask(taskId);
+		if (task == null) return Optional.empty();
 		Document summaryRow = items.aggregate(List.of(
 			new Document("$match", collectorMatch(collectorId, taskId, fromInclusive, toExclusive)),
 			new Document("$group", new Document("_id", null)
@@ -358,7 +317,8 @@ public class MongoReportQueryStore implements ReportQueryStore {
 				))))
 		)).first();
 		if (summaryRow == null) {
-			if (date == null || items.countDocuments(collectorMatch(collectorId, taskId)) == 0) {
+			if (fromInclusive == null && toExclusive == null
+				|| items.countDocuments(collectorMatch(collectorId, taskId)) == 0) {
 				return Optional.empty();
 			}
 			summaryRow = new Document();
@@ -374,6 +334,9 @@ public class MongoReportQueryStore implements ReportQueryStore {
 				.append("recordingDurationMillis", new Document(
 					"$ifNull", List.of("$currentResult.audio.durationMillis", 0)
 				))
+				.append("completed", new Document("$cond", List.of(
+					new Document("$eq", List.of("$status", "COMPLETED")), 1, 0
+				)))
 				.append("referenceAudioDurationMillis", new Document(
 					"$ifNull", List.of("$referenceAudioDurationMillis", 0)
 				))
@@ -382,6 +345,7 @@ public class MongoReportQueryStore implements ReportQueryStore {
 				))),
 			new Document("$group", new Document("_id", "$date")
 				.append("submissionCount", new Document("$sum", 1))
+				.append("completedCount", new Document("$sum", "$completed"))
 				.append("recordingDurationMillis", new Document("$sum", "$recordingDurationMillis"))
 				.append("referenceAudioDurationMillis", new Document("$sum", "$referenceAudioDurationMillis"))
 				.append("referenceVideoDurationMillis", new Document("$sum", "$referenceVideoDurationMillis"))),
@@ -392,13 +356,14 @@ public class MongoReportQueryStore implements ReportQueryStore {
 			days.add(new CollectorTaskDaySummary(
 				LocalDate.parse(row.getString("_id")),
 				number(row, "submissionCount"),
+				number(row, "completedCount"),
 				number(row, "recordingDurationMillis"),
 				number(row, "referenceAudioDurationMillis"),
 				number(row, "referenceVideoDurationMillis")
 			));
 		}
 		List<CollectorTaskReportItem> recent = findCollectorTaskSubmissions(
-			collectorId, taskId, date, Pageable.ofSize(3)
+			collectorId, taskId, fromInclusive, toExclusive, Pageable.ofSize(3)
 		).getContent();
 		return Optional.of(new CollectorTaskReport(
 			taskId,
@@ -431,6 +396,15 @@ public class MongoReportQueryStore implements ReportQueryStore {
 			: date.atStartOfDay(java.time.ZoneId.of("Asia/Shanghai")).toInstant();
 		Instant toExclusive = date == null ? null
 			: date.plusDays(1).atStartOfDay(java.time.ZoneId.of("Asia/Shanghai")).toInstant();
+		return findCollectorTaskSubmissions(
+			collectorId, taskId, fromInclusive, toExclusive, pageable
+		);
+	}
+
+	@Override
+	public Page<CollectorTaskReportItem> findCollectorTaskSubmissions(
+		String collectorId, String taskId, Instant fromInclusive, Instant toExclusive, Pageable pageable
+	) {
 		Document match = collectorMatch(collectorId, taskId, fromInclusive, toExclusive);
 		List<Document> pagePipeline = new ArrayList<>();
 		pagePipeline.add(new Document("$match", match));

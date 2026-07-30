@@ -13,10 +13,8 @@ export const adminSidebar = [
     ]
   },
   {
-    key: 'reports', title: '工作统计', icon: 'report', roles: ['ADMIN', 'REVIEWER'], children: [
-      { key: 'task-reports', title: '任务统计', path: '/admin/reports/tasks', roles: ['ADMIN'] },
-      { key: 'collector-reports', title: '采集员统计', path: '/admin/reports/collectors', roles: ['ADMIN'] },
-      { key: 'reviewer-reports', title: '审核统计', path: '/admin/reports/reviewers' }
+    key: 'reports', title: '工作统计', icon: 'report', roles: ['ADMIN'], children: [
+      { key: 'collector-reports', title: '采集员统计', path: '/admin/reports/collectors' }
     ]
   },
   {

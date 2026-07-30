@@ -1,7 +1,6 @@
 package com.recording.platform.report.controller;
 
 import com.recording.platform.api.PageResponse;
-import com.recording.platform.report.dto.ReviewerSummary;
 import com.recording.platform.report.dto.SubmissionView;
 import com.recording.platform.report.dto.WorkSummary;
 import com.recording.platform.report.dto.CollectorReportTaskList;
@@ -55,19 +54,6 @@ public class ReportController {
 
 	public WorkSummary collector(String userId, PlatformPrincipal actor) { return reports.collector(userId, actor); }
 
-	@GetMapping("/reviewers")
-	public ReviewerSummary reviewer(
-		@RequestParam String userId,
-		@RequestParam(required = false) String taskId,
-		@RequestParam(required = false) LocalDate fromDate,
-		@RequestParam(required = false) LocalDate toDate,
-		@AuthenticationPrincipal PlatformPrincipal actor
-	) {
-		return reports.reviewer(userId, taskId, fromDate, toDate, actor);
-	}
-
-	public ReviewerSummary reviewer(String userId, PlatformPrincipal actor) { return reports.reviewer(userId, actor); }
-
 	@GetMapping("/tasks/{taskId}/collectors")
 	public PageResponse<com.recording.platform.report.dto.CollectorRankingRow> taskCollectors(
 		@org.springframework.web.bind.annotation.PathVariable String taskId,
@@ -79,6 +65,32 @@ public class ReportController {
 		@AuthenticationPrincipal PlatformPrincipal actor
 	) {
 		return reports.taskCollectors(taskId, fromDate, toDate, sortBy, page, size, actor);
+	}
+
+	@GetMapping("/collectors/{collectorId}/tasks/{taskId}")
+	public CollectorTaskReport collectorTask(
+		@org.springframework.web.bind.annotation.PathVariable String collectorId,
+		@org.springframework.web.bind.annotation.PathVariable String taskId,
+		@RequestParam(required = false) LocalDate fromDate,
+		@RequestParam(required = false) LocalDate toDate,
+		@AuthenticationPrincipal PlatformPrincipal actor
+	) {
+		return reports.collectorTask(collectorId, taskId, fromDate, toDate, actor);
+	}
+
+	@GetMapping("/collectors/{collectorId}/tasks/{taskId}/submissions")
+	public PageResponse<CollectorTaskReportItem> collectorTaskSubmissions(
+		@org.springframework.web.bind.annotation.PathVariable String collectorId,
+		@org.springframework.web.bind.annotation.PathVariable String taskId,
+		@RequestParam(required = false) LocalDate fromDate,
+		@RequestParam(required = false) LocalDate toDate,
+		@RequestParam(defaultValue = "0") int page,
+		@RequestParam(defaultValue = "20") int size,
+		@AuthenticationPrincipal PlatformPrincipal actor
+	) {
+		return reports.collectorTaskSubmissions(
+			collectorId, taskId, fromDate, toDate, page, size, actor
+		);
 	}
 
 	@GetMapping("/me")

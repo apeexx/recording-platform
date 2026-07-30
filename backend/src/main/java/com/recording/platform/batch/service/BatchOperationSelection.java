@@ -19,7 +19,8 @@ public record BatchOperationSelection(
 	String itemCodeQuery,
 	Set<com.recording.platform.task.model.TaskItemStatus> statuses,
 	Set<String> reviewerIds,
-	boolean includeUnassignedReviewer
+	boolean includeUnassignedReviewer,
+	String sourceItemIdQuery
 ) {
 	public BatchOperationSelection {
 		excludedItemIds = excludedItemIds == null ? Set.of() : Set.copyOf(excludedItemIds);
@@ -32,11 +33,12 @@ public record BatchOperationSelection(
 		itemCodeQuery = itemCodeQuery == null ? "" : itemCodeQuery.trim();
 		statuses = statuses == null ? Set.of() : Set.copyOf(statuses);
 		reviewerIds = reviewerIds == null ? Set.of() : Set.copyOf(reviewerIds);
+		sourceItemIdQuery = sourceItemIdQuery == null ? "" : sourceItemIdQuery.trim();
 	}
 
 	public BatchOperationSelection(String taskId, BatchOperationSource source, Set<String> excludedItemIds) {
 		this(taskId, source, excludedItemIds, AdminTaskItemGroup.ALL, Set.of(), false,
-			TaskItemResultKind.ALL, Set.of(), Set.of(), Set.of(), "", Set.of(), Set.of(), false);
+			TaskItemResultKind.ALL, Set.of(), Set.of(), Set.of(), "", Set.of(), Set.of(), false, "");
 	}
 
 	public BatchOperationSelection(
@@ -45,7 +47,7 @@ public record BatchOperationSelection(
 		boolean includeUnassigned, TaskItemResultKind result
 	) {
 		this(taskId, source, excludedItemIds, group, collectorIds, includeUnassigned,
-			result, Set.of(), Set.of(), Set.of(), "", Set.of(), Set.of(), false);
+			result, Set.of(), Set.of(), Set.of(), "", Set.of(), Set.of(), false, "");
 	}
 
 	public BatchOperationSelection(
@@ -55,7 +57,22 @@ public record BatchOperationSelection(
 		Set<TaskItemResultKind> results
 	) {
 		this(taskId, source, excludedItemIds, group, collectorIds, includeUnassigned,
-			result, itemCodes, groups, results, "", Set.of(), Set.of(), false);
+			result, itemCodes, groups, results, "", Set.of(), Set.of(), false, "");
+	}
+
+	public BatchOperationSelection(
+		String taskId, BatchOperationSource source, Set<String> excludedItemIds,
+		AdminTaskItemGroup group, Set<String> collectorIds, boolean includeUnassigned,
+		TaskItemResultKind result, Set<String> itemCodes, Set<AdminTaskItemGroup> groups,
+		Set<TaskItemResultKind> results, String itemCodeQuery,
+		Set<com.recording.platform.task.model.TaskItemStatus> statuses,
+		Set<String> reviewerIds, boolean includeUnassignedReviewer
+	) {
+		this(
+			taskId, source, excludedItemIds, group, collectorIds, includeUnassigned,
+			result, itemCodes, groups, results, itemCodeQuery, statuses, reviewerIds,
+			includeUnassignedReviewer, ""
+		);
 	}
 
 	private static <T> Set<T> merge(Set<T> values, T legacy, T allValue) {

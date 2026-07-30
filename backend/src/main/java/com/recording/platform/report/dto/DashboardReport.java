@@ -1,5 +1,6 @@
 package com.recording.platform.report.dto;
 
+import java.time.Instant;
 import java.util.List;
 
 public record DashboardReport(
@@ -8,5 +9,12 @@ public record DashboardReport(
 	long currentCollectorCount,
 	long todayFirstSubmissionCount,
 	List<DashboardTrendPoint> trend,
-	List<DashboardTaskRanking> taskRanking
-) { }
+	List<DashboardTaskRanking> taskRanking,
+	Instant generatedAt
+) {
+	public DashboardReport withGeneratedAt(Instant value) {
+		return new DashboardReport(
+			tasks, items, currentCollectorCount, todayFirstSubmissionCount, trend, taskRanking, value
+		);
+	}
+}

@@ -7,7 +7,6 @@ const seconds = value => `${Math.round((Number(value) || 0) / 1000)} 秒`
     <section><h3>工作量</h3><div class="summary-grid"><div><span>提交条数</span><strong>{{summary.submissionCount??summary.cumulativeSubmissions??0}}</strong></div><div><span>完成条数</span><strong>{{summary.completedCount??summary.currentCompletedCount??0}}</strong></div></div></section>
     <section><h3>最终结果</h3><div class="summary-grid"><div><span>录音时长</span><strong>{{seconds(summary.recordingDurationMillis??summary.currentDurationMillis)}}</strong></div></div></section>
     <section><h3>参考来源</h3><div class="summary-grid"><div><span>参考音频时长</span><strong>{{seconds(summary.referenceAudioDurationMillis)}}</strong></div><div><span>参考视频时长</span><strong>{{seconds(summary.referenceVideoDurationMillis)}}</strong></div></div></section>
-    <section class="workflow-metrics"><h3>流程辅助</h3><div class="summary-grid"><div><span>释放</span><strong>{{summary.releaseCount||0}}</strong></div><div><span>废弃</span><strong>{{summary.discardCount||0}}</strong></div></div></section>
   </div>
 </template>
 <style scoped>

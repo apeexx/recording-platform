@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.doAnswer;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
@@ -42,6 +43,8 @@ import com.recording.platform.task.service.TaskManagementService;
 import com.recording.platform.task.service.TaskQueryService;
 import com.recording.platform.task.service.TaskItemActionResult;
 import com.recording.platform.task.service.TaskPoolService;
+import com.recording.platform.task.service.TaskItemCsvExportService;
+import com.recording.platform.task.service.TaskItemFilter;
 import com.recording.platform.review.service.ReviewService;
 import com.recording.platform.task.service.TaskItemAdministrationService;
 import com.recording.platform.operation.service.OperationService;
@@ -117,11 +120,68 @@ class TaskApiSecurityIntegrationTests {
 	private MediaAccessService mediaAccessService;
 	@MockitoBean
 	private IntegrationResultService integrationResultService;
+	@MockitoBean
+	private TaskItemCsvExportService taskItemCsvExportService;
 
 	@BeforeEach
 	void executeControllerIdempotencyMutations() {
 		lenient().when(idempotencyService.execute(any(), anyString(), anyString(), any(Class.class), any()))
 			.thenAnswer((invocation) -> ((Supplier<?>) invocation.getArgument(4)).get());
+	}
+
+	@Test
+	void onlyAdminCanExportAllFilteredTaskItemsAndDateRangeUsesShanghaiDays() throws Exception {
+		doAnswer(invocation -> {
+			invocation.<java.io.OutputStream>getArgument(2).write(new byte[] {(byte) 0xEF, (byte) 0xBB, (byte) 0xBF});
+			return null;
+		}).when(taskItemCsvExportService).write(eq("task-1"), any(TaskItemFilter.class), any(java.io.OutputStream.class));
+
+		mockMvc.perform(get("/api/tasks/task-1/items/export.csv")
+				.with(user("admin").roles("ADMIN"))
+				.param("sourceItemIdQuery", "script.+")
+				.param("fromDate", "2026-07-29")
+			.param("toDate", "2026-07-30"))
+			.andExpect(status().isOk())
+			.andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"task-items.csv\""))
+			.andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
+			.andExpect(content().bytes(new byte[] {(byte) 0xEF, (byte) 0xBB, (byte) 0xBF}));
+
+		ArgumentCaptor<TaskItemFilter> filter = ArgumentCaptor.forClass(TaskItemFilter.class);
+		verify(taskItemCsvExportService).write(eq("task-1"), filter.capture(), any(java.io.OutputStream.class));
+		org.assertj.core.api.Assertions.assertThat(filter.getValue().sourceItemIdQuery()).isEqualTo("script.+");
+		org.assertj.core.api.Assertions.assertThat(filter.getValue().firstSubmittedFrom())
+			.isEqualTo(Instant.parse("2026-07-28T16:00:00Z"));
+		org.assertj.core.api.Assertions.assertThat(filter.getValue().firstSubmittedTo())
+			.isEqualTo(Instant.parse("2026-07-30T16:00:00Z"));
+
+		mockMvc.perform(get("/api/tasks/task-1/items/export.csv")
+				.with(user("reviewer").roles("REVIEWER")))
+			.andExpect(status().isForbidden());
+
+		mockMvc.perform(get("/api/tasks/task-1/items/export.csv/ready")
+				.with(user("admin").roles("ADMIN"))
+				.param("fromDate", "2026-07-29")
+				.param("toDate", "2026-07-30"))
+			.andExpect(status().isNoContent());
+		verify(taskItemCsvExportService).prepare("task-1");
+
+		mockMvc.perform(get("/api/tasks/task-1/items/export.csv/ready")
+				.with(user("reviewer").roles("REVIEWER")))
+			.andExpect(status().isForbidden());
+	}
+
+	@Test
+	void exportRejectsInvalidDateRangeAndReviewerReportEndpointNoLongerExists() throws Exception {
+		mockMvc.perform(get("/api/tasks/task-1/items/export.csv")
+				.with(user("admin").roles("ADMIN"))
+				.param("fromDate", "2026-07-30")
+				.param("toDate", "2026-07-29"))
+			.andExpect(status().isUnprocessableEntity())
+			.andExpect(jsonPath("$.code").value("INVALID_REPORT_DATE_RANGE"));
+
+		mockMvc.perform(get("/api/reports/reviewers")
+				.with(user("admin").roles("ADMIN")))
+			.andExpect(status().isNotFound());
 	}
 
 	@Test

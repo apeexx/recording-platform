@@ -123,12 +123,17 @@ public class SecurityConfig {
 			.requestMatchers(HttpMethod.POST, "/api/tasks", "/api/tasks/**").hasRole("ADMIN")
 			.requestMatchers(HttpMethod.PUT, "/api/tasks/**").hasRole("ADMIN")
 			.requestMatchers(HttpMethod.DELETE, "/api/tasks/**").hasRole("ADMIN")
+			.requestMatchers(HttpMethod.GET, "/api/tasks/*/items/export.csv", "/api/tasks/*/items/export.csv/ready")
+				.hasRole("ADMIN")
 			.requestMatchers(HttpMethod.GET, "/api/tasks/*/items", "/api/tasks/*/grants", "/api/tasks/*/access-requests")
 				.hasRole("ADMIN")
 			.requestMatchers("/api/voice-generation/**", "/api/admin/**").hasRole("ADMIN")
 			.requestMatchers(HttpMethod.GET, "/api/operations").hasAnyRole("ADMIN", "REVIEWER")
-			.requestMatchers(HttpMethod.GET, "/api/reports/tasks", "/api/reports/collectors").hasRole("ADMIN")
-			.requestMatchers(HttpMethod.GET, "/api/reports/reviewers").hasAnyRole("ADMIN", "REVIEWER")
+			.requestMatchers(
+				HttpMethod.GET,
+				"/api/reports/tasks", "/api/reports/tasks/**",
+				"/api/reports/collectors", "/api/reports/collectors/**"
+			).hasRole("ADMIN")
 			.requestMatchers("/api/auth/miniprogram/**").hasRole("COLLECTOR")
 			.requestMatchers("/api/**").authenticated()
 			.anyRequest().permitAll()

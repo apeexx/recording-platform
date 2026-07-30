@@ -1,6 +1,6 @@
 import { httpRequest } from './httpClient.js'
 import { queryString } from './apiUtils.js'
-import { buildTaskItemQuery } from './taskItemFilters.js'
+import { buildTaskItemExportQuery, buildTaskItemQuery } from './taskItemFilters.js'
 
 const encoded = (value) => encodeURIComponent(value)
 export const taskApi = {
@@ -11,6 +11,12 @@ export const taskApi = {
   deleteTask(id, key) { return httpRequest(`/api/tasks/${encoded(id)}`, { method: 'DELETE', idempotencyKey: key }) },
   transition(id, action, key) { return httpRequest(`/api/tasks/${encoded(id)}/${action}`, { method: 'POST', idempotencyKey: key }) },
   items(id, page = 0, size = 20, filters = {}) { return httpRequest(`/api/tasks/${encoded(id)}/items${buildTaskItemQuery(page, size, filters)}`) },
+  exportItems(id, filters = {}, dates = {}) {
+    return `/api/tasks/${encoded(id)}/items/export.csv${buildTaskItemExportQuery(filters, dates)}`
+  },
+  prepareExport(id, filters = {}, dates = {}) {
+    return httpRequest(`/api/tasks/${encoded(id)}/items/export.csv/ready${buildTaskItemExportQuery(filters, dates)}`)
+  },
   item(itemId) { return httpRequest(`/api/task-items/${encoded(itemId)}`) },
   addItem(id, data, key) { return httpRequest(`/api/tasks/${encoded(id)}/items`, { method: 'POST', json: data, idempotencyKey: key }) },
   updateItem(itemId, data, key) { return httpRequest(`/api/task-items/${encoded(itemId)}`, { method: 'PUT', json: data, idempotencyKey: key }) },

@@ -5,11 +5,16 @@ import com.recording.platform.idempotency.IdempotencyService;
 import com.recording.platform.importing.AddTaskItemCommand;
 import com.recording.platform.importing.TaskItemCreationService;
 import com.recording.platform.security.PlatformPrincipal;
+import com.recording.platform.report.service.ReportDateRange;
 import com.recording.platform.task.model.TaskItem;
+import com.recording.platform.task.service.TaskItemCsvExportService;
 import com.recording.platform.task.service.TaskPoolService;
 import com.recording.platform.task.store.TaskItemStore;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
+import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
+import java.time.LocalDate;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
@@ -41,19 +46,22 @@ public class TaskItemsController {
 	private final TaskItemStore items;
 	private final IdempotencyService idempotency;
 	private final IdentityDirectory users;
+	private final TaskItemCsvExportService csvExport;
 
 	public TaskItemsController(
 		TaskItemCreationService creation,
 		TaskPoolService pool,
 		TaskItemStore items,
 		IdempotencyService idempotency,
-		IdentityDirectory users
+		IdentityDirectory users,
+		TaskItemCsvExportService csvExport
 	) {
 		this.creation = creation;
 		this.pool = pool;
 		this.items = items;
 		this.idempotency = idempotency;
 		this.users = users;
+		this.csvExport = csvExport;
 	}
 
 	@PostMapping
@@ -93,11 +101,15 @@ public class TaskItemsController {
 		@RequestParam(name = "group", required = false) Set<AdminTaskItemGroup> groups,
 		@RequestParam(name = "collectorId", required = false) Set<String> collectorIds,
 		@RequestParam(defaultValue = "false") boolean includeUnassigned,
-		@RequestParam(name = "result", required = false) Set<TaskItemResultKind> results
+		@RequestParam(name = "result", required = false) Set<TaskItemResultKind> results,
+		@RequestParam(defaultValue = "") String sourceItemIdQuery
 	) {
 		var result = items.findAllByTaskId(
 			taskId,
-			new TaskItemFilter(itemCodes, itemCodeQuery, groups, collectorIds, includeUnassigned, results),
+			new TaskItemFilter(
+				itemCodes, itemCodeQuery, groups, collectorIds, includeUnassigned, results,
+				sourceItemIdQuery, null, null
+			),
 			PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100))
 		);
 		Map<String, IdentityUser> identities = users.findAllByIdIn(
@@ -112,6 +124,43 @@ public class TaskItemsController {
 			item.setReviewerName(reviewer == null ? null : reviewer.name());
 		});
 		return PageResponse.from(result);
+	}
+
+	@GetMapping(value = "/export.csv", produces = "text/csv")
+	public void export(
+		@PathVariable String taskId,
+		@RequestParam(name = "itemCode", required = false) Set<String> itemCodes,
+		@RequestParam(defaultValue = "") String itemCodeQuery,
+		@RequestParam(name = "group", required = false) Set<AdminTaskItemGroup> groups,
+		@RequestParam(name = "collectorId", required = false) Set<String> collectorIds,
+		@RequestParam(defaultValue = "false") boolean includeUnassigned,
+		@RequestParam(name = "result", required = false) Set<TaskItemResultKind> results,
+		@RequestParam(defaultValue = "") String sourceItemIdQuery,
+		@RequestParam(required = false) LocalDate fromDate,
+		@RequestParam(required = false) LocalDate toDate,
+		HttpServletResponse response
+	) throws IOException {
+		ReportDateRange range = ReportDateRange.of(fromDate, toDate);
+		TaskItemFilter filter = new TaskItemFilter(
+			itemCodes, itemCodeQuery, groups, collectorIds, includeUnassigned, results,
+			sourceItemIdQuery, range.fromInclusive(), range.toExclusive()
+		);
+		response.setCharacterEncoding(java.nio.charset.StandardCharsets.UTF_8.name());
+		response.setContentType("text/csv;charset=UTF-8");
+		response.setHeader("Content-Disposition", "attachment; filename=\"task-items.csv\"");
+		response.setHeader("Cache-Control", "no-store");
+		csvExport.write(taskId, filter, response.getOutputStream());
+	}
+
+	@GetMapping("/export.csv/ready")
+	@ResponseStatus(HttpStatus.NO_CONTENT)
+	public void prepareExport(
+		@PathVariable String taskId,
+		@RequestParam(required = false) LocalDate fromDate,
+		@RequestParam(required = false) LocalDate toDate
+	) {
+		ReportDateRange.of(fromDate, toDate);
+		csvExport.prepare(taskId);
 	}
 
 	public record AddItemRequest(

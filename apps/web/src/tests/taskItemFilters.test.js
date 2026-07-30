@@ -23,12 +23,14 @@ describe('task item filters', () => {
       collectorIds: ['MINI-1'],
       includeUnassigned: false,
       results: ['TEXT_AND_AUDIO', 'AUDIO_ONLY'],
+      sourceItemIdQuery: '',
     })).toEqual({
       itemCodes: ['T000001-0000001'],
       groups: ['FINISHED', 'SUBMITTED'],
       collectorIds: ['MINI-1'],
       includeUnassigned: false,
       results: ['TEXT_AND_AUDIO', 'AUDIO_ONLY'],
+      sourceItemIdQuery: '',
     })
   })
 
@@ -38,6 +40,7 @@ describe('task item filters', () => {
       itemCodeQuery: '000001',
       groups: ['PENDING', 'SUBMITTED'],
       results: ['TEXT_ONLY', 'AUDIO_ONLY'],
+      sourceItemIdQuery: ' script.+ ',
     })
     const params = new URLSearchParams(query.slice(1))
 
@@ -45,5 +48,6 @@ describe('task item filters', () => {
     expect(params.get('itemCodeQuery')).toBe('000001')
     expect(params.getAll('group')).toEqual(['PENDING', 'SUBMITTED'])
     expect(params.getAll('result')).toEqual(['TEXT_ONLY', 'AUDIO_ONLY'])
+    expect(params.get('sourceItemIdQuery')).toBe('script.+')
   })
 })

@@ -21,6 +21,7 @@ const userSearching = ref(false)
 const codeQuery = ref('')
 const codeCandidates = ref([])
 const codeSearching = ref(false)
+const sourceQuery = ref(String(props.modelValue.sourceItemIdQuery || ''))
 const groupOptions = [
   ['PENDING', '待录制'], ['SUBMITTED', '已提交'],
   ['FINISHED', '已完成'], ['DISCARDED', '废弃数据'],
@@ -55,15 +56,17 @@ const active = computed(() => ({
   collector: normalized.value.collectorIds.length > 0 || normalized.value.includeUnassigned,
   reviewer: normalized.value.reviewerIds?.length > 0 || normalized.value.includeUnassignedReviewer,
   result: normalized.value.results.length > 0,
+  source: Boolean(normalized.value.sourceItemIdQuery),
 })[props.kind])
 const label = computed(() => {
-  const base = { code: '编号', status: '状态', collector: '采集员姓名', reviewer: '审核员姓名', result: '结果' }[props.kind] || '筛选'
+  const base = { code: '编号', status: '状态', collector: '采集员姓名', reviewer: '审核员姓名', result: '结果', source: '脚本来源' }[props.kind] || '筛选'
   const count = {
     code: selectedCodes.value.length,
     status: (props.reviewMode ? normalized.value.statuses : normalized.value.groups).length,
     collector: normalized.value.collectorIds.length + (normalized.value.includeUnassigned ? 1 : 0),
     reviewer: (normalized.value.reviewerIds?.length || 0) + (normalized.value.includeUnassignedReviewer ? 1 : 0),
     result: normalized.value.results.length,
+    source: normalized.value.sourceItemIdQuery ? 1 : 0,
   }[props.kind]
   return count ? `${base} · ${count}` : base
 })
@@ -84,6 +87,10 @@ function clearDimension() {
   if (props.kind === 'collector') update({ collectorIds: [], includeUnassigned: false })
   if (props.kind === 'reviewer') update({ reviewerIds: [], includeUnassignedReviewer: false })
   if (props.kind === 'result') update({ results: [] })
+  if (props.kind === 'source') {
+    sourceQuery.value = ''
+    update({ sourceItemIdQuery: '' })
+  }
 }
 async function searchUsers() {
   userSearching.value = true
@@ -135,6 +142,10 @@ onMounted(() => {
     <form v-if="kind === 'collector' || kind === 'reviewer'" class="filter-search" novalidate @submit.prevent="searchUsers">
       <input v-model.trim="userQuery" placeholder="姓名、用户 ID 或账号">
       <button class="button-link" :disabled="userSearching">{{ userSearching ? '搜索中' : '搜索' }}</button>
+    </form>
+    <form v-if="kind === 'source'" class="filter-search" novalidate @submit.prevent="update({ sourceItemIdQuery: sourceQuery })">
+      <input v-model.trim="sourceQuery" placeholder="脚本 ID 前缀或完整 ID">
+      <button class="button-link">应用</button>
     </form>
 
     <div class="filter-option-list">
