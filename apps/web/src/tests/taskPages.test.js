@@ -195,7 +195,8 @@ describe('任务页面 API', () => {
    expect(source).toContain('permission-layout')
 	  const styles=fs.readFileSync(path.resolve('src/styles/business.css'),'utf8')
    expect(styles).toContain('.permission-layout')
-	  expect(styles).toContain('align-items:stretch')
+	  expect(styles).toMatch(/\.permission-layout\{[^}]*align-items:start/)
+	  expect(styles).toMatch(/\.permission-users\{[^}]*align-self:start/)
 	})
 
   it('侧栏品牌区与顶部栏共享同一高度变量',()=>{

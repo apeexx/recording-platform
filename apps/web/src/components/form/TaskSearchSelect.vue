@@ -126,7 +126,7 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', outside))
         :aria-selected="task.id === modelValue"
         @pointerenter="activeIndex = index"
         @click="choose(task)"
-      ><strong>{{ task.taskCode }}</strong><span>{{ task.name }}</span></button>
+      ><strong class="task-search-code">{{ task.taskCode }}</strong><span class="task-search-name">{{ task.name }}</span></button>
       <p v-if="!filteredTasks.length && !allowEmpty">未找到匹配任务</p>
     </div>
   </div>

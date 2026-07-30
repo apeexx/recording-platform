@@ -57,6 +57,8 @@ describe('采集员统计筛选控件', () => {
     await input.trigger('focus')
     await input.setValue('台州')
     expect(wrapper.findAll('[role="option"]')).toHaveLength(1)
+    expect(wrapper.get('[role="option"] .task-search-code').text()).toBe('T000001')
+    expect(wrapper.get('[role="option"] .task-search-name').text()).toBe('台州正式数据')
     await wrapper.get('[role="option"]').trigger('click')
 
     expect(wrapper.emitted('update:modelValue')).toEqual([['task-1']])

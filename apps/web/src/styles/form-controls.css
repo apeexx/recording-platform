@@ -159,14 +159,32 @@
 
 .task-search-menu button {
   display: flex;
+  align-items: center;
   gap: 10px;
   width: 100%;
+  min-width: 0;
   padding: 10px 12px;
   border-radius: 10px;
   background: transparent;
   color: var(--foreground);
   text-align: left;
   cursor: pointer;
+}
+
+.task-search-code {
+  flex: 0 0 76px;
+  overflow: hidden;
+  line-height: 22px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-search-name {
+  min-width: 0;
+  overflow: hidden;
+  line-height: 22px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .task-search-menu button:hover,
