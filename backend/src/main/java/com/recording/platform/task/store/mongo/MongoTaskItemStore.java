@@ -659,7 +659,7 @@ public class MongoTaskItemStore implements TaskItemStore {
 	) {
 		if (taskIds == null || taskIds.isEmpty()) return List.of();
 		Document entered = new Document("$and", List.of(
-			new Document("$ne", List.of("$firstSubmittedAt", null)),
+			new Document("$ne", java.util.Arrays.asList("$firstSubmittedAt", null)),
 			new Document("$not", List.of(new Document("$in", List.of(
 				"$status", List.of(TaskItemStatus.AVAILABLE.name(), TaskItemStatus.DISCARDED.name())
 			))))
