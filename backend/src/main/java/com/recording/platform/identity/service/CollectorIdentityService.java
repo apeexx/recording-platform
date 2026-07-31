@@ -56,7 +56,7 @@ public class CollectorIdentityService {
 
 	public MiniProgramUser completeProfile(String userId, String name, String account, String password) {
 		MiniProgramUser current = requireCollector(userId);
-		validateName(name);
+		String normalizedName = validateName(name);
 		boolean accountProvided = StringUtils.hasText(account);
 		boolean passwordProvided = StringUtils.hasText(password);
 		if (accountProvided != passwordProvided) {
@@ -74,6 +74,7 @@ public class CollectorIdentityService {
 		if (StringUtils.hasText(current.getAccount()) || StringUtils.hasText(current.getPasswordHash())) {
 			throw new ApiException(HttpStatus.CONFLICT, "PROFILE_ALREADY_COMPLETED", "登录账号已设置");
 		}
+		ensureNameAvailable(userId, normalizedName);
 		Optional<MiniProgramUser> existing = users.findByAccount(normalized);
 		if (existing.isPresent() && !userId.equals(existing.get().getId())) {
 			throw usernameExists();
@@ -82,21 +83,29 @@ public class CollectorIdentityService {
 			return users.completeProfileIfActive(
 				userId,
 				normalized,
-				name.trim(),
+				normalizedName,
 				passwordEncoder.encode(password),
 				Instant.now(clock)
 			).orElseThrow(() -> new ApiException(
 				HttpStatus.CONFLICT, "ACCOUNT_STATE_CHANGED", "账号状态已变化，请重试"
 			));
 		} catch (DuplicateKeyException exception) {
+			if (isNameDuplicate(exception) || nameOwnedByOther(userId, normalizedName)) {
+				throw nameExists();
+			}
 			throw usernameExists();
 		}
 	}
 
 	public MiniProgramUser setName(String userId, String name) {
-		validateName(name);
-		return users.updateNameIfActive(userId, name.trim(), Instant.now(clock))
-			.orElseThrow(() -> new ApiException(HttpStatus.CONFLICT, "ACCOUNT_STATE_CHANGED", "账号状态已变化，请重试"));
+		String normalizedName = validateName(name);
+		ensureNameAvailable(userId, normalizedName);
+		try {
+			return users.updateNameIfActive(userId, normalizedName, Instant.now(clock))
+				.orElseThrow(() -> new ApiException(HttpStatus.CONFLICT, "ACCOUNT_STATE_CHANGED", "账号状态已变化，请重试"));
+		} catch (DuplicateKeyException exception) {
+			throw nameExists();
+		}
 	}
 
 	public MiniProgramUser changePassword(String userId, String currentPassword, String newPassword) {
@@ -144,10 +153,23 @@ public class CollectorIdentityService {
 		}
 	}
 
-	private void validateName(String name) {
+	private String validateName(String name) {
 		if (!StringUtils.hasText(name) || name.trim().length() > 64) {
 			throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "INVALID_NAME", "姓名不能为空且不能超过 64 个字符");
 		}
+		return name.trim();
+	}
+
+	private void ensureNameAvailable(String userId, String name) {
+		if (nameOwnedByOther(userId, name)) throw nameExists();
+	}
+
+	private boolean nameOwnedByOther(String userId, String name) {
+		return users.findByName(name).filter(existing -> !userId.equals(existing.getId())).isPresent();
+	}
+
+	private boolean isNameDuplicate(DuplicateKeyException exception) {
+		return exception.getMessage() != null && exception.getMessage().contains("unique_miniprogram_name");
 	}
 
 	private String validateAccount(String account) {
@@ -178,5 +200,9 @@ public class CollectorIdentityService {
 
 	private ApiException usernameExists() {
 		return new ApiException(HttpStatus.CONFLICT, "USERNAME_EXISTS", "该登录账号已被使用");
+	}
+
+	private ApiException nameExists() {
+		return new ApiException(HttpStatus.CONFLICT, "NAME_EXISTS", "该姓名已被使用");
 	}
 }

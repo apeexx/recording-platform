@@ -12,6 +12,7 @@ import com.recording.platform.identity.model.UserStatus;
 import com.recording.platform.identity.service.MiniProgramLoginResult;
 import java.util.Arrays;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.mongodb.core.index.Indexed;
 
 class MiniProgramProfileContractTests {
 	@Test
@@ -29,6 +30,15 @@ class MiniProgramProfileContractTests {
 		user.setName("张三");
 
 		assertThat(com.recording.platform.identity.service.CollectorProfilePolicy.isComplete(user)).isTrue();
+	}
+
+	@Test
+	void collectorNamesUseASparseUniqueIndex() throws NoSuchFieldException {
+		Indexed indexed = MiniProgramUser.class.getDeclaredField("name").getAnnotation(Indexed.class);
+
+		assertThat(indexed).isNotNull();
+		assertThat(indexed.unique()).isTrue();
+		assertThat(indexed.sparse()).isTrue();
 	}
 
 	@Test

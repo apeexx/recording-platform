@@ -31,6 +31,7 @@ public class MiniProgramUser {
 	@Indexed(unique = true, sparse = true)
 	private String account;
 
+	@Indexed(name = "unique_miniprogram_name", unique = true, sparse = true)
 	private String name;
 	private String passwordHash;
 	private UserStatus status;

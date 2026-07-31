@@ -114,5 +114,51 @@ class CollectorIdentityServiceTests {
 	@Test void nameUpdatePreservesCollectorBoundary(){MiniProgramUserStore users=mock(MiniProgramUserStore.class);MiniProgramUser user=mini();when(users.updateNameIfActive(eq(user.getId()),eq("张三"),eq(Instant.now(CLOCK)))).thenAnswer(i->{user.setName("张三");return Optional.of(user);});
 		assertThat(new CollectorIdentityService(users,mock(SessionService.class),passwords,CLOCK).setName(user.getId()," 张三 ").getName()).isEqualTo("张三");}
 
+	@Test
+	void duplicateCollectorNameIsRejectedAfterTrimmingButTheCurrentOwnerCanKeepIt() {
+		MiniProgramUserStore users = mock(MiniProgramUserStore.class);
+		MiniProgramUser user = mini();
+		user.setName("李四");
+		MiniProgramUser other = mini();
+		other.setId("MINI-1123456789abcdef01234567");
+		other.setName("张三");
+		when(users.findById(user.getId())).thenReturn(Optional.of(user));
+		when(users.findByName("张三")).thenReturn(Optional.of(other));
+		when(users.findByName("李四")).thenReturn(Optional.of(user));
+		when(users.updateNameIfActive(user.getId(), "李四", Instant.now(CLOCK))).thenReturn(Optional.of(user));
+		CollectorIdentityService service = new CollectorIdentityService(users, mock(SessionService.class), passwords, CLOCK);
+
+		assertThatThrownBy(() -> service.completeProfile(user.getId(), " 张三 ", null, null))
+			.isInstanceOfSatisfying(ApiException.class, error -> {
+				assertThat(error.getStatus()).isEqualTo(org.springframework.http.HttpStatus.CONFLICT);
+				assertThat(error.getCode()).isEqualTo("NAME_EXISTS");
+			});
+		assertThat(service.setName(user.getId(), " 李四 ")).isSameAs(user);
+	}
+
+	@Test
+	void concurrentNameClaimsMapToNameExistsForBothProfilePaths() {
+		MiniProgramUserStore users = mock(MiniProgramUserStore.class);
+		MiniProgramUser user = mini();
+		when(users.findById(user.getId())).thenReturn(Optional.of(user));
+		when(users.findByName("张三")).thenReturn(Optional.empty());
+		when(users.updateNameIfActive(user.getId(), "张三", Instant.now(CLOCK)))
+			.thenThrow(new DuplicateKeyException("unique_miniprogram_name"));
+		CollectorIdentityService service = new CollectorIdentityService(users, mock(SessionService.class), passwords, CLOCK);
+
+		assertThatThrownBy(() -> service.setName(user.getId(), "张三"))
+			.isInstanceOfSatisfying(ApiException.class, error -> assertThat(error.getCode()).isEqualTo("NAME_EXISTS"));
+
+		when(users.findByAccount("682913")).thenReturn(Optional.empty());
+		when(users.completeProfileIfActive(eq(user.getId()), eq("682913"), eq("张三"), any(), eq(Instant.now(CLOCK))))
+			.thenThrow(new DuplicateKeyException("unique_miniprogram_name"));
+		MiniProgramUser other = mini();
+		other.setId("MINI-1123456789abcdef01234567");
+		when(users.findByName("张三")).thenReturn(Optional.empty(), Optional.of(other));
+
+		assertThatThrownBy(() -> service.completeProfile(user.getId(), "张三", "682913", "Password-1"))
+			.isInstanceOfSatisfying(ApiException.class, error -> assertThat(error.getCode()).isEqualTo("NAME_EXISTS"));
+	}
+
 	private MiniProgramUser mini() { MiniProgramUser user=new MiniProgramUser();user.setId("MINI-0123456789abcdef01234567");user.setStatus(UserStatus.ACTIVE);return user; }
 }

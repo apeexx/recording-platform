@@ -6,5 +6,6 @@ import org.springframework.data.mongodb.repository.MongoRepository;
 
 public interface SpringDataMiniProgramUserRepository extends MongoRepository<MiniProgramUser, String> {
 	Optional<MiniProgramUser> findByAccount(String account);
+	Optional<MiniProgramUser> findByName(String name);
 	Optional<MiniProgramUser> findByWechatAppIdAndWechatOpenId(String wechatAppId, String wechatOpenId);
 }

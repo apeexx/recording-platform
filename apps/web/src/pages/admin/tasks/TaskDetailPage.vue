@@ -17,7 +17,7 @@ import { defaultTaskItemFilters, selectionFilters } from '../../../lib/taskItemF
 const notifications = useNotifications()
 const route = useRoute()
 const router = useRouter()
-const itemPageSize = ref(20)
+const itemPageSize = ref(10)
 const task = ref(null)
 const items = ref([])
 const page = ref(0)

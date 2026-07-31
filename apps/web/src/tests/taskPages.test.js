@@ -57,10 +57,10 @@ describe('任务页面 API', () => {
 	  expect(pool).not.toContain('externalItemId')
 	  expect(pool).not.toContain('外部编号')
 	})
-  it('任务详情数据池默认每页二十条并提供服务端分页', () => {
+  it('任务详情数据池默认每页十条并提供服务端分页', () => {
     const detail = fs.readFileSync(path.resolve('src/pages/admin/tasks/TaskDetailPage.vue'), 'utf8')
     expect(detail).toContain("import PaginationControls from '../../../components/admin/PaginationControls.vue'")
-    expect(detail).toContain('const itemPageSize = ref(20)')
+    expect(detail).toContain('const itemPageSize = ref(10)')
     expect(detail).toContain('taskApi.items(route.params.id, page.value, itemPageSize.value, filters.value)')
     expect(detail).toContain('function changePage(value)')
     expect(detail).toContain('async function changePageSize(value)')

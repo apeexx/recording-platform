@@ -13,6 +13,7 @@ public interface MiniProgramUserStore {
 	Optional<MiniProgramUser> findById(String id);
 	List<MiniProgramUser> findAllByIdIn(Collection<String> ids);
 	Optional<MiniProgramUser> findByAccount(String account);
+	Optional<MiniProgramUser> findByName(String name);
 	Optional<MiniProgramUser> findByWechatIdentity(String appId, String openId);
 	Page<MiniProgramUser> search(String query, Pageable pageable);
 	Optional<MiniProgramUser> updateNameIfActive(String userId, String name, Instant updatedAt);

@@ -27,6 +27,7 @@ public class MongoMiniProgramUserStore implements MiniProgramUserStore {
 	@Override public Optional<MiniProgramUser> findById(String id) { return repository.findById(id); }
 	@Override public List<MiniProgramUser> findAllByIdIn(Collection<String> ids) { return repository.findAllById(ids); }
 	@Override public Optional<MiniProgramUser> findByAccount(String account) { return repository.findByAccount(account); }
+	@Override public Optional<MiniProgramUser> findByName(String name) { return repository.findByName(name); }
 	@Override public Optional<MiniProgramUser> findByWechatIdentity(String appId, String openId) { return repository.findByWechatAppIdAndWechatOpenId(appId, openId); }
 	@Override public Page<MiniProgramUser> search(String term, Pageable pageable) {
 		Query query = new Query();

@@ -658,12 +658,12 @@ public class MongoTaskItemStore implements TaskItemStore {
 		Collection<String> taskIds, Instant todayStart, Instant tomorrowStart
 	) {
 		if (taskIds == null || taskIds.isEmpty()) return List.of();
-		Document entered = new Document("$and", List.of(
-			new Document("$ne", java.util.Arrays.asList("$firstSubmittedAt", null)),
-			new Document("$not", List.of(new Document("$in", List.of(
-				"$status", List.of(TaskItemStatus.AVAILABLE.name(), TaskItemStatus.DISCARDED.name())
-			))))
-		));
+		Document entered = new Document("$in", List.of("$status", List.of(
+			TaskItemStatus.SUBMITTED.name(),
+			TaskItemStatus.REVIEW_PENDING.name(),
+			TaskItemStatus.REWORK_PENDING.name(),
+			TaskItemStatus.COMPLETED.name()
+		)));
 		Document group = new Document("_id", "$taskId")
 			.append("effectiveItemCount", conditionalSum(new Document("$ne", List.of(
 				"$status", TaskItemStatus.DISCARDED.name()
@@ -672,11 +672,8 @@ public class MongoTaskItemStore implements TaskItemStore {
 				"$status", TaskItemStatus.COMPLETED.name()
 			))))
 			.append("reviewEnteredCount", conditionalSum(entered))
-			.append("reviewProcessedCount", conditionalSum(new Document("$and", List.of(
-				entered,
-				new Document("$in", List.of("$status", List.of(
-					TaskItemStatus.COMPLETED.name(), TaskItemStatus.REWORK_PENDING.name()
-				)))
+			.append("reviewProcessedCount", conditionalSum(new Document("$in", List.of(
+				"$status", List.of(TaskItemStatus.COMPLETED.name(), TaskItemStatus.REWORK_PENDING.name())
 			))))
 			.append("submittedCount", conditionalSum(new Document("$eq", List.of(
 				"$status", TaskItemStatus.SUBMITTED.name()

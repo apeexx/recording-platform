@@ -47,7 +47,7 @@ import org.springframework.data.domain.Sort;
 class MongoTaskItemStoreTests {
 	@Test
 	@SuppressWarnings({"unchecked", "rawtypes"})
-	void reviewMetricsPipelineCanRepresentMissingFirstSubmissionWithoutExternalMongo() {
+	void reviewMetricsPipelineCountsOnlyItemsCurrentlyInsideTheReviewFlow() {
 		SpringDataTaskItemRepository repository = org.mockito.Mockito.mock(SpringDataTaskItemRepository.class);
 		MongoTemplate template = org.mockito.Mockito.mock(MongoTemplate.class);
 		MongoCollection<Document> collection = org.mockito.Mockito.mock(MongoCollection.class);
@@ -68,7 +68,9 @@ class MongoTaskItemStoreTests {
 		ArgumentCaptor<List<Document>> pipeline = ArgumentCaptor.forClass(List.class);
 		verify(collection).aggregate(pipeline.capture());
 		assertThat(pipeline.getValue().get(1).toJson())
-			.contains("$firstSubmittedAt", "$ne", "null", "AVAILABLE", "DISCARDED");
+			.contains("SUBMITTED", "REVIEW_PENDING", "REWORK_PENDING", "COMPLETED")
+			.doesNotContain("$firstSubmittedAt")
+			.doesNotContain("RECORDING_PENDING");
 	}
 
 	@Test

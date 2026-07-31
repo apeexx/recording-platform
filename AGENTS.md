@@ -285,9 +285,9 @@ Web 数据大屏使用仅 ADMIN 可访问的 `GET /api/reports/dashboard`，返�
 请求路径：/api/auth/miniprogram/login、/account-login、/takeover、/profile、/profile/complete、/name、/password、/avatar
 请求参数：微信登录 JSON code、可选 invitationCode；账号登录 JSON account/password；资料完成 JSON name、可选成对 account/password；改密 currentPassword/newPassword；头像 multipart avatar
 响应结构：登录返回不透明 Bearer token、account、profileComplete、hasCustomAvatar；资料接口返回采集员摘要；头像 GET 返回文件流
-错误码：503 WECHAT_NOT_CONFIGURED/WECHAT_UNAVAILABLE；401 WECHAT_LOGIN_FAILED/INVALID_CREDENTIALS/TAKEOVER_TOKEN_INVALID；403 INVITATION_REQUIRED/INVITATION_CODE_INVALID；409 ACCOUNT_IN_USE（details.takeoverToken 为短时一次性接管凭证）/USERNAME_EXISTS；413 AVATAR_TOO_LARGE；422 INVALID_NAME/ACCOUNT_PASSWORD_REQUIRED/INVALID_COLLECTOR_ACCOUNT/PASSWORD_TOO_WEAK/INVALID_AVATAR_FILE
+错误码：503 WECHAT_NOT_CONFIGURED/WECHAT_UNAVAILABLE；401 WECHAT_LOGIN_FAILED/INVALID_CREDENTIALS/TAKEOVER_TOKEN_INVALID；403 INVITATION_REQUIRED/INVITATION_CODE_INVALID；409 ACCOUNT_IN_USE（details.takeoverToken 为短时一次性接管凭证）/USERNAME_EXISTS/NAME_EXISTS；413 AVATAR_TOO_LARGE；422 INVALID_NAME/ACCOUNT_PASSWORD_REQUIRED/INVALID_COLLECTOR_ACCOUNT/PASSWORD_TOO_WEAK/INVALID_AVATAR_FILE
 权限要求：两种登录公开；其余仅 COLLECTOR 小程序 Bearer
-数据一致性要求：微信和数字账号登录始终映射同一 `MINI-...` 小程序用户 ID；已有微信用户不需要邀请码，新微信身份未提供邀请码时不创建用户或会话，无效、停用和用尽统一返回 INVITATION_CODE_INVALID；邀请兑换以 AppID/OpenID 身份哈希原子声明和计数，重试、并发或中途失败不得重复扣次；有效姓名存在即 profileComplete=true；数字账号和密码必须同时提供或同时省略，未设置时可后补一次，设置后用户不可自行修改；数字账号仅在 `miniprogram_users` 内唯一；头像 DELETE 接口保留兼容但小程序无入口
+数据一致性要求：微信和数字账号登录始终映射同一 `MINI-...` 小程序用户 ID；已有微信用户不需要邀请码，新微信身份未提供邀请码时不创建用户或会话，无效、停用和用尽统一返回 INVITATION_CODE_INVALID；邀请兑换以 AppID/OpenID 身份哈希原子声明和计数，重试、并发或中途失败不得重复扣次；有效姓名存在即 profileComplete=true；姓名去除首尾空格后按精确值在全部 `miniprogram_users` 内唯一，英文大小写不同允许共存，停用用户仍占用姓名；数字账号和密码必须同时提供或同时省略，未设置时可后补一次，设置后用户不可自行修改；数字账号仅在 `miniprogram_users` 内唯一；头像 DELETE 接口保留兼容但小程序无入口
 前端调用位置：apps/miniprogram/services/session.js、services/api.js、pages/login、pages/profile
 ```
 
@@ -405,7 +405,7 @@ Web 数据大屏使用仅 ADMIN 可访问的 `GET /api/reports/dashboard`，返�
 错误码：404 NO_AVAILABLE_ITEM/TASK_ITEM_NOT_FOUND；409 ITEM_CONFLICT/INVALID_TASK_STATE；422 ITEM_REFERENCE_REQUIRED/REMOTE_URL_INVALID
 权限要求：添加和任务条目列表仅 ADMIN；start 仅 COLLECTOR；详情仅 ADMIN/REVIEWER/当前采集员
 数据一致性要求：DRAFT/RUNNING/PAUSED 可新增，ENDED 返回 INVALID_TASK_STATE；管理列表的 PENDING=RECORDING_PENDING+REWORK_PENDING、FINISHED=REVIEW_PENDING+COMPLETED；编号、状态、采集员、未分配与结果筛选均在服务端分页执行，同维度多值 OR、跨维度 AND，空集合或 ALL 不过滤；sourceItemIdQuery 使用正则转义后的脚本 ID 前缀匹配，不接受调用方正则表达式；新条目只绑定 taskId，参考音视频只保存通过轻量语法校验的 HTTPS URL；itemCode 任务内递增唯一且不复用；添加和领取均持久化幂等
-前端调用位置：apps/web/src/pages/admin/tasks/TaskDetailPage.vue 与 TaskPoolPage.vue、apps/miniprogram/pages/tasks/*、apps/miniprogram/pages/work/*；Web 后台普通列表统一使用数字分页，默认 20 条并支持每页 10/20/50 条，小程序任务数据固定每页 10 条
+前端调用位置：apps/web/src/pages/admin/tasks/TaskDetailPage.vue 与 TaskPoolPage.vue、apps/miniprogram/pages/tasks/*、apps/miniprogram/pages/work/*；Web 后台普通列表统一使用数字分页，任务详情数据池默认 10 条、其余普通列表默认 20 条并支持每页 10/20/50 条，小程序任务数据固定每页 10 条
 ```
 
 ```text
@@ -470,7 +470,7 @@ Web 数据大屏使用仅 ADMIN 可访问的 `GET /api/reports/dashboard`，返�
 响应结构：任务审核摘要固定包含 pendingCount、effectiveItemCount、completedCount、reviewEnteredCount、reviewProcessedCount、submittedCount、reviewPendingCount、todayCompletedCount；TaskItem、审核池分页或逐条批量结果
 错误码：404 NO_REVIEW_ITEM；409 STALE_STATE；422 INVALID_REVIEWER/INVALID_BATCH_SIZE/审核内容错误
 权限要求：ADMIN/REVIEWER 可查看审核池并领取指定条目；按数量随机批量领取仅 REVIEWER；所选条目批量领取允许 ADMIN/REVIEWER；分配和批量通过仅 ADMIN；ADMIN/REVIEWER 只有作为当前 reviewerId 时才能释放，决定必须已有审核领取或分配
-数据一致性要求：审核任务列表默认仅返回 pendingCount 大于零的任务；includeCleared=true 时返回全部启用人工审核的任务，包括零积压任务。两种模式均按积压降序、taskCode 稳定排序；pendingCount 固定等于 submittedCount + reviewPendingCount。审核入口使用包含已清空任务的汇总保持整体进度和今日完成真实，但只把 pendingCount 大于零的任务渲染为待办卡。审核汇总使用一次 Mongo 聚合：effectiveItemCount 排除 DISCARDED，reviewEnteredCount 要求存在 firstSubmittedAt 且当前非 AVAILABLE/DISCARDED，reviewProcessedCount 为前述范围内当前 COMPLETED/REWORK_PENDING，todayCompletedCount 按 Asia/Shanghai 当天 firstCompletedAt 且当前仍 COMPLETED。审核筛选始终与角色可见范围 AND 组合，并同步用于跨页预览、快照和执行；领取和分配只处理 SUBMITTED 并原子转 REVIEW_PENDING；释放原子回到 SUBMITTED；审核通过保留 currentResult 并单独写 reviewFinalAnswer；所选条目批量操作按输入顺序返回逐条成功/失败结果
+数据一致性要求：审核任务列表默认仅返回 pendingCount 大于零的任务；includeCleared=true 时返回全部启用人工审核的任务，包括零积压任务。两种模式均按积压降序、taskCode 稳定排序；pendingCount 固定等于 submittedCount + reviewPendingCount。审核入口使用包含已清空任务的汇总保持整体进度和今日完成真实，但只把 pendingCount 大于零的任务渲染为待办卡。审核汇总使用一次 Mongo 聚合：effectiveItemCount 排除 DISCARDED；reviewEnteredCount 只统计当前为 SUBMITTED/REVIEW_PENDING/REWORK_PENDING/COMPLETED 的条目；reviewProcessedCount 统计当前为 COMPLETED/REWORK_PENDING 的条目，因此待录、可领取和废弃均不进入审核处理进度；todayCompletedCount 按 Asia/Shanghai 当天 firstCompletedAt 且当前仍 COMPLETED。审核筛选始终与角色可见范围 AND 组合，并同步用于跨页预览、快照和执行；领取和分配只处理 SUBMITTED 并原子转 REVIEW_PENDING；释放原子回到 SUBMITTED；审核通过保留 currentResult 并单独写 reviewFinalAnswer；所选条目批量操作按输入顺序返回逐条成功/失败结果
 前端调用位置：apps/web/src/lib/reviewApi.js、apps/web/src/pages/admin/review/*
 ```
 
@@ -670,10 +670,10 @@ Web 数据大屏使用仅 ADMIN 可访问的 `GET /api/reports/dashboard`，返�
 字段名称：id（`MINI-` 前缀）、version、account、name、passwordHash、status、wechatAppId、wechatOpenId、invitationId、invitationName、invitationCodeSuffix、invitationRedeemedAt、avatarPath、avatarContentType、avatarUpdatedAt、createdAt、updatedAt
 字段类型：字符串、布尔值、UTC Instant
 默认值：新微信用户 ACTIVE；角色不在本集合存储，小程序身份在鉴权与响应中固定视为 COLLECTOR
-唯一约束：稀疏 account；稀疏复合 (wechatAppId, wechatOpenId)
-索引：account 唯一稀疏索引；(wechatAppId, wechatOpenId) 唯一稀疏复合索引
-数据兼容策略：仅保存小程序采集员身份；新微信用户保存脱敏邀请码来源，历史用户允许四个邀请码来源字段为空；不得把完整邀请码、邀请码哈希、明文密码、微信 session_key 或客户端提交的 openId 写入管理员响应
-迁移步骤：不回填历史用户；身份拆分后使用 `MINI-` 前缀 ID，旧统一身份集合不再作为当前运行集合
+唯一约束：稀疏 account；稀疏 name；稀疏复合 (wechatAppId, wechatOpenId)
+索引：account 唯一稀疏索引；name 唯一稀疏索引 `unique_miniprogram_name`；(wechatAppId, wechatOpenId) 唯一稀疏复合索引
+数据兼容策略：仅保存小程序采集员身份；姓名按去除首尾空格后的精确值全局唯一且停用用户继续占用；新微信用户保存脱敏邀请码来源，历史用户允许四个邀请码来源字段为空；不得把完整邀请码、邀请码哈希、明文密码、微信 session_key 或客户端提交的 openId 写入管理员响应
+迁移步骤：不回填或清洗历史用户；部署前确认不存在重复非空姓名，身份拆分后使用 `MINI-` 前缀 ID，旧统一身份集合不再作为当前运行集合
 回滚方式：拆分或清库前备份相关集合；不要直接删除已创建用户
 ```
 

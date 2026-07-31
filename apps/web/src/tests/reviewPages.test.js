@@ -137,6 +137,49 @@ describe('审核页面 API', () => {
     wrapper.unmount()
   })
 
+  it('审核任务卡将编号和名称放在同一行并并排展示两种进度', async () => {
+    window.matchMedia = vi.fn(() => ({
+      matches: true,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }))
+    httpRequest.mockResolvedValue([{
+      taskId: 'task-1',
+      taskCode: 'T000001',
+      taskName: '台州正式数据',
+      pendingCount: 2,
+      effectiveItemCount: 503,
+      completedCount: 205,
+      reviewEnteredCount: 258,
+      reviewProcessedCount: 256,
+      submittedCount: 2,
+      reviewPendingCount: 0,
+      todayCompletedCount: 89,
+    }])
+
+    const wrapper = mount(ReviewTaskSelectPage, {
+      global: {
+        stubs: {
+          PageActions: { template: '<header><slot /></header>' },
+          RouterLink: { template: '<a><slot /></a>' },
+        },
+      },
+    })
+    await flushPromises()
+
+    const header = wrapper.get('.review-task-header')
+    expect(header.get('.review-task-identity').text()).toContain('T000001')
+    expect(header.get('.review-task-identity').text()).toContain('台州正式数据')
+    expect(header.text()).toContain('2 条积压')
+    const progress = wrapper.findAll('.review-task-progress')
+    expect(progress).toHaveLength(2)
+    expect(progress[0].text()).toContain('任务完成度')
+    expect(progress[0].text()).toContain('205 / 503')
+    expect(progress[1].text()).toContain('审核处理进度')
+    expect(progress[1].text()).toContain('256 / 258')
+    wrapper.unmount()
+  })
+
   it('审核人员候选使用审核域接口而不是管理员用户搜索', async () => {
     httpRequest.mockResolvedValue([])
     await reviewApi.filterUsers('task-1', 'COLLECTOR', '张')
