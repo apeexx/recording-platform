@@ -2,9 +2,30 @@ const test = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
+const vm = require('node:vm')
 
 const root = path.resolve(__dirname, '..')
 const read = file => fs.readFileSync(path.join(root, file), 'utf8')
+
+function loadStatisticsPage(api = {}) {
+  let definition
+  vm.runInNewContext(read('pages/statistics/index.js'), {
+    Page: value => { definition = value },
+    require: id => id.includes('feedback')
+      ? {error() {}}
+      : require('../pages/statistics/date-range.js'),
+    getApp: () => ({globalData:{api}}),
+    wx: {},
+  }, {filename:'pages/statistics/index.js'})
+  return {
+    ...definition,
+    data:{...definition.data},
+    setData(patch, callback) {
+      Object.assign(this.data, patch)
+      callback?.()
+    },
+  }
+}
 
 test('底部导航包含任务统计和我的三个 Tab', () => {
   const app = JSON.parse(read('app.json'))
@@ -45,15 +66,80 @@ test('统计页提供六种日期范围和底部日历', () => {
   assert.match(script, /selectCalendarDay\(event\)/)
 })
 
-test('统计页两套明细各自使用固定五条分页', () => {
+test('统计页两套明细各自使用十条分页和原生页码选择器', () => {
   const script = read('pages/statistics/index.js')
   const template = read('pages/statistics/index.wxml')
-  assert.match(script, /detailSize:\s*5/)
+  assert.match(script, /detailSize:\s*10/)
   assert.match(script, /submissionPage:\s*0/)
   assert.match(script, /completionPage:\s*0/)
+  assert.match(script, /submissionPageOptions/)
+  assert.match(script, /completionPageOptions/)
   assert.match(template, /上一页/)
   assert.match(template, /下一页/)
-  assert.match(template, /当前第/)
+  assert.match(template, /<picker[^>]*mode="selector"[^>]*bindchange="selectDetailPage"/)
+  assert.match(template, /第 \{\{submissionPage\+1\}\} 页 \/ 共 \{\{submissionTotalPages\}\} 页/)
+  assert.match(template, /第 \{\{completionPage\+1\}\} 页 \/ 共 \{\{completionTotalPages\}\} 页/)
+  assert.doesNotMatch(template, /当前第/)
+})
+
+test('统计页直接选择页码时保持提交和完成页码独立', async () => {
+  const page = loadStatisticsPage()
+  let refreshes = 0
+  page.refreshCurrent = async () => { refreshes += 1 }
+  page.setData({
+    activeDetailTab:'submissions',
+    submissionPage:0,
+    completionPage:2,
+    submissionTotalPages:4,
+    completionTotalPages:5,
+    loading:false,
+  })
+
+  await page.selectDetailPage({detail:{value:'2'}})
+  assert.equal(page.data.submissionPage, 2)
+  assert.equal(page.data.completionPage, 2)
+  assert.equal(refreshes, 1)
+
+  await page.selectDetailPage({detail:{value:'2'}})
+  assert.equal(refreshes, 1)
+
+  page.setData({activeDetailTab:'completions'})
+  await page.selectDetailPage({detail:{value:'4'}})
+  assert.equal(page.data.submissionPage, 2)
+  assert.equal(page.data.completionPage, 4)
+  assert.equal(refreshes, 2)
+})
+
+test('统计页刷新后将越界页收敛到最后有效页', async () => {
+  const submissionPages = []
+  const completionPages = []
+  const api = {
+    taskReport: async () => ({stageSummary:{submissionHourDistribution:[]},stageDays:[]}),
+    taskSubmissions: async (_taskId, page) => {
+      submissionPages.push(page)
+      return {items:[],total:12}
+    },
+    taskCompletions: async (_taskId, page) => {
+      completionPages.push(page)
+      return {items:[],total:5}
+    },
+  }
+  const page = loadStatisticsPage(api)
+  page.setData({
+    selectedTaskId:'task-1',
+    report:{},
+    submissionPage:3,
+    completionPage:2,
+  })
+
+  await page.refreshCurrent()
+
+  assert.deepEqual(submissionPages, [3, 1])
+  assert.deepEqual(completionPages, [2, 0])
+  assert.equal(page.data.submissionPage, 1)
+  assert.equal(page.data.completionPage, 0)
+  assert.deepEqual(Array.from(page.data.submissionPageOptions), ['第 1 页', '第 2 页'])
+  assert.deepEqual(Array.from(page.data.completionPageOptions), ['第 1 页'])
 })
 
 test('业务日期工具支持凌晨四点换日、快捷范围和反向日期交换', () => {

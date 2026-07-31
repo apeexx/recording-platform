@@ -103,11 +103,11 @@ test('任务双阶段统计和两套明细继承业务日期范围', async () =>
   })
   const range = {fromDate:'2026-07-25',toDate:'2026-07-31'}
   await api.taskReport('task-1', range)
-  await api.taskSubmissions('task-1', 1, 5, range)
-  await api.taskCompletions('task-1', 2, 5, range)
+  await api.taskSubmissions('task-1', 1, 10, range)
+  await api.taskCompletions('task-1', 2, 10, range)
   assert.match(urls[0], /\?fromDate=2026-07-25&toDate=2026-07-31$/)
-  assert.match(urls[1], /\/submissions\?page=1&size=5&fromDate=2026-07-25&toDate=2026-07-31$/)
-  assert.match(urls[2], /\/completions\?page=2&size=5&fromDate=2026-07-25&toDate=2026-07-31$/)
+  assert.match(urls[1], /\/submissions\?page=1&size=10&fromDate=2026-07-25&toDate=2026-07-31$/)
+  assert.match(urls[2], /\/completions\?page=2&size=10&fromDate=2026-07-25&toDate=2026-07-31$/)
 })
 
 test('释放备注、标记无效和恢复使用同一条目状态接口', async () => {

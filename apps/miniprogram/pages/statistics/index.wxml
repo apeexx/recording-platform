@@ -82,11 +82,19 @@
           <view class="subtle">首次完成：{{item.firstCompletedAtText}}</view>
         </view>
       </block>
-      <view class="detail-pagination">
-        <button bindtap="previousDetailPage">上一页</button>
-        <text wx:if="{{activeDetailTab==='submissions'}}">当前第 {{submissionPage+1}} / {{submissionTotalPages}} 页</text>
-        <text wx:else>当前第 {{completionPage+1}} / {{completionTotalPages}} 页</text>
-        <button bindtap="nextDetailPage">下一页</button>
+      <view wx:if="{{activeDetailTab==='submissions'}}" class="detail-pagination">
+        <button class="detail-page-button" disabled="{{loading||refreshing||submissionPage===0}}" bindtap="previousDetailPage">上一页</button>
+        <picker class="detail-page-picker" mode="selector" range="{{submissionPageOptions}}" value="{{submissionPage}}" disabled="{{loading||refreshing}}" bindchange="selectDetailPage">
+          <view class="detail-page-summary">第 {{submissionPage+1}} 页 / 共 {{submissionTotalPages}} 页</view>
+        </picker>
+        <button class="detail-page-button" disabled="{{loading||refreshing||submissionPage+1>=submissionTotalPages}}" bindtap="nextDetailPage">下一页</button>
+      </view>
+      <view wx:else class="detail-pagination">
+        <button class="detail-page-button" disabled="{{loading||refreshing||completionPage===0}}" bindtap="previousDetailPage">上一页</button>
+        <picker class="detail-page-picker" mode="selector" range="{{completionPageOptions}}" value="{{completionPage}}" disabled="{{loading||refreshing}}" bindchange="selectDetailPage">
+          <view class="detail-page-summary">第 {{completionPage+1}} 页 / 共 {{completionTotalPages}} 页</view>
+        </picker>
+        <button class="detail-page-button" disabled="{{loading||refreshing||completionPage+1>=completionTotalPages}}" bindtap="nextDetailPage">下一页</button>
       </view>
     </view>
   </block>

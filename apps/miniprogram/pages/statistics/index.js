@@ -73,6 +73,18 @@ function monthTitle(month) {
   return `${year}年${Number(value)}月`
 }
 
+function detailTotalPages(total, size) {
+  return Math.max(1, Math.ceil((Number(total) || 0) / size))
+}
+
+function detailPageOptions(totalPages) {
+  return Array.from({length:totalPages}, (_, index) => `第 ${index + 1} 页`)
+}
+
+function clampDetailPage(page, totalPages) {
+  return Math.min(Math.max(Number(page) || 0, 0), totalPages - 1)
+}
+
 Page({
   requestSequence: 0,
   data: {
@@ -80,8 +92,9 @@ Page({
     fromDate:'', toDate:'', activePreset:'today', rangeLabel:'今天',
     report:null, hourBars:[], selectedHour:null,
     activeDetailTab:'submissions', submissions:[], completions:[],
-    submissionPage:0, completionPage:0, detailSize:5,
+    submissionPage:0, completionPage:0, detailSize:10,
     submissionTotal:0, completionTotal:0, submissionTotalPages:1, completionTotalPages:1,
+    submissionPageOptions:['第 1 页'], completionPageOptions:['第 1 页'],
     showCalendar:false, calendarMonth:'', calendarTitle:'', calendarCells:[],
     draftStart:'', draftEnd:'',
     loading:true, refreshing:false, loadError:'',
@@ -137,14 +150,25 @@ Page({
         getApp().globalData.api.taskCompletions(taskId, this.data.completionPage, this.data.detailSize, this.range()),
       ])
       if (sequence !== this.requestSequence) return
+      const submissionTotal = Number(submissions.total) || 0
+      const completionTotal = Number(completions.total) || 0
+      const submissionTotalPages = detailTotalPages(submissionTotal, this.data.detailSize)
+      const completionTotalPages = detailTotalPages(completionTotal, this.data.detailSize)
+      const submissionPage = clampDetailPage(this.data.submissionPage, submissionTotalPages)
+      const completionPage = clampDetailPage(this.data.completionPage, completionTotalPages)
+      if (submissionPage !== this.data.submissionPage || completionPage !== this.data.completionPage) {
+        this.setData({submissionPage, completionPage})
+        await this.refreshCurrent()
+        return
+      }
       const viewed = viewReport(report)
       this.setData({
         report:viewed,
         hourBars:hourBars(report.stageSummary?.submissionHourDistribution),
         submissions:detailRows(submissions.items), completions:detailRows(completions.items),
-        submissionTotal:Number(submissions.total) || 0, completionTotal:Number(completions.total) || 0,
-        submissionTotalPages:Math.max(1, Math.ceil((Number(submissions.total) || 0) / this.data.detailSize)),
-        completionTotalPages:Math.max(1, Math.ceil((Number(completions.total) || 0) / this.data.detailSize)),
+        submissionTotal, completionTotal, submissionTotalPages, completionTotalPages,
+        submissionPageOptions:detailPageOptions(submissionTotalPages),
+        completionPageOptions:detailPageOptions(completionTotalPages),
         loadError:'',
       })
     } catch (error) {
@@ -224,17 +248,29 @@ Page({
     this.setData({activeDetailTab:event.currentTarget.dataset.tab})
   },
   async previousDetailPage() {
+    if (this.data.loading || this.data.refreshing) return
     const field = this.data.activeDetailTab === 'submissions' ? 'submissionPage' : 'completionPage'
     if (this.data[field] <= 0) return
     this.setData({[field]:this.data[field] - 1})
     await this.refreshCurrent()
   },
   async nextDetailPage() {
+    if (this.data.loading || this.data.refreshing) return
     const submissions = this.data.activeDetailTab === 'submissions'
     const field = submissions ? 'submissionPage' : 'completionPage'
     const totalPages = submissions ? this.data.submissionTotalPages : this.data.completionTotalPages
     if (this.data[field] + 1 >= totalPages) return
     this.setData({[field]:this.data[field] + 1})
+    await this.refreshCurrent()
+  },
+  async selectDetailPage(event) {
+    if (this.data.loading || this.data.refreshing) return
+    const submissions = this.data.activeDetailTab === 'submissions'
+    const field = submissions ? 'submissionPage' : 'completionPage'
+    const totalPages = submissions ? this.data.submissionTotalPages : this.data.completionTotalPages
+    const page = Number(event.detail.value)
+    if (!Number.isInteger(page) || page < 0 || page >= totalPages || page === this.data[field]) return
+    this.setData({[field]:page})
     await this.refreshCurrent()
   },
   openSubmission(event) {
