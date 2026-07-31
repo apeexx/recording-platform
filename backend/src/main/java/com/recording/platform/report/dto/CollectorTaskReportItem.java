@@ -8,10 +8,30 @@ public record CollectorTaskReportItem(
 	String itemCode,
 	Instant firstSubmittedAt,
 	Instant latestSubmittedAt,
+	Instant firstCompletedAt,
 	TaskItemStatus currentItemStatus,
 	long recordingDurationMillis,
 	long referenceAudioDurationMillis,
 	long referenceVideoDurationMillis,
 	boolean textPresent,
 	boolean audioPresent
-) { }
+) {
+	public CollectorTaskReportItem(
+		String itemId,
+		String itemCode,
+		Instant firstSubmittedAt,
+		Instant latestSubmittedAt,
+		TaskItemStatus currentItemStatus,
+		long recordingDurationMillis,
+		long referenceAudioDurationMillis,
+		long referenceVideoDurationMillis,
+		boolean textPresent,
+		boolean audioPresent
+	) {
+		this(
+			itemId, itemCode, firstSubmittedAt, latestSubmittedAt, null, currentItemStatus,
+			recordingDurationMillis, referenceAudioDurationMillis, referenceVideoDurationMillis,
+			textPresent, audioPresent
+		);
+	}
+}

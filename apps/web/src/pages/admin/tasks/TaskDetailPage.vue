@@ -411,7 +411,7 @@ onBeforeUnmount(() => { stopImportTracking(); clearBatchPoll() })
 
           <section class="business-card business-form">
             <div class="business-heading">
-              <h3>批量导入</h3>
+              <h3>批量导入 <HelpPopover label="CSV 导入说明" content="CSV 只读取当前任务已启用的参考列，后台异步处理并允许部分成功；来源平台和脚本 ID 不由普通导入写入。" /></h3>
               <button type="button" class="button-link" @click="downloadTemplate">下载示例 CSV</button>
             </div>
             <div class="csv-dropzone" :class="{ 'is-dragging': dragging }"
@@ -435,9 +435,9 @@ onBeforeUnmount(() => { stopImportTracking(); clearBatchPoll() })
 
         <div class="business-card business-card-wide task-pool-card">
           <div class="business-heading task-pool-heading">
-            <h3>数据池（共 {{ total }} 条）</h3>
+            <h3>数据池（共 {{ total }} 条） <HelpPopover label="数据池说明" content="列表按条目当前状态展示；脚本来源 ID 可用于前缀定位，释放、废弃和跨页批量调整都会执行状态一致性校验。" /></h3>
             <div class="business-actions task-pool-toolbar">
-              <button class="button-secondary" @click="exportCsv">导出 CSV</button>
+              <button class="button-secondary help-action" @click="exportCsv">导出 CSV</button><HelpPopover label="CSV 导出说明" content="导出继承当前筛选并包含全部匹配结果，不受当前分页限制；文件使用中文表头和 UTF-8 BOM。" />
               <TaskBatchActionMenu :selected-count="selection.selectedCount.value"
                 :counts="{ status: applicableCount('status'), release: applicableCount('release'), discard: applicableCount('discard'), restore: applicableCount('restore') }"
                 :status-options="statusOptions" @status="changeStatus" @release="batch('release')" @discard="batch('discard')" @restore="batch('restore')" />

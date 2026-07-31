@@ -253,6 +253,82 @@ class ReportServiceTests {
 	}
 
 	@Test
+	void collectorTaskDashboardAddsIndependentStagesForTheRequestedBusinessDateRange() {
+		TaskItemStore items = mock(TaskItemStore.class);
+		ReportQueryStore queries = mock(ReportQueryStore.class);
+		Instant from = Instant.parse("2026-07-30T20:00:00Z");
+		Instant to = Instant.parse("2026-08-01T20:00:00Z");
+		var legacy = new com.recording.platform.report.dto.CollectorTaskReport(
+			"task-1", "T000001", "普通话录音",
+			new com.recording.platform.report.dto.CollectorTaskReportSummary(3, 2, 8_000, 9_000, 10_000),
+			List.of(), List.of()
+		);
+		var stages = new com.recording.platform.report.dto.StageReportSummary(
+			new com.recording.platform.report.dto.StageMetrics(3, 8_000, 9_000, 10_000),
+			new com.recording.platform.report.dto.StageMetrics(2, 6_000, 7_000, 8_000),
+			java.util.stream.IntStream.range(0, 24)
+				.map(index -> (index + 4) % 24)
+				.mapToObj(hour -> new com.recording.platform.report.dto.SubmissionHourBucket(hour, 0))
+				.toList()
+		);
+		var stageDays = List.of(new com.recording.platform.report.dto.StageDaySummary(
+			LocalDate.of(2026, 7, 31), stages.submissions(), stages.completions()
+		));
+		var stageReport = new com.recording.platform.report.dto.AdminCollectorTaskReport(
+			"task-1", "T000001", "普通话录音", "collector-1", null, stages, stageDays
+		);
+		when(queries.collectorTaskReport("collector-1", "task-1", from, to))
+			.thenReturn(Optional.of(legacy));
+		when(queries.adminCollectorTaskReport("collector-1", "task-1", from, to))
+			.thenReturn(Optional.of(stageReport));
+		ReportService service = new ReportService(items, queries);
+
+		var result = service.myTask(
+			"task-1", null, LocalDate.of(2026, 7, 31), LocalDate.of(2026, 8, 1), collector()
+		);
+
+		assertThat(result.summary()).isEqualTo(legacy.summary());
+		assertThat(result.stageSummary()).isEqualTo(stages);
+		assertThat(result.stageDays()).containsExactlyElementsOf(stageDays);
+	}
+
+	@Test
+	void collectorTaskDashboardRejectsCombiningLegacyDateWithRange() {
+		ReportService service = new ReportService(mock(TaskItemStore.class), mock(ReportQueryStore.class));
+
+		assertThatThrownBy(() -> service.myTask(
+			"task-1", LocalDate.of(2026, 7, 31),
+			LocalDate.of(2026, 7, 31), LocalDate.of(2026, 7, 31), collector()
+		)).isInstanceOfSatisfying(com.recording.platform.api.ApiException.class,
+			error -> assertThat(error.getCode()).isEqualTo("INVALID_REPORT_DATE_RANGE"));
+	}
+
+	@Test
+	void collectorCompletionDetailsUseFirstCompletedRangeAndCurrentCompletedState() {
+		ReportQueryStore queries = mock(ReportQueryStore.class);
+		Instant from = Instant.parse("2026-07-30T20:00:00Z");
+		Instant to = Instant.parse("2026-07-31T20:00:00Z");
+		var row = new com.recording.platform.report.dto.AdminCollectorReportItem(
+			"item-1", "T000001-0000001", from, from, Instant.parse("2026-07-31T08:00:00Z"),
+			TaskItemStatus.COMPLETED, 2_000, 3_000, 4_000, true, true
+		);
+		when(queries.findAdminCollectorTaskCompletions(
+			"collector-1", "task-1", from, to, PageRequest.of(0, 5)
+		)).thenReturn(new PageImpl<>(List.of(row), PageRequest.of(0, 5), 1));
+		ReportService service = new ReportService(mock(TaskItemStore.class), queries);
+
+		var result = service.myTaskCompletions(
+			"task-1", null, LocalDate.of(2026, 7, 31), LocalDate.of(2026, 7, 31),
+			0, 5, collector()
+		);
+
+		assertThat(result.total()).isEqualTo(1);
+		assertThat(result.items().get(0).firstCompletedAt())
+			.isEqualTo(Instant.parse("2026-07-31T08:00:00Z"));
+		assertThat(result.items().get(0).currentItemStatus()).isEqualTo(TaskItemStatus.COMPLETED);
+	}
+
+	@Test
 	void adminCollectorTaskDetailUsesInclusiveShanghaiDateRange() {
 		TaskItemStore items = mock(TaskItemStore.class);
 		ReportQueryStore queries = mock(ReportQueryStore.class);

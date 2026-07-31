@@ -72,6 +72,15 @@ function uploadSubmission(itemId, payload) {
   }))
 }
 
+function reportRangeQuery(value) {
+  if (!value) return ''
+  if (typeof value === 'string') return value ? `date=${encodeURIComponent(value)}` : ''
+  const parts = []
+  if (value.fromDate) parts.push(`fromDate=${encodeURIComponent(value.fromDate)}`)
+  if (value.toDate) parts.push(`toDate=${encodeURIComponent(value.toDate)}`)
+  return parts.join('&')
+}
+
 module.exports = {
   operationId,
   login: body=>request('/api/auth/miniprogram/login',{method:'POST',data:body}),
@@ -103,8 +112,18 @@ module.exports = {
   discard: (id,revision,op,reason)=>request(`/api/task-items/${encodeURIComponent(id)}/discard`,{method:'POST',data:{operationId:op,expectedRevision:revision,reason}}),
   restore: (id,revision,op)=>request(`/api/task-items/${encodeURIComponent(id)}/restore`,{method:'POST',data:{operationId:op,expectedRevision:revision}}),
   reportTasks: ()=>request('/api/reports/me/tasks'),
-  taskReport: (id,date='')=>request(`/api/reports/me/tasks/${encodeURIComponent(id)}${date?`?date=${encodeURIComponent(date)}`:''}`),
-  taskSubmissions: (id,page=0,size=20,date='')=>request(`/api/reports/me/tasks/${encodeURIComponent(id)}/submissions?page=${page}&size=${size}${date?`&date=${encodeURIComponent(date)}`:''}`),
+  taskReport: (id,range='')=>{
+    const query=reportRangeQuery(range)
+    return request(`/api/reports/me/tasks/${encodeURIComponent(id)}${query?`?${query}`:''}`)
+  },
+  taskSubmissions: (id,page=0,size=20,range='')=>{
+    const query=reportRangeQuery(range)
+    return request(`/api/reports/me/tasks/${encodeURIComponent(id)}/submissions?page=${page}&size=${size}${query?`&${query}`:''}`)
+  },
+  taskCompletions: (id,page=0,size=5,range='')=>{
+    const query=reportRangeQuery(range)
+    return request(`/api/reports/me/tasks/${encodeURIComponent(id)}/completions?page=${page}&size=${size}${query?`&${query}`:''}`)
+  },
   myReport: ()=>request('/api/reports/me'),
   mySubmissions: (page=0)=>request(`/api/reports/me/submissions?page=${page}&size=5`)
 }

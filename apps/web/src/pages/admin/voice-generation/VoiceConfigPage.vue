@@ -7,6 +7,7 @@ import {
   saveDefaultVoiceConfig
 } from '../../../lib/voiceGenerationApi.js'
 import { useNotifications } from '../../../composables/useNotifications.js'
+import HelpPopover from '../../../components/form/HelpPopover.vue'
 
 const notifications = useNotifications()
 const loading = ref(false)
@@ -94,7 +95,7 @@ onMounted(async () => {
   <div class="admin-page">
     <div class="voice-title-row">
       <div>
-        <h2>声音配置</h2>
+        <h2>声音配置 <HelpPopover label="默认音色配置说明" content="默认音色和语速、音量、语调会作为工作台的初始生成参数；保存后写入后端配置，不包含 API Key。" /></h2>
         <p>刷新、查看和删除 MiniMax 已克隆音色，前端不保存 API Key。</p>
       </div>
       <button class="voice-button" type="button" :disabled="loading" @click="loadVoices">刷新音色</button>
@@ -104,7 +105,7 @@ onMounted(async () => {
       <div class="voice-status">{{ message }}</div>
       <div class="voice-grid">
         <label class="voice-field">
-          默认音色 ID
+          <span class="voice-help-label">默认音色 ID <HelpPopover label="默认音色 ID 说明" content="工作台打开时优先使用的已建库音色；删除音色前应确认它不再作为默认值。" /></span>
           <input v-model="config.voiceId" type="text" />
         </label>
         <div>

@@ -27,7 +27,7 @@ describe('任务页面 API', () => {
 	  const controls = fs.readFileSync(path.resolve('src/styles/form-controls.css'), 'utf8')
 	  const business = fs.readFileSync(path.resolve('src/styles/business.css'), 'utf8')
 
-	  expect(source).toContain('<label class="duration-range-field">录音时长范围')
+    expect(source).toContain('<div class="duration-range-field help-field"><div>录音时长范围')
 	  expect(source).not.toContain('<label class="business-span">录音时长范围')
 	  expect(source).toContain('colored-checkbox')
 	  expect(controls).toContain('.duration-range-track')

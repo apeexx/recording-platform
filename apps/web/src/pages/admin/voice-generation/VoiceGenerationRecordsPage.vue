@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue'
 import { fetchRecords } from '../../../lib/voiceGenerationApi.js'
 import { useNotifications } from '../../../composables/useNotifications.js'
 import PaginationControls from '../../../components/admin/PaginationControls.vue'
+import HelpPopover from '../../../components/form/HelpPopover.vue'
 
 const notifications = useNotifications()
 const loading = ref(false)
@@ -36,7 +37,7 @@ onMounted(loadRecords)
   <div class="admin-page">
     <div class="voice-title-row">
       <div>
-        <h2>生成记录</h2>
+        <h2>生成记录 <HelpPopover label="生成记录状态说明" content="记录区分试听、克隆和日常合成；处理中表示后端尚未结束，失败记录保留脱敏错误摘要，成功记录可播放生成音频。" /></h2>
         <p>查看真实语音生成、试听和克隆记录，音频文件由后端本地目录提供。</p>
       </div>
       <button class="voice-button" type="button" :disabled="loading" @click="loadRecords">刷新记录</button>

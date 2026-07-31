@@ -84,4 +84,26 @@ describe('HelpPopover', () => {
     expect(bubbled).toBe(false)
     wrapper.unmount()
   })
+
+  it('多个实例使用不同说明 ID 且点击新说明会关闭旧说明', async () => {
+    const first = mount(HelpPopover, {
+      props: { label: '第一项说明', content: '第一项内容' },
+      attachTo: document.body,
+    })
+    const second = mount(HelpPopover, {
+      props: { label: '第二项说明', content: '第二项内容' },
+      attachTo: document.body,
+    })
+    await first.get('button').trigger('click')
+    await flushPromises()
+    const firstId = first.get('button').attributes('aria-describedby')
+    await second.get('button').trigger('click')
+    await flushPromises()
+    const secondId = second.get('button').attributes('aria-describedby')
+    expect(firstId).not.toBe(secondId)
+    expect(document.body.querySelectorAll('[role="tooltip"]')).toHaveLength(1)
+    expect(document.body.querySelector('[role="tooltip"]').textContent).toContain('第二项内容')
+    first.unmount()
+    second.unmount()
+  })
 })

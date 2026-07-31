@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AsyncState from '../../../components/admin/AsyncState.vue'
 import PageActions from '../../../components/admin/PageActions.vue'
+import HelpPopover from '../../../components/form/HelpPopover.vue'
 import { useAdminSession } from '../../../composables/useAdminSession.js'
 import { useNotifications } from '../../../composables/useNotifications.js'
 import { operationId } from '../../../lib/apiUtils.js'
@@ -205,7 +206,7 @@ onBeforeUnmount(() => pollTimers.forEach((timer) => window.clearTimeout(timer)))
         </div>
         <div class="review-decision-column">
           <div class="business-card review-result-card">
-          <h3>原始采集结果</h3>
+          <h3>原始采集结果 <HelpPopover label="原始采集结果说明" content="展示采集员当前提交的文字和录音，是审核判断的原始依据；AI 候选不会覆盖这里的内容。" /></h3>
           <section>
             <h4>音频结果</h4>
             <audio v-if="audioUrl" controls :src="audioUrl" />
@@ -218,7 +219,7 @@ onBeforeUnmount(() => pollTimers.forEach((timer) => window.clearTimeout(timer)))
           </section>
           </div>
           <div class="business-card review-ai-card">
-            <h3>AI 辅助审核</h3>
+            <h3>AI 辅助审核 <HelpPopover label="AI 候选说明" content="AI 只生成候选转写或修订文字，不会自动通过、驳回或改写原始采集结果。" /></h3>
             <p class="business-note">AI 结果仅作为候选文字，不会自动保存或作出审核结论。</p>
             <div class="review-ai-actions">
               <div v-if="hasOriginalAudio">
@@ -239,14 +240,14 @@ onBeforeUnmount(() => pollTimers.forEach((timer) => window.clearTimeout(timer)))
             </div>
           </div>
           <div class="business-card">
-            <h3>审核最终答案</h3>
+            <h3>审核最终答案 <HelpPopover label="审核最终答案说明" content="审核员可采用或编辑候选文字；审核通过后该内容优先作为最终结果，留空时回退当前采集文字。" /></h3>
             <label>
               最终文本{{ version?.resultType === 'TEXT' ? '（必填）' : '（选填）' }}
               <textarea v-model="finalAnswer" rows="8" placeholder="填写或采用 AI 生成的最终答案" />
             </label>
           </div>
           <div class="business-card">
-          <h3>审核结论</h3>
+          <h3>审核结论 <HelpPopover label="审核结论说明" content="通过会进入已完成；驳回会进入待返修并保留原采集员。提交前仍会校验当前修订版本，防止覆盖他人操作。" /></h3>
           <div class="business-check-list">
             <label v-for="reason in version?.rejectionReasons || []" :key="reason">
               <input v-model="reasons" type="checkbox" :value="reason" />{{ reason }}

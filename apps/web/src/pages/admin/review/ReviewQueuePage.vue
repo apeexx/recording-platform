@@ -6,6 +6,7 @@ import PageActions from '../../../components/admin/PageActions.vue'
 import PaginationControls from '../../../components/admin/PaginationControls.vue'
 import UserSearchSelect from '../../../components/form/UserSearchSelect.vue'
 import TaskItemFilters from '../../../components/admin/TaskItemFilters.vue'
+import HelpPopover from '../../../components/form/HelpPopover.vue'
 import { reviewApi } from '../../../lib/reviewApi.js'
 import { batchOperationApi } from '../../../lib/batchOperationApi.js'
 import { operationId } from '../../../lib/apiUtils.js'
@@ -226,7 +227,7 @@ onBeforeUnmount(clearPoll)
     </section>
     <div class="business-card">
       <section class="review-filter-toolbar">
-        <div class="business-heading"><div><h3>审核池筛选</h3><p>按条目、采集员、审核员、状态和成果类型组合筛选。</p></div><button class="button-secondary" @click="clearFilters">清除筛选</button></div>
+        <div class="business-heading"><div><h3>审核池筛选 <HelpPopover label="审核池筛选说明" content="筛选可组合使用；跨页全选会作用于全部匹配结果，而不是仅当前页面。" /></h3><p>按条目、采集员、审核员、状态和成果类型组合筛选。</p></div><button class="button-secondary" @click="clearFilters">清除筛选</button></div>
         <div class="review-filter-grid">
           <TaskItemFilters review-mode kind="code" :task-id="route.params.taskId" :model-value="filters" @change="changeFilters"/>
           <TaskItemFilters review-mode kind="collector" :task-id="route.params.taskId" :model-value="filters" @change="changeFilters"/>
@@ -242,6 +243,7 @@ onBeforeUnmount(clearPoll)
         </template>
       </div>
       <div v-if="selection.selectedCount.value" class="batch-selection-bar">
+        <HelpPopover label="审核批量处理说明" content="批量领取、分配和通过由后台按条目状态逐项校验；已变化或不适用的条目会跳过并计入结果。" />
         <span>已选择 {{ selection.selectedCount.value }} 条</span>
         <button v-if="selection.mode.value === 'PAGE' && total > selection.selectedCount.value" class="button-link" @click="selectAllMatching">选择全部 {{ total }} 条筛选结果</button>
         <strong v-else-if="selection.mode.value === 'ALL'">已跨页全选</strong>

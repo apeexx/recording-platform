@@ -1,6 +1,9 @@
 <view class="page statistics-page">
   <view wx:if="{{loading&&!report}}" class="empty">正在加载任务统计…</view>
-  <view wx:elif="{{loadError&&!report}}" class="empty"><view>{{loadError}}</view><button class="button" bindtap="loadTasks">重新加载</button></view>
+  <view wx:elif="{{loadError&&!report}}" class="empty">
+    <view>{{loadError}}</view>
+    <button class="button" bindtap="loadTasks">重新加载</button>
+  </view>
   <view wx:elif="{{!tasks.length}}" class="empty">暂无可统计的提交数据</view>
   <block wx:else>
     <view class="card report-heading">
@@ -8,33 +11,98 @@
       <picker mode="selector" range="{{taskNames}}" value="{{selectedTaskIndex}}" bindchange="taskChange">
         <view class="task-picker">{{taskNames[selectedTaskIndex]}}<text>⌄</text></view>
       </picker>
-      <view class="subtle">业务日按 Asia/Shanghai 04:00 至次日 04:00 统计</view>
-      <view class="date-filter">
-        <picker mode="date" value="{{selectedDate}}" bindchange="dateChange">
-          <view class="date-picker">{{selectedDate||'全部日期'}}<text>选择日期 ›</text></view>
-        </picker>
-        <button wx:if="{{selectedDate}}" class="date-clear" bindtap="clearDate">清除</button>
+      <view class="business-day-note">业务日按 Asia/Shanghai 04:00 至次日 04:00 统计</view>
+    </view>
+
+    <scroll-view class="preset-scroll" scroll-x enhanced show-scrollbar="{{false}}">
+      <view class="preset-row">
+        <button wx:for="{{['today','yesterday','last7','month','all','custom']}}" wx:key="*this"
+          class="preset-pill {{activePreset===item?'active':''}}" data-preset="{{item}}" bindtap="applyPreset">
+          {{item==='today'?'今天':item==='yesterday'?'昨天':item==='last7'?'近 7 日':item==='month'?'本月':item==='all'?'全部':'自定义'}}
+        </button>
+      </view>
+    </scroll-view>
+    <view class="range-caption">{{rangeLabel}}</view>
+
+    <view class="card stage-card submission-stage">
+      <view class="stage-title-row"><view><view class="stage-title">提交统计</view><view class="subtle">按首次提交业务日归属</view></view><view class="stage-count">{{report.stageSummary.submissions.count}} 条</view></view>
+      <view class="stage-metrics">
+        <view><text>最终录音</text><strong>{{report.stageSummary.submissions.recordingDurationText}}</strong></view>
+        <view><text>参考音频</text><strong>{{report.stageSummary.submissions.referenceAudioDurationText}}</strong></view>
+        <view><text>参考视频</text><strong>{{report.stageSummary.submissions.referenceVideoDurationText}}</strong></view>
       </view>
     </view>
-    <view class="metric-grid">
-      <view class="card metric-card primary"><view class="metric">{{report.summary.submissionCount||0}}</view><view class="metric-label">提交条数</view></view>
-      <view class="card metric-card primary"><view class="metric">{{report.summary.completedCount||0}}</view><view class="metric-label">完成条数</view></view>
-      <view class="card metric-card"><view class="metric metric-duration">{{report.summary.recordingDurationText}}</view><view class="metric-label">录音时长</view></view>
-      <view class="card metric-card"><view class="metric metric-duration">{{report.summary.referenceAudioDurationText}}</view><view class="metric-label">参考音频时长</view></view>
-      <view class="card metric-card wide"><view class="metric metric-duration">{{report.summary.referenceVideoDurationText}}</view><view class="metric-label">参考视频时长</view></view>
+    <view class="card stage-card completion-stage">
+      <view class="stage-title-row"><view><view class="stage-title">完成统计</view><view class="subtle">按首次完成业务日归属</view></view><view class="stage-count">{{report.stageSummary.completions.count}} 条</view></view>
+      <view class="stage-metrics">
+        <view><text>最终录音</text><strong>{{report.stageSummary.completions.recordingDurationText}}</strong></view>
+        <view><text>参考音频</text><strong>{{report.stageSummary.completions.referenceAudioDurationText}}</strong></view>
+        <view><text>参考视频</text><strong>{{report.stageSummary.completions.referenceVideoDurationText}}</strong></view>
+      </view>
     </view>
-    <view class="section-heading"><view class="section-title">每日提交</view><view class="subtle">按首次提交日期统计</view></view>
-    <view wx:if="{{!report.days.length}}" class="card empty compact">暂无每日数据</view>
-    <view wx:for="{{report.days}}" wx:key="date" class="card day-card">
-      <view class="day-top"><view class="day-date">{{item.date}}</view><view class="day-count">{{item.submissionCount}} 条</view></view>
-      <view class="day-metrics"><text>录音 {{item.recordingDurationText}}</text><text>音频源 {{item.referenceAudioDurationText}}</text><text>视频源 {{item.referenceVideoDurationText}}</text></view>
+
+    <view class="card hour-card">
+      <view class="section-title">24 小时首次提交分布</view>
+      <view class="subtle">按真实北京时间小时展示，业务日从 04 时开始</view>
+      <view wx:if="{{selectedHour}}" class="hour-tooltip">{{selectedHour.hour}}–{{selectedHour.nextHour}} 时，{{selectedHour.count}} 条</view>
+      <view class="hour-chart">
+        <view wx:for="{{hourBars}}" wx:key="hour" class="hour-column" data-hour="{{item.hour}}" data-count="{{item.count}}" bindtap="selectHour">
+          <view class="hour-bar-wrap"><view class="hour-bar {{selectedHour&&selectedHour.hour===item.hour?'selected':''}}" style="height:{{item.height}}%"></view></view>
+          <view class="hour-label">{{item.label}}</view>
+        </view>
+      </view>
     </view>
-    <view class="section-heading recent-heading"><view class="section-title">最近提交</view><view class="more-link" bindtap="openMore">更多 ›</view></view>
-    <view wx:if="{{!report.recentSubmissions.length}}" class="card empty compact">暂无提交记录</view>
-    <view wx:for="{{report.recentSubmissions}}" wx:key="itemId" class="card submission-card" data-item-id="{{item.itemId}}" bindtap="openSubmission">
-      <view class="submission-top"><view class="submission-code">{{item.itemCode}}</view><view class="tag">{{item.statusText}}</view></view>
-      <view class="subtle">最新提交：{{item.latestSubmittedAtText}}</view>
-      <view class="chevron">›</view>
+
+    <view class="section-heading"><view class="section-title">提交与完成每日统计</view></view>
+    <view wx:if="{{!report.stageDays.length}}" class="card empty compact">当前范围暂无每日数据</view>
+    <view wx:for="{{report.stageDays}}" wx:key="date" class="card day-card">
+      <view class="day-date">{{item.date}}</view>
+      <view class="day-stage-grid">
+        <view class="day-stage"><view class="day-stage-head"><text>提交</text><strong>{{item.submissions.count}} 条</strong></view><view>录音 {{item.submissions.recordingDurationText}}</view><view>音频 {{item.submissions.referenceAudioDurationText}}</view><view>视频 {{item.submissions.referenceVideoDurationText}}</view></view>
+        <view class="day-stage"><view class="day-stage-head"><text>完成</text><strong>{{item.completions.count}} 条</strong></view><view>录音 {{item.completions.recordingDurationText}}</view><view>音频 {{item.completions.referenceAudioDurationText}}</view><view>视频 {{item.completions.referenceVideoDurationText}}</view></view>
+      </view>
+    </view>
+
+    <view class="card details-card">
+      <view class="detail-tabs">
+        <view class="{{activeDetailTab==='submissions'?'active':''}}" data-tab="submissions" bindtap="switchDetailTab">提交明细（{{submissionTotal}}）</view>
+        <view class="{{activeDetailTab==='completions'?'active':''}}" data-tab="completions" bindtap="switchDetailTab">完成明细（{{completionTotal}}）</view>
+      </view>
+      <block wx:if="{{activeDetailTab==='submissions'}}">
+        <view wx:if="{{!submissions.length}}" class="empty compact">暂无提交明细</view>
+        <view wx:for="{{submissions}}" wx:key="itemId" class="detail-row" data-item-id="{{item.itemId}}" bindtap="openSubmission">
+          <view><strong>{{item.itemCode}}</strong><text class="tag">{{item.statusText}}</text></view>
+          <view class="subtle">首次提交：{{item.firstSubmittedAtText}}</view>
+        </view>
+      </block>
+      <block wx:else>
+        <view wx:if="{{!completions.length}}" class="empty compact">暂无完成明细</view>
+        <view wx:for="{{completions}}" wx:key="itemId" class="detail-row" data-item-id="{{item.itemId}}" bindtap="openSubmission">
+          <view><strong>{{item.itemCode}}</strong><text class="tag">{{item.statusText}}</text></view>
+          <view class="subtle">首次完成：{{item.firstCompletedAtText}}</view>
+        </view>
+      </block>
+      <view class="detail-pagination">
+        <button bindtap="previousDetailPage">上一页</button>
+        <text wx:if="{{activeDetailTab==='submissions'}}">当前第 {{submissionPage+1}} / {{submissionTotalPages}} 页</text>
+        <text wx:else>当前第 {{completionPage+1}} / {{completionTotalPages}} 页</text>
+        <button bindtap="nextDetailPage">下一页</button>
+      </view>
     </view>
   </block>
+
+  <view wx:if="{{refreshing}}" class="loading-overlay"><view class="loading-spinner"></view></view>
+
+  <view wx:if="{{showCalendar}}" class="calendar-mask" bindtap="cancelCalendar">
+    <view class="calendar-sheet" catchtap="stopBubble">
+      <view class="sheet-handle"></view>
+      <view class="calendar-header"><button data-delta="-1" bindtap="changeCalendarMonth">‹</button><strong>{{calendarTitle}}</strong><button data-delta="1" bindtap="changeCalendarMonth">›</button></view>
+      <view class="calendar-week"><text>日</text><text>一</text><text>二</text><text>三</text><text>四</text><text>五</text><text>六</text></view>
+      <view class="calendar-grid">
+        <view wx:for="{{calendarCells}}" wx:key="key" class="calendar-cell {{item.blank?'blank':''}} {{item.inRange?'in-range':''}} {{item.selected?'selected':''}} {{item.isToday?'today':''}}" data-date="{{item.date}}" bindtap="selectCalendarDay">{{item.day}}</view>
+      </view>
+      <view class="calendar-hint">{{draftEnd?'点击日期重新选择范围':draftStart?'请选择结束日期':'请选择开始日期'}}</view>
+      <button class="calendar-cancel" bindtap="cancelCalendar">取消</button>
+    </view>
+  </view>
 </view>

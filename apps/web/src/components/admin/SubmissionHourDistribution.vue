@@ -1,5 +1,6 @@
 <script setup>
 import { computed } from 'vue'
+import HelpPopover from '../form/HelpPopover.vue'
 const props = defineProps({ values: { type: Array, default: () => [] } })
 const normalized = computed(() => Array.from({ length: 24 }, (_, index) => {
   const hour = (index + 4) % 24
@@ -11,7 +12,7 @@ const maximum = computed(() => Math.max(1, ...normalized.value.map((item) => ite
 
 <template>
   <section class="business-card hour-card">
-    <div class="business-heading"><div><h3>24 小时首次提交分布</h3><p>按真实北京时间小时展示，顺序为业务日 04:00 至次日 04:00，只统计首次提交条数。</p></div></div>
+    <div class="business-heading"><div><h3>24 小时首次提交分布 <HelpPopover label="小时分布说明" content="柱子按首次提交发生的真实北京时间小时统计，顺序从业务日 04 时排到次日 03 时；同一条目重复提交不会增加次数。" /></h3><p>按真实北京时间小时展示，顺序为业务日 04:00 至次日 04:00，只统计首次提交条数。</p></div></div>
     <div class="hour-chart" role="img" aria-label="24 小时首次提交分布柱状图">
       <div v-for="item in normalized" :key="item.hour" class="hour-column" :title="`${item.hour}:00 · ${item.count} 条`">
         <span class="hour-count">{{ item.count || '' }}</span>

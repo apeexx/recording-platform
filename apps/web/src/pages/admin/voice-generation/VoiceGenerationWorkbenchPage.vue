@@ -9,6 +9,7 @@ import {
   synthesizeVoice
 } from '../../../lib/voiceGenerationApi.js'
 import { useNotifications } from '../../../composables/useNotifications.js'
+import HelpPopover from '../../../components/form/HelpPopover.vue'
 
 const notifications = useNotifications()
 const modes = [
@@ -134,7 +135,7 @@ onMounted(refreshDashboard)
   <div class="admin-page">
     <div class="voice-title-row">
       <div>
-        <h2>语音生成工作台</h2>
+        <h2>语音生成工作台 <HelpPopover label="语音生成模式说明" content="0 元试听用于临时试听；付费克隆只上传母带并创建新音色；日常合成使用已建库音色生成正式音频。" /></h2>
         <p>连接 Spring Boot 后端与 MiniMax，完成试听、克隆、合成和结果追踪。</p>
       </div>
       <button class="voice-ghost-button" type="button" @click="refreshDashboard">刷新音色</button>
@@ -159,7 +160,7 @@ onMounted(refreshDashboard)
         <div class="voice-grid">
           <div>
             <label v-if="activeMode === 'preview'" class="voice-field">
-              上传参考音频
+              <span class="voice-help-label">上传参考音频 <HelpPopover label="试听音频说明" content="试听参考音频用于生成临时候选声音，不会创建付费克隆音色。" /></span>
               <div class="voice-dropzone">
                 <input type="file" accept="audio/*" @change="onPreviewFileChange" />
                 <span>{{ previewAudio ? previewAudio.name : '支持 mp3 / wav / m4a，用于 0 元试听' }}</span>
@@ -167,7 +168,7 @@ onMounted(refreshDashboard)
             </label>
 
             <label v-if="activeMode === 'clone'" class="voice-field">
-              上传付费克隆母带
+              <span class="voice-help-label">上传付费克隆母带 <HelpPopover label="克隆母带限制说明" content="母带仅支持 mp3、m4a 或 wav，时长 10 秒至 5 分钟，文件不超过 20MB。" /></span>
               <div class="voice-dropzone">
                 <input type="file" accept="audio/*" @change="onCloneFileChange" />
                 <span>{{ cloneAudio ? cloneAudio.name : '确认满意后再执行付费克隆' }}</span>
@@ -175,12 +176,12 @@ onMounted(refreshDashboard)
             </label>
 
             <label v-if="activeMode === 'synthesize'" class="voice-field">
-              已付费建库的音色 ID
+              <span class="voice-help-label">已付费建库的音色 ID <HelpPopover label="已有音色 ID 说明" content="填写已在 MiniMax 建库成功的音色 ID，用于日常合成；前端不会保存 API Key。" /></span>
               <input v-model="form.voiceId" type="text" placeholder="sichuan_native_01" />
             </label>
 
             <label v-if="activeMode === 'clone'" class="voice-field">
-              新音色 ID
+              <span class="voice-help-label">新音色 ID <HelpPopover label="新音色 ID 说明" content="必须以英文字母开头，仅含字母、数字、下划线或连字符，且不能以下划线或连字符结尾。" /></span>
               <input v-model="form.cloneVoiceId" type="text" placeholder="sichuan_native_01" />
             </label>
 
@@ -199,7 +200,7 @@ onMounted(refreshDashboard)
             </button>
 
             <label v-if="activeMode !== 'clone'" class="voice-field">
-              需要合成的文本
+              <span class="voice-help-label">需要合成的文本 <HelpPopover label="合成文本说明" content="发送给语音服务生成音频的正文，最多 5000 字；不要填写密钥或敏感凭证。" /></span>
               <textarea v-model="form.text" maxlength="5000" />
               <span>{{ form.text.length }} / 5000</span>
             </label>
@@ -207,17 +208,17 @@ onMounted(refreshDashboard)
 
           <aside v-if="activeMode !== 'clone'">
             <div class="voice-range-row">
-              <strong>语速</strong>
+              <strong class="voice-help-label">语速 <HelpPopover label="语速说明" content="控制生成音频播放速度，1.0 为常速；数值越大语速越快。" /></strong>
               <input v-model="form.speed" type="range" min="0.5" max="2" step="0.1" />
               <span>{{ Number(form.speed).toFixed(1) }}x</span>
             </div>
             <div class="voice-range-row">
-              <strong>音量</strong>
+              <strong class="voice-help-label">音量 <HelpPopover label="音量说明" content="控制生成音频的相对响度，不改变输入母带文件。" /></strong>
               <input v-model="form.volume" type="range" min="0.1" max="5" step="0.1" />
               <span>{{ Number(form.volume).toFixed(1) }}</span>
             </div>
             <div class="voice-range-row">
-              <strong>语调</strong>
+              <strong class="voice-help-label">语调 <HelpPopover label="语调说明" content="按半音级调整生成声音的音高，0 表示不偏移。" /></strong>
               <input v-model="form.pitch" type="range" min="-12" max="12" step="1" />
               <span>{{ form.pitch }}</span>
             </div>

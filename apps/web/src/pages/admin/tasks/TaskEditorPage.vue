@@ -5,6 +5,7 @@ import PageActions from '../../../components/admin/PageActions.vue'
 import BaseSelect from '../../../components/form/BaseSelect.vue'
 import DurationRangeSlider from '../../../components/form/DurationRangeSlider.vue'
 import ToggleSwitch from '../../../components/form/ToggleSwitch.vue'
+import HelpPopover from '../../../components/form/HelpPopover.vue'
 import AsyncState from '../../../components/admin/AsyncState.vue'
 import { taskApi } from '../../../lib/taskApi.js'
 import { operationId } from '../../../lib/apiUtils.js'
@@ -65,14 +66,14 @@ onMounted(init)
     <form class="business-card business-form business-form-wide" novalidate @submit.prevent="save">
       <div class="business-form-grid">
         <label>任务名称<input ref="nameInput" v-model.trim="form.name" required></label>
-        <label>最终成果<BaseSelect v-model="form.resultType" :options="resultOptions" aria-label="最终成果" /></label>
+        <div class="help-field"><div>最终成果 <HelpPopover label="最终成果说明" content="文本成果允许提交文字、录音或两者同时提交；音频成果必须提交录音且不能夹带文字。" /></div><BaseSelect v-model="form.resultType" :options="resultOptions" aria-label="最终成果" /></div>
         <label>录音格式<BaseSelect v-model="form.recordingFormat" :options="formatOptions" aria-label="录音格式" /></label>
         <label>采样率<BaseSelect v-model="form.sampleRate" :options="sampleRateOptions" aria-label="采样率" /></label>
-        <label class="duration-range-field">录音时长范围<DurationRangeSlider v-model:min-value="form.minDurationSeconds" v-model:max-value="form.maxDurationSeconds" :min="1" :max="600" /></label>
+        <div class="duration-range-field help-field"><div>录音时长范围 <HelpPopover label="录音规格说明" content="仅在实际提交录音时校验格式、采样率、单声道和时长；可设置范围为 1 至 600 秒。" /></div><DurationRangeSlider v-model:min-value="form.minDurationSeconds" v-model:max-value="form.maxDurationSeconds" :min="1" :max="600" /></div>
         <label class="business-span">说明<textarea v-model="form.description" rows="3" /></label>
       </div>
-      <fieldset><legend>参考内容（至少一项）</legend><label v-for="type in ['TEXT','AUDIO','VIDEO']" :key="type" class="business-check colored-checkbox"><input v-model="form.referenceTypes" type="checkbox" :value="type"><span>{{ type === 'TEXT' ? '参考文字' : type === 'AUDIO' ? '参考音频' : '参考视频' }}</span></label></fieldset>
-      <fieldset><legend>审核</legend><ToggleSwitch v-model="form.humanReviewEnabled" label="人工审核" /></fieldset>
+      <fieldset><legend>参考内容（至少一项） <HelpPopover label="参考类型说明" content="决定每个条目启用哪些参考内容；未启用的导入列会被忽略，启用后的条目至少要有一项有效参考内容。" /></legend><label v-for="type in ['TEXT','AUDIO','VIDEO']" :key="type" class="business-check colored-checkbox"><input v-model="form.referenceTypes" type="checkbox" :value="type"><span>{{ type === 'TEXT' ? '参考文字' : type === 'AUDIO' ? '参考音频' : '参考视频' }}</span></label></fieldset>
+      <fieldset><legend>审核 <HelpPopover label="人工审核说明" content="启用后，采集提交先进入待领取审核池；关闭后提交会直接完成，且不会保存驳回预设原因。" /></legend><ToggleSwitch v-model="form.humanReviewEnabled" label="人工审核" /></fieldset>
       <label v-if="form.humanReviewEnabled">驳回预设原因（逗号分隔）<input v-model="form.rejectionReasons"></label>
       <p class="business-note">文本任务可提交文本或录音，也可同时提交；音频任务仅提交录音。首期 AI 功能固定关闭。</p>
       <div class="business-actions"><router-link class="button-secondary" to="/admin/tasks">取消</router-link><button class="button-primary" :disabled="saving">{{ saving ? '保存中…' : '保存' }}</button></div>
@@ -80,3 +81,7 @@ onMounted(init)
     </AsyncState>
   </section>
 </template>
+
+<style scoped>
+.help-field{display:grid;gap:8px;font-weight:700}.help-field>div,legend{display:flex;align-items:center;gap:6px}
+</style>

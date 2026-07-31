@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AsyncState from '../../../components/admin/AsyncState.vue'
 import PageActions from '../../../components/admin/PageActions.vue'
+import HelpPopover from '../../../components/form/HelpPopover.vue'
 import { taskApi } from '../../../lib/taskApi.js'
 import { reportApi } from '../../../lib/reportApi.js'
 import { operationId } from '../../../lib/apiUtils.js'
@@ -159,7 +160,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
       <div class="item-detail-layout">
         <main class="item-detail-main">
           <article class="business-card">
-            <div class="business-heading"><div><h3>参考源</h3><p v-if="editing">正在编辑参考内容，编号不可修改。</p></div></div>
+            <div class="business-heading"><div><h3>参考源 <HelpPopover label="条目参考源说明" content="参考文字及音视频地址供采集员作业时查看；URL 仅保存并播放，不由平台主动下载或探测。" /></h3><p v-if="editing">正在编辑参考内容，编号不可修改。</p></div></div>
             <section v-if="referenceTypes.includes('TEXT')" class="reference-source-block">
               <h4>参考文本</h4>
               <textarea v-if="editing" v-model.trim="editForm.referenceText" class="task-reference-textarea" rows="7"/>
@@ -186,7 +187,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
         </main>
         <aside class="item-detail-aside">
           <article class="business-card item-context">
-            <h3>条目信息</h3>
+            <h3>条目信息 <HelpPopover label="条目状态说明" content="状态表示条目当前所处流程；释放会回到待领取并清除当前归属，废弃会移出业务统计但保留历史。" /></h3>
             <dl>
               <dt>状态</dt><dd>{{ statusLabel('item', item.status) }}</dd>
               <dt>采集员</dt><dd>{{ item.collectorName || '-' }}<small>{{ item.collectorId || '未分配' }}</small></dd>
@@ -203,7 +204,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
             </div>
           </article>
           <article class="business-card">
-            <h3>采集结果</h3>
+            <h3>采集结果 <HelpPopover label="当前与最终结果说明" content="当前结果是条目最新有效提交；最终结果只在当前已完成时成立，审核最终答案优先于采集文字。" /></h3>
             <audio v-if="resultAudioUrl" controls :src="resultAudioUrl"/>
             <p v-else class="business-note">无结果音频</p>
             <div v-if="item.currentResult?.text" class="reference-text">{{ item.currentResult.text }}</div>

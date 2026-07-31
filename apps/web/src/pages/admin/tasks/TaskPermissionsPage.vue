@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router'
 import PageActions from '../../../components/admin/PageActions.vue'
 import AsyncState from '../../../components/admin/AsyncState.vue'
 import PaginationControls from '../../../components/admin/PaginationControls.vue'
+import HelpPopover from '../../../components/form/HelpPopover.vue'
 import { taskApi } from '../../../lib/taskApi.js'
 import { userApi } from '../../../lib/userApi.js'
 import { operationId } from '../../../lib/apiUtils.js'
@@ -196,7 +197,7 @@ onMounted(initialize)
 
         <div class="permission-side">
           <article class="business-card">
-            <div class="business-heading"><div><h3>待审批申请（{{ requestTotal }}）</h3><p>仅显示等待处理的申请。</p></div></div>
+            <div class="business-heading"><div><h3>待审批申请（{{ requestTotal }}） <HelpPopover label="授权申请说明" content="采集员申请进入待审批列表；批准后形成当前任务的有效授权，拒绝只结束本次申请。" /></h3><p>仅显示等待处理的申请。</p></div></div>
             <form class="business-inline permission-search" novalidate @submit.prevent="loadRequests(true)">
               <input v-model.trim="requestQuery" placeholder="姓名、完整用户 ID 或登录账号">
               <button class="button-primary" :disabled="requestLoading">搜索</button>
@@ -215,7 +216,7 @@ onMounted(initialize)
           </article>
 
           <article class="business-card">
-            <div class="business-heading"><div><h3>已授权用户（{{ grantTotal }}）</h3><p>仅显示当前有效授权。</p></div></div>
+            <div class="business-heading"><div><h3>已授权用户（{{ grantTotal }}） <HelpPopover label="有效授权说明" content="有效授权允许采集员领取该任务的新条目；撤销只阻止后续领取，不影响其已领取条目的提交和释放。" /></h3><p>仅显示当前有效授权。</p></div></div>
             <form class="business-inline permission-search" novalidate @submit.prevent="loadGrants(true)">
               <input v-model.trim="grantQuery" placeholder="姓名、完整用户 ID 或登录账号">
               <button class="button-primary" :disabled="grantLoading">搜索</button>

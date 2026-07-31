@@ -414,6 +414,7 @@ public class MongoReportQueryStore implements ReportQueryStore {
 			.append("itemCode", 1)
 			.append("firstSubmittedAt", 1)
 			.append("latestSubmittedAt", 1)
+			.append("firstCompletedAt", 1)
 			.append("currentItemStatus", "$status")
 			.append("recordingDurationMillis", new Document(
 				"$ifNull", List.of("$currentResult.audio.durationMillis", 0)
@@ -803,6 +804,7 @@ public class MongoReportQueryStore implements ReportQueryStore {
 			row.getString("itemCode"),
 			instant(row.get("firstSubmittedAt")),
 			instant(row.get("latestSubmittedAt")),
+			instant(row.get("firstCompletedAt")),
 			TaskItemStatus.valueOf(row.getString("currentItemStatus")),
 			number(row, "recordingDurationMillis"),
 			number(row, "referenceAudioDurationMillis"),

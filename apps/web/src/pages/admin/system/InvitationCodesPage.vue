@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } 
 import AsyncState from '../../../components/admin/AsyncState.vue'
 import PageActions from '../../../components/admin/PageActions.vue'
 import PaginationControls from '../../../components/admin/PaginationControls.vue'
+import HelpPopover from '../../../components/form/HelpPopover.vue'
 import { useNotifications } from '../../../composables/useNotifications.js'
 import { operationId } from '../../../lib/apiUtils.js'
 import { invitationApi } from '../../../lib/invitationApi.js'
@@ -159,6 +160,7 @@ onBeforeUnmount(() => { document.body.style.overflow = '' })
 <template>
   <section>
     <PageActions title="邀请码管理" description="控制新微信身份首次进入小程序的使用范围">
+      <HelpPopover label="邀请码使用规则说明" content="邀请码仅用于新微信身份首次准入；每次成功兑换占用一次，停用后永久不可恢复，完整邀请码只在创建后显示一次。" />
       <button data-testid="open-create-invitation" class="primary" @click="openCreate">创建邀请码</button>
     </PageActions>
     <AsyncState :loading="loading" :error="error" :empty="!rows.length" @retry="load">
@@ -191,7 +193,8 @@ onBeforeUnmount(() => { document.body.style.overflow = '' })
           <form novalidate @submit.prevent="create">
             <label>名称<input ref="nameInput" v-model="form.name" maxlength="64" placeholder="例如：审核体验"></label>
             <label>备注（可选）<input ref="noteInput" v-model="form.note" maxlength="200" placeholder="记录发放对象或用途"></label>
-            <label>最大使用次数<input ref="maxUsesInput" v-model.number="form.maxUses" type="number" min="1" max="1000" step="1"></label>
+            <div class="invitation-help-label">最大使用次数 <HelpPopover label="最大使用次数说明" content="允许 1 至 1000 次；只有新身份成功兑换才计数，重复登录不会再次占用。" /></div>
+            <input ref="maxUsesInput" v-model.number="form.maxUses" type="number" min="1" max="1000" step="1" aria-label="最大使用次数">
             <div class="modal-actions"><button type="button" :disabled="creating" @click="closeCreate">取消</button><button class="primary" type="submit" :disabled="creating">{{ creating ? '创建中…' : '创建' }}</button></div>
           </form>
         </section>

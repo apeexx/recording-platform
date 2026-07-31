@@ -48,6 +48,10 @@ class MongoReportQueryStoreTests {
 		);
 
 		assertTrue(result.isEmpty());
+		@SuppressWarnings("rawtypes")
+		ArgumentCaptor<List> pipelines = ArgumentCaptor.forClass(List.class);
+		verify(items, org.mockito.Mockito.times(2)).aggregate(pipelines.capture());
+		assertTrue(pipelines.getAllValues().get(0).toString().contains("firstCompletedAt"));
 	}
 
 	@Test

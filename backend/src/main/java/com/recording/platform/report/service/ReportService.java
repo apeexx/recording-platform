@@ -31,6 +31,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import com.recording.platform.identity.store.IdentityDirectory;
 import com.recording.platform.identity.model.IdentityUser;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.time.Clock;
@@ -241,19 +242,33 @@ public class ReportService {
 	}
 
 	public CollectorTaskReport myTask(String taskId, PlatformPrincipal actor) {
-		requireCollector(actor);
-		return queries.collectorTaskReport(actor.userId(), taskId)
-			.orElseThrow(() -> new ApiException(
-				HttpStatus.NOT_FOUND, "REPORT_TASK_NOT_FOUND", "没有可统计的任务数据"
-			));
+		return myTask(taskId, null, null, null, actor);
 	}
 
 	public CollectorTaskReport myTask(String taskId, LocalDate date, PlatformPrincipal actor) {
+		return myTask(taskId, date, null, null, actor);
+	}
+
+	public CollectorTaskReport myTask(
+		String taskId, LocalDate date, LocalDate fromDate, LocalDate toDate, PlatformPrincipal actor
+	) {
 		requireCollector(actor);
-		return queries.collectorTaskReport(actor.userId(), taskId, date)
+		ReportDateRange range = personalRange(date, fromDate, toDate);
+		Optional<CollectorTaskReport> reportResult = date == null && fromDate == null && toDate == null
+			? queries.collectorTaskReport(actor.userId(), taskId)
+			: queries.collectorTaskReport(
+				actor.userId(), taskId, range.fromInclusive(), range.toExclusive()
+			);
+		CollectorTaskReport report = reportResult
 			.orElseThrow(() -> new ApiException(
 				HttpStatus.NOT_FOUND, "REPORT_TASK_NOT_FOUND", "没有可统计的任务数据"
 			));
+		AdminCollectorTaskReport stages = queries.adminCollectorTaskReport(
+			actor.userId(), taskId, range.fromInclusive(), range.toExclusive()
+		).orElse(null);
+		return stages == null
+			? report.withStages(StageReportSummary.empty(), List.of())
+			: report.withStages(stages.summary(), stages.days());
 	}
 
 	public PageResponse<CollectorTaskReportItem> myTaskSubmissions(
@@ -271,13 +286,56 @@ public class ReportService {
 	public PageResponse<CollectorTaskReportItem> myTaskSubmissions(
 		String taskId, LocalDate date, int page, int size, PlatformPrincipal actor
 	) {
+		return myTaskSubmissions(taskId, date, null, null, page, size, actor);
+	}
+
+	public PageResponse<CollectorTaskReportItem> myTaskSubmissions(
+		String taskId, LocalDate date, LocalDate fromDate, LocalDate toDate,
+		int page, int size, PlatformPrincipal actor
+	) {
 		requireCollector(actor);
+		ReportDateRange range = personalRange(date, fromDate, toDate);
 		int safePage = Math.max(page, 0);
 		int safeSize = Math.min(Math.max(size, 1), 100);
 		var result = queries.findCollectorTaskSubmissions(
-			actor.userId(), taskId, date, PageRequest.of(safePage, safeSize)
+			actor.userId(), taskId, range.fromInclusive(), range.toExclusive(),
+			PageRequest.of(safePage, safeSize)
 		);
 		return new PageResponse<>(result.getContent(), result.getNumber(), result.getSize(), result.getTotalElements());
+	}
+
+	public PageResponse<CollectorTaskReportItem> myTaskCompletions(
+		String taskId, LocalDate date, LocalDate fromDate, LocalDate toDate,
+		int page, int size, PlatformPrincipal actor
+	) {
+		requireCollector(actor);
+		ReportDateRange range = personalRange(date, fromDate, toDate);
+		int safePage = Math.max(page, 0);
+		int safeSize = Math.min(Math.max(size, 1), 100);
+		var result = queries.findAdminCollectorTaskCompletions(
+			actor.userId(), taskId, range.fromInclusive(), range.toExclusive(),
+			PageRequest.of(safePage, safeSize)
+		);
+		List<CollectorTaskReportItem> rows = result.getContent().stream().map(row ->
+			new CollectorTaskReportItem(
+				row.itemId(), row.itemCode(), row.firstSubmittedAt(), row.latestSubmittedAt(),
+				row.firstCompletedAt(), row.currentItemStatus(), row.recordingDurationMillis(),
+				row.referenceAudioDurationMillis(), row.referenceVideoDurationMillis(),
+				row.textPresent(), row.audioPresent()
+			)
+		).toList();
+		return new PageResponse<>(rows, result.getNumber(), result.getSize(), result.getTotalElements());
+	}
+
+	private ReportDateRange personalRange(LocalDate date, LocalDate fromDate, LocalDate toDate) {
+		if (date != null && (fromDate != null || toDate != null)) {
+			throw new ApiException(
+				HttpStatus.UNPROCESSABLE_ENTITY,
+				"INVALID_REPORT_DATE_RANGE",
+				"单日日期不能与日期范围同时使用"
+			);
+		}
+		return date == null ? ReportDateRange.of(fromDate, toDate) : ReportDateRange.of(date, date);
 	}
 
 	private WorkSummary work(List<TaskItem> values) {

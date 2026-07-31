@@ -1,4 +1,5 @@
 <script setup>
+import HelpPopover from '../form/HelpPopover.vue'
 defineProps({ summary: { type: Object, default: () => ({}) } })
 const seconds = (value) => `${((Number(value) || 0) / 1000).toFixed(1)} 秒`
 const stages = [
@@ -10,7 +11,7 @@ const stages = [
 <template>
   <div class="stage-summary-grid">
     <section v-for="[key,title,note] in stages" :key="key" class="business-card stage-panel">
-      <div class="stage-heading"><div><h3>{{ title }}</h3><p>{{ note }}</p></div><strong>{{ summary?.[key]?.count || 0 }} 条</strong></div>
+      <div class="stage-heading"><div><h3>{{ title }} <HelpPopover :label="`${title}说明`" :content="key === 'submissions' ? '提交统计按当前采集员的首次提交时间归属；覆盖提交与返修不会重复累计，释放或废弃后移出统计。' : '完成统计只计算当前仍为已完成的条目，并按第一次完成时间归属；退回期间暂不计入，再次完成仍归第一次完成日期。'" /></h3><p>{{ note }}</p></div><strong>{{ summary?.[key]?.count || 0 }} 条</strong></div>
       <dl>
         <div><dt>最终录音时长</dt><dd>{{ seconds(summary?.[key]?.recordingDurationMillis) }}</dd></div>
         <div><dt>参考音频时长</dt><dd>{{ seconds(summary?.[key]?.referenceAudioDurationMillis) }}</dd></div>

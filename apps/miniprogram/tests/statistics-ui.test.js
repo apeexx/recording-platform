@@ -13,32 +13,61 @@ test('底部导航包含任务统计和我的三个 Tab', () => {
   assert.ok(app.pages.includes('pages/submission-records/index'))
 })
 
-test('统计页按最近任务展示五项总量每日数据和最近三条', () => {
+test('统计页按最近任务展示双阶段、小时分布、每日数据和双明细', () => {
   const script = read('pages/statistics/index.js')
   const template = read('pages/statistics/index.wxml')
   assert.match(script, /reportTasks\(\)/)
-  assert.match(script, /selectedTaskId:\s*tasks\[0\]\.taskId/)
-  assert.match(script, /recentSubmissions/)
-  for (const label of ['提交条数', '完成条数', '录音时长', '参考音频时长', '参考视频时长']) {
+  assert.match(script, /taskCompletions/)
+  assert.match(script, /requestSequence/)
+  for (const label of ['提交统计', '完成统计', '最终录音', '参考音频', '参考视频']) {
     assert.ok(template.includes(label))
   }
-  assert.match(template, /wx:for="{{report\.days}}"/)
-  assert.match(template, /bindtap="openMore"/)
+  assert.match(template, /wx:for="{{hourBars}}"/)
+  assert.match(template, /bindtap="selectHour"/)
+  assert.match(template, /wx:for="{{report\.stageDays}}"/)
+  assert.match(template, /提交明细/)
+  assert.match(template, /完成明细/)
   assert.match(template, /bindtap="openSubmission"/)
 })
 
-test('统计页可选择单日并清除为全部日期', () => {
+test('统计页提供六种日期范围和底部日历', () => {
   const script = read('pages/statistics/index.js')
   const template = read('pages/statistics/index.wxml')
-  assert.match(template, /mode="date"/)
-  assert.match(template, /bindchange="dateChange"/)
-  assert.match(template, /bindtap="clearDate"/)
+  for (const label of ['今天', '昨天', '近 7 日', '本月', '全部', '自定义']) {
+    assert.ok(template.includes(label))
+  }
+  assert.match(template, /calendar-sheet/)
+  assert.match(template, /bindtap="selectCalendarDay"/)
+  assert.match(template, /bindtap="cancelCalendar"/)
   assert.match(template, /Asia\/Shanghai 04:00 至次日 04:00/)
-  assert.match(script, /selectedDate:\s*''/)
-  assert.match(script, /taskReport\(taskId,\s*this\.data\.selectedDate\)/)
-  assert.match(script, /dateChange\(event\)/)
-  assert.match(script, /clearDate\(\)/)
-  assert.match(script, /date=\$\{encodeURIComponent\(this\.data\.selectedDate\)\}/)
+  assert.match(script, /applyPreset\(event\)/)
+  assert.match(script, /openCalendar\(\)/)
+  assert.match(script, /selectCalendarDay\(event\)/)
+})
+
+test('统计页两套明细各自使用固定五条分页', () => {
+  const script = read('pages/statistics/index.js')
+  const template = read('pages/statistics/index.wxml')
+  assert.match(script, /detailSize:\s*5/)
+  assert.match(script, /submissionPage:\s*0/)
+  assert.match(script, /completionPage:\s*0/)
+  assert.match(template, /上一页/)
+  assert.match(template, /下一页/)
+  assert.match(template, /当前第/)
+})
+
+test('业务日期工具支持凌晨四点换日、快捷范围和反向日期交换', () => {
+  const dates = require('../pages/statistics/date-range.js')
+  assert.equal(dates.businessDate(new Date('2026-07-31T19:59:59Z')), '2026-07-31')
+  assert.equal(dates.businessDate(new Date('2026-07-31T20:00:00Z')), '2026-08-01')
+  assert.deepEqual(dates.normalizeRange('2026-08-02', '2026-07-31'), {
+    fromDate:'2026-07-31', toDate:'2026-08-02',
+  })
+  const presets = dates.presetRanges(new Date('2026-07-31T03:00:00Z'))
+  assert.deepEqual(presets.today, {fromDate:'2026-07-31',toDate:'2026-07-31'})
+  assert.deepEqual(presets.last7, {fromDate:'2026-07-25',toDate:'2026-07-31'})
+  assert.deepEqual(presets.month, {fromDate:'2026-07-01',toDate:'2026-07-31'})
+  assert.deepEqual(presets.all, {fromDate:'',toDate:''})
 })
 
 test('更多提交页按二十条触底分页并继承日期', () => {

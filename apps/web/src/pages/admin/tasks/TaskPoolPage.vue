@@ -4,6 +4,7 @@ import AsyncState from '../../../components/admin/AsyncState.vue'
 import PageActions from '../../../components/admin/PageActions.vue'
 import PaginationControls from '../../../components/admin/PaginationControls.vue'
 import BaseSelect from '../../../components/form/BaseSelect.vue'
+import HelpPopover from '../../../components/form/HelpPopover.vue'
 import TaskBatchActionMenu from '../../../components/admin/TaskBatchActionMenu.vue'
 import TaskItemFilters from '../../../components/admin/TaskItemFilters.vue'
 import { taskApi } from '../../../lib/taskApi.js'
@@ -236,9 +237,11 @@ onBeforeUnmount(clearPoll)
         <BaseSelect v-model="taskId" :options="taskOptions" placeholder="请选择任务" aria-label="选择任务" @update:model-value="choose"/>
         <button class="button-secondary" :disabled="!taskId" @click="load">刷新</button>
         <button class="button-secondary" :disabled="!taskId" @click="exportCsv">导出 CSV</button>
+        <HelpPopover label="数据池导出说明" content="导出继承编号、来源、状态、人员和成果类型筛选，并输出全部匹配条目，不受分页限制。" />
         <TaskBatchActionMenu :selected-count="selection.selectedCount.value"
           :counts="{ status: applicableCount('status'), release: applicableCount('release'), discard: applicableCount('discard'), restore: applicableCount('restore') }"
           :status-options="statusOptions" :disabled="processing" @status="changeStatus" @release="batch('release')" @discard="batch('discard')" @restore="batch('restore')" />
+        <HelpPopover label="批量操作说明" content="可选择本页或全部筛选结果；后台分批执行并保留冲突与跳过统计，释放、废弃和恢复含义不同。" />
       </div>
       <div v-if="selection.selectedCount.value" class="batch-selection-bar">
         <span>已选择 {{ selection.selectedCount.value }} 条</span>

@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import AsyncState from '../../../components/admin/AsyncState.vue'
 import PageActions from '../../../components/admin/PageActions.vue'
+import HelpPopover from '../../../components/form/HelpPopover.vue'
 import { reportApi } from '../../../lib/reportApi.js'
 import { useNotifications } from '../../../composables/useNotifications.js'
 
@@ -65,18 +66,18 @@ onMounted(load)
         <article><span>任务总数</span><strong>{{ dashboard.tasks.total }}</strong><small>进行中 {{ dashboard.tasks.running }}</small></article>
         <article><span>数据总量</span><strong>{{ dashboard.items.total }}</strong><small>已完成 {{ dashboard.items.completed }}</small></article>
         <article><span>当前采集人数</span><strong>{{ dashboard.currentCollectorCount }}</strong><small>按当前分配去重</small></article>
-        <article><span>今日首次提交</span><strong>{{ dashboard.todayFirstSubmissionCount }}</strong><small>Asia/Shanghai</small></article>
+        <article><span>今日首次提交 <HelpPopover label="今日首次提交说明" content="统计当前业务日内第一次提交的条目；业务日按 Asia/Shanghai 04:00 至次日 04:00 划分。" /></span><strong>{{ dashboard.todayFirstSubmissionCount }}</strong><small>Asia/Shanghai</small></article>
       </div>
       <div class="dashboard-grid">
         <article class="business-card dashboard-chart">
-          <div class="business-heading"><div><h3>近 7 日首次提交</h3><p>按条目首次提交日期统计</p></div></div>
+          <div class="business-heading"><div><h3>近 7 日首次提交 <HelpPopover label="近七日趋势说明" content="以当前业务日为终点，展示最近七个业务日的首次提交条数；覆盖提交不重复累计。" /></h3><p>按条目首次提交日期统计</p></div></div>
           <svg viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="近七日首次提交趋势">
             <path d="M0 90H100" class="chart-axis"/><polyline :points="trendPoints" class="chart-line"/>
           </svg>
           <div class="trend-labels"><span v-for="row in dashboard.trend" :key="row.date">{{ row.date.slice(5) }}<strong>{{ row.firstSubmissionCount }}</strong></span></div>
         </article>
         <article class="business-card">
-          <h3>条目状态分布</h3>
+          <h3>条目状态分布 <HelpPopover label="条目状态分布说明" content="按条目当前状态汇总；待录制与返修、已提交与审核中分别合并展示，废弃条目单独列出。" /></h3>
           <div class="status-distribution">
             <div v-for="segment in itemSegments" :key="segment.label">
               <span>{{ segment.label }}</span><strong>{{ segment.value }}</strong>
@@ -85,7 +86,7 @@ onMounted(load)
           </div>
         </article>
         <article class="business-card dashboard-ranking">
-          <h3>任务完成排行</h3>
+          <h3>任务完成排行 <HelpPopover label="任务完成排行说明" content="按任务当前已完成条目数排行，最多展示八个任务；并列时使用稳定的任务顺序。" /></h3>
           <div v-if="dashboard.taskRanking.length" class="business-list">
             <div v-for="(row,index) in dashboard.taskRanking" :key="row.taskId">
               <span><strong>{{ index + 1 }} · {{ row.taskName }}</strong><small>{{ row.taskCode }} · 当前提交 {{ row.submissionCount }} · {{ seconds(row.recordingDurationMillis) }}</small></span>

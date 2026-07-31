@@ -38,7 +38,7 @@ MongoDB 身份、会话与统一 API 错误基础
 本文件 AGENTS.md
 ```
 
-当前已实现身份、会话、后台用户管理、新微信身份邀请码准入、语音生成持久化，以及嵌入式任务配置、授权申请、任务池领取、录音提交/返修/释放、人工审核、AI 辅助审核、动态状态、软废弃恢复、媒体读取和 CSV 导入后端闭环；Web 已实现后台身份、邀请码管理、任务配置、数据池/导入、权限、审核、用户、操作记录与统计页面，小程序已实现首次邀请准入、独立的按任务个人统计、每日分段和倒序提交记录。AI 只生成候选最终答案，不执行机器审核决定。
+当前已实现身份、会话、后台用户管理、新微信身份邀请码准入、语音生成持久化，以及嵌入式任务配置、授权申请、任务池领取、录音提交/返修/释放、人工审核、AI 辅助审核、动态状态、软废弃恢复、媒体读取和 CSV 导入后端闭环；Web 已实现后台身份、邀请码管理、任务配置、数据池/导入、权限、审核、用户、操作记录与统计页面，小程序已实现首次邀请准入，以及按任务、日期范围拆分提交/完成的双阶段统计、小时分布、每日卡片和两套分页明细。AI 只生成候选最终答案，不执行机器审核决定。
 
 Spring Security 已配置为不透明服务端会话，不使用 JWT。除 Web/微信登录与接管接口外，其余 `/api/**` 默认认证；管理员、任务管理、授权管理、导入和语音生成接口按角色保护，采集写接口仅允许 `COLLECTOR` 小程序 Bearer 身份；外部集成仅允许专用 API Key 访问明确列出的四个端点。
 
@@ -227,7 +227,7 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 ## 7. 接口说明
 
 当前后端提供身份、会话、后台用户管理、语音生成、任务配置、授权、任务池、人工审核、任务级 AI 辅助转写、动态状态、软废弃恢复、录音媒体、导入及外部完成结果读取 API；不提供机器自动通过或自动驳回。
-当前同时提供操作记录与统计 API：条目操作记录按权限读取，全局操作记录仅 ADMIN/REVIEWER；管理员统计按首次提交与首次完成拆成两个阶段，提供任务汇总、24 小时提交分布、任务内采集员排行、独立人员详情及提交/完成两套分页明细；小程序继续按最近提交任务查看原有 current assignment 汇总、每日分段及倒序提交明细。全部报表日期按 Asia/Shanghai 凌晨 4 点换日，日期 `2026-07-31` 表示 `[2026-07-31 04:00, 2026-08-01 04:00)`；原始时间展示不平移。审核统计接口已移除，REVIEWER 调用 `/api/reports/me` 固定返回 `403 ACCESS_DENIED`。
+当前同时提供操作记录与统计 API：条目操作记录按权限读取，全局操作记录仅 ADMIN/REVIEWER；管理员与小程序本人统计均按首次提交与首次完成拆成两个阶段，提供任务汇总、04→03 的 24 小时提交分布、每日统计及提交/完成两套分页明细，管理员额外提供任务内采集员排行和独立人员详情。全部报表日期按 Asia/Shanghai 凌晨 4 点换日，日期 `2026-07-31` 表示 `[2026-07-31 04:00, 2026-08-01 04:00)`；原始时间展示不平移。审核统计接口已移除，REVIEWER 调用 `/api/reports/me` 固定返回 `403 ACCESS_DENIED`。
 Web 数据大屏使用仅 ADMIN 可访问的 `GET /api/reports/dashboard`，返回 `generatedAt`、真实任务生命周期数量、条目状态数量、当前采集人数、Asia/Shanghai 当日及最近 7 日首次提交统计和最多 8 个任务排行；最近操作仍复用 `/api/operations`。
 
 所有 API 响应必须带 `X-Request-Id`；错误响应统一为 `{ code, message, requestId, details? }`。未预期异常只能返回脱敏摘要，不得返回堆栈、数据库内部消息、密钥或完整第三方 payload。统一状态至少覆盖 400、401、403、404、409、413、415、422、429、500 和 503。
@@ -454,12 +454,12 @@ Web 数据大屏使用仅 ADMIN 可访问的 `GET /api/reports/dashboard`，返�
 
 ```text
 请求方法：GET
-请求路径：/api/reports/me/tasks、/api/reports/me/tasks/{taskId}、/api/reports/me/tasks/{taskId}/submissions
-请求参数：任务列表无业务参数；任务汇总使用 taskId 和可选 date=YYYY-MM-DD；完整提交记录使用 taskId、page、size 和可选 date=YYYY-MM-DD；日期为空表示全部
-响应结构：任务列表 {items:[{taskId,taskCode,taskName,latestSubmittedAt}]}；任务汇总 {taskId,taskCode,taskName,summary,days,recentSubmissions}，summary 含 submissionCount、completedCount、recordingDurationMillis、referenceAudioDurationMillis、referenceVideoDurationMillis，days 按日期倒序并包含 completedCount，recentSubmissions 固定最近 3 条；完整记录返回分页结构
-错误码：404 REPORT_TASK_NOT_FOUND
+请求路径：/api/reports/me/tasks、/api/reports/me/tasks/{taskId}、/api/reports/me/tasks/{taskId}/submissions、/api/reports/me/tasks/{taskId}/completions
+请求参数：任务列表无业务参数；任务汇总支持旧 date=YYYY-MM-DD 或 fromDate/toDate；提交与完成明细使用 taskId、page、size 及同样的日期参数；日期为空表示全部，date 不得与范围参数同时出现
+响应结构：任务列表 {items:[{taskId,taskCode,taskName,latestSubmittedAt}]}；任务汇总继续保留 {summary,days,recentSubmissions}，并新增 stageSummary={submissions,completions,submissionHourDistribution} 与 stageDays；两种 StageMetrics 均含 count、recordingDurationMillis、referenceAudioDurationMillis、referenceVideoDurationMillis，小时桶固定 24 个且顺序为 04→03；提交/完成明细返回分页结构并包含 firstCompletedAt
+错误码：404 REPORT_TASK_NOT_FOUND；422 INVALID_REPORT_DATE_RANGE
 权限要求：仅当前 COLLECTOR 小程序 Bearer
-数据一致性要求：直接聚合 task_items 当前数据库快照，仅统计仍属于当前采集员且具有 firstSubmittedAt 的当前 assignment；同一条目在一个 assignment 内只计 1 条，返修和覆盖提交不重复增加；当前结果录音时长始终取最新值，COMPLETED 时即最终值；参考音视频分别统计，无对应媒体时为 0；指定 date 后汇总、每日数据、最近 3 条和完整提交记录均限定对应的 Asia/Shanghai 04:00 至次日 04:00 业务日；管理员释放回 AVAILABLE 后该条目立即退出原采集员统计，历史 submissions/operations 不删除；任务列表和提交明细均按 latestSubmittedAt 倒序；Mongo 原始查询必须将 task_items 中的字符串 taskId 转换为 tasks 集合实际使用的 ObjectId 后读取任务资料
+数据一致性要求：本人接口只聚合当前登录采集员；旧 summary/days/recentSubmissions 保持兼容。新增提交阶段按当前 assignment 的 firstSubmittedAt，完成阶段只统计当前 COMPLETED 并按 firstCompletedAt；同一条目覆盖、返修或再次完成不改变首次归属。释放与废弃排除规则、当前有效结果时长及 04:00 业务日边界与管理员双阶段报表一致；完成明细只返回当前仍为 COMPLETED 且首次完成时间命中范围的条目。date 与 fromDate/toDate 同时提供、或 fromDate 晚于 toDate，统一返回 422；任务列表和提交明细保持倒序。Mongo 原始查询必须将 task_items 中的字符串 taskId 转换为 tasks 集合实际使用的 ObjectId 后读取任务资料
 前端调用位置：apps/miniprogram/pages/statistics/*、apps/miniprogram/pages/submission-records/*
 ```
 

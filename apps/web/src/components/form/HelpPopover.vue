@@ -1,3 +1,7 @@
+<script>
+let helpPopoverSequence = 0
+</script>
+
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
@@ -6,8 +10,7 @@ const props = defineProps({
   content: { type: String, required: true },
 })
 
-let nextId = 0
-const instanceId = `help-popover-${++nextId}`
+const instanceId = `help-popover-${++helpPopoverSequence}`
 const trigger = ref(null)
 const panel = ref(null)
 const hovered = ref(false)

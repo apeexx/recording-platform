@@ -4,6 +4,7 @@ import PageActions from '../../../components/admin/PageActions.vue'
 import AsyncState from '../../../components/admin/AsyncState.vue'
 import PaginationControls from '../../../components/admin/PaginationControls.vue'
 import BaseSelect from '../../../components/form/BaseSelect.vue'
+import HelpPopover from '../../../components/form/HelpPopover.vue'
 import { useNotifications } from '../../../composables/useNotifications.js'
 import { statusLabel } from '../../../lib/statusLabels.js'
 import { userApi } from '../../../lib/userApi.js'
@@ -190,6 +191,7 @@ onBeforeUnmount(() => {
 <template>
   <section>
     <PageActions title="用户管理" description="分别管理 Web 端账号与小程序端账号">
+      <HelpPopover label="用户类型角色状态说明" content="Web 用户可为管理员或审核员，小程序用户固定为采集员；停用会阻止登录并废止活动会话，但不会删除历史业务记录。" />
       <button data-user-type="WEB" :class="['tab', view === 'WEB' && 'active']" @click="switchView('WEB')">Web 端账号</button>
       <button data-user-type="MINIPROGRAM" :class="['tab', view === 'MINIPROGRAM' && 'active']" @click="switchView('MINIPROGRAM')">小程序端账号</button>
     </PageActions>

@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AsyncState from '../../../components/admin/AsyncState.vue'
+import DateRangePicker from '../../../components/form/DateRangePicker.vue'
 import PageActions from '../../../components/admin/PageActions.vue'
 import PaginationControls from '../../../components/admin/PaginationControls.vue'
 import StageSummaryPanel from '../../../components/admin/StageSummaryPanel.vue'
@@ -10,14 +11,18 @@ import { reportApi } from '../../../lib/reportApi.js'
 import { taskApi } from '../../../lib/taskApi.js'
 import { statusLabel } from '../../../lib/statusLabels.js'
 import { useNotifications } from '../../../composables/useNotifications.js'
+import { businessDate, businessMonthStart, shiftBusinessDate } from '../../../lib/businessDate.js'
 
 const route = useRoute()
 const router = useRouter()
 const notifications = useNotifications()
 const taskId = String(route.params.taskId)
 const collectorId = String(route.params.collectorId)
-const fromDate = String(route.query.fromDate || '')
-const toDate = String(route.query.toDate || '')
+const today = businessDate()
+const fromDate = ref(String(route.query.fromDate || ''))
+const toDate = ref(String(route.query.toDate || ''))
+const activePreset = ref(route.query.fromDate || route.query.toDate ? 'custom' : 'all')
+const dateRangePicker = ref(null)
 const activeTab = ref(route.query.tab === 'completions' ? 'completions' : 'submissions')
 const submissionPage = ref(Math.max(0, Number(route.query.submissionPage) || 0))
 const completionPage = ref(Math.max(0, Number(route.query.completionPage) || 0))
@@ -29,9 +34,15 @@ const submissionTotal = ref(0)
 const completionTotal = ref(0)
 const loading = ref(false)
 const loadError = ref('')
+let requestSequence = 0
 const reportParams = computed(() => ({
-  ...(fromDate ? { fromDate } : {}), ...(toDate ? { toDate } : {}),
+  ...(fromDate.value ? { fromDate: fromDate.value } : {}),
+  ...(toDate.value ? { toDate: toDate.value } : {}),
 }))
+const presets = [
+  ['today', '今天'], ['yesterday', '昨天'], ['seven-days', '近 7 日'],
+  ['month', '本月'], ['all', '全部'], ['custom', '自定义范围'],
+]
 const currentRows = computed(() => activeTab.value === 'submissions' ? submissions.value : completions.value)
 const currentTotal = computed(() => activeTab.value === 'submissions' ? submissionTotal.value : completionTotal.value)
 const currentPage = computed(() => activeTab.value === 'submissions' ? submissionPage.value : completionPage.value)
@@ -60,7 +71,39 @@ function syncQuery() {
     query: detailQuery(),
   })
 }
+async function applyPreset(key) {
+  activePreset.value = key
+  if (key === 'custom') {
+    await dateRangePicker.value?.openPicker()
+    return
+  }
+  if (key === 'today') fromDate.value = toDate.value = today
+  if (key === 'yesterday') fromDate.value = toDate.value = shiftBusinessDate(today, -1)
+  if (key === 'seven-days') {
+    fromDate.value = shiftBusinessDate(today, -6)
+    toDate.value = today
+  }
+  if (key === 'month') {
+    fromDate.value = businessMonthStart(today)
+    toDate.value = today
+  }
+  if (key === 'all') fromDate.value = toDate.value = ''
+  submissionPage.value = 0
+  completionPage.value = 0
+  await syncQuery()
+  await load(true)
+}
+async function changeDateRange(range) {
+  fromDate.value = range.fromDate
+  toDate.value = range.toDate
+  activePreset.value = 'custom'
+  submissionPage.value = 0
+  completionPage.value = 0
+  await syncQuery()
+  await load(true)
+}
 async function load(refresh = false) {
+  const sequence = ++requestSequence
   loading.value = true
   if (!detail.value) loadError.value = ''
   try {
@@ -73,15 +116,19 @@ async function load(refresh = false) {
         ...reportParams.value, page: completionPage.value, size: pageSize.value,
       }),
     ])
+    if (sequence !== requestSequence) return
     detail.value = nextDetail
     submissions.value = submissionResult.items || []
     completions.value = completionResult.items || []
     submissionTotal.value = Number(submissionResult.total) || 0
     completionTotal.value = Number(completionResult.total) || 0
   } catch (error) {
+    if (sequence !== requestSequence) return
     if (refresh || detail.value) notifications.error(error.message)
     else loadError.value = error.message
-  } finally { loading.value = false }
+  } finally {
+    if (sequence === requestSequence) loading.value = false
+  }
 }
 async function selectTab(tab) {
   activeTab.value = tab
@@ -138,6 +185,14 @@ onMounted(() => load())
       <button class="button-secondary" @click="goBack">返回统计列表</button>
       <button class="button-primary" @click="exportCsv">导出此采集员 CSV</button>
     </PageActions>
+    <section class="business-card detail-date-filter">
+      <div class="date-presets" aria-label="日期快捷选择">
+        <button v-for="[key,label] in presets" :key="key" type="button"
+          :class="{ 'is-active': activePreset === key }" @click="applyPreset(key)">{{ label }}</button>
+      </div>
+      <DateRangePicker ref="dateRangePicker" :from-date="fromDate" :to-date="toDate"
+        :today="today" @change="changeDateRange" />
+    </section>
     <AsyncState :loading="loading && !detail" :error="loadError" :empty="!detail" @retry="load">
       <StageSummaryPanel :summary="detail?.summary" />
       <SubmissionHourDistribution :values="detail?.summary?.submissionHourDistribution" />
@@ -179,5 +234,5 @@ onMounted(() => load())
 </template>
 
 <style scoped>
-.detail-page{display:grid;gap:18px}.day-section,.detail-list{padding:20px}.day-table{min-width:1060px}.day-table thead tr:first-child th{text-align:center;background:color-mix(in srgb,var(--primary) 5%,var(--card))}.detail-tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin:-4px 0 18px}.detail-tabs button{border:0;border-bottom:2px solid transparent;background:transparent;color:var(--muted-foreground);padding:11px 16px;font:inherit;cursor:pointer}.detail-tabs button.is-active{border-bottom-color:var(--primary);color:var(--foreground);font-weight:700}
+.detail-page{display:grid;gap:18px}.detail-date-filter{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 18px}.date-presets{display:flex;flex-wrap:wrap;gap:8px}.date-presets button{border:1px solid var(--border);border-radius:999px;background:var(--card);color:var(--muted-foreground);padding:8px 14px;font:inherit;cursor:pointer}.date-presets button.is-active{border-color:color-mix(in srgb,var(--primary) 42%,var(--border));background:color-mix(in srgb,var(--primary) 10%,var(--card));color:var(--primary);font-weight:700}.day-section,.detail-list{padding:20px}.day-table{min-width:1060px}.day-table thead tr:first-child th{text-align:center;background:color-mix(in srgb,var(--primary) 5%,var(--card))}.detail-tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin:-4px 0 18px}.detail-tabs button{border:0;border-bottom:2px solid transparent;background:transparent;color:var(--muted-foreground);padding:11px 16px;font:inherit;cursor:pointer}.detail-tabs button.is-active{border-bottom-color:var(--primary);color:var(--foreground);font-weight:700}@media(max-width:760px){.detail-date-filter{align-items:stretch;flex-direction:column}.date-presets{overflow-x:auto;flex-wrap:nowrap;padding-bottom:2px}.date-presets button{flex:0 0 auto}}
 </style>

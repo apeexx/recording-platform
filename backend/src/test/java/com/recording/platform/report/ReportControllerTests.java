@@ -92,6 +92,31 @@ class ReportControllerTests {
 	}
 
 	@Test
+	void exposesCollectorStageRangeAndCompletionPagination() {
+		ReportService service = mock(ReportService.class);
+		ReportController controller = new ReportController(service);
+		PlatformPrincipal collector = new PlatformPrincipal(
+			"s", "collector-1", null, "采集员", UserRole.COLLECTOR, SessionType.MINIPROGRAM, false
+		);
+		LocalDate from = LocalDate.of(2026, 7, 31);
+		LocalDate to = LocalDate.of(2026, 8, 1);
+		var report = new com.recording.platform.report.dto.CollectorTaskReport(
+			"task-1", "T000001", "普通话录音",
+			new com.recording.platform.report.dto.CollectorTaskReportSummary(0, 0, 0, 0, 0),
+			List.of(), List.of()
+		);
+		PageResponse<com.recording.platform.report.dto.CollectorTaskReportItem> page =
+			new PageResponse<>(List.of(), 0, 5, 0);
+		when(service.myTask("task-1", null, from, to, collector)).thenReturn(report);
+		when(service.myTaskCompletions("task-1", null, from, to, 0, 5, collector))
+			.thenReturn(page);
+
+		assertThat(controller.myTask("task-1", null, from, to, collector)).isSameAs(report);
+		assertThat(controller.myTaskCompletions("task-1", null, from, to, 0, 5, collector))
+			.isSameAs(page);
+	}
+
+	@Test
 	void exposesDateFilteredTaskReportAndCollectorRanking() {
 		ReportService service = mock(ReportService.class);
 		ReportController controller = new ReportController(service);

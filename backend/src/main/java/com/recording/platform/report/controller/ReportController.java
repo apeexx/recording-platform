@@ -135,9 +135,11 @@ public class ReportController {
 	public CollectorTaskReport myTask(
 		@org.springframework.web.bind.annotation.PathVariable String taskId,
 		@RequestParam(required = false) LocalDate date,
+		@RequestParam(required = false) LocalDate fromDate,
+		@RequestParam(required = false) LocalDate toDate,
 		@AuthenticationPrincipal PlatformPrincipal actor
 	) {
-		return reports.myTask(taskId, date, actor);
+		return reports.myTask(taskId, date, fromDate, toDate, actor);
 	}
 
 	public CollectorTaskReport myTask(String taskId, PlatformPrincipal actor) {
@@ -148,11 +150,28 @@ public class ReportController {
 	public PageResponse<CollectorTaskReportItem> myTaskSubmissions(
 		@org.springframework.web.bind.annotation.PathVariable String taskId,
 		@RequestParam(required = false) LocalDate date,
+		@RequestParam(required = false) LocalDate fromDate,
+		@RequestParam(required = false) LocalDate toDate,
 		@RequestParam(defaultValue = "0") int page,
 		@RequestParam(defaultValue = "20") int size,
 		@AuthenticationPrincipal PlatformPrincipal actor
 	) {
-		return reports.myTaskSubmissions(taskId, date, page, size, actor);
+		return reports.myTaskSubmissions(taskId, date, fromDate, toDate, page, size, actor);
+	}
+
+	@GetMapping("/me/tasks/{taskId}/completions")
+	public PageResponse<CollectorTaskReportItem> myTaskCompletions(
+		@org.springframework.web.bind.annotation.PathVariable String taskId,
+		@RequestParam(required = false) LocalDate date,
+		@RequestParam(required = false) LocalDate fromDate,
+		@RequestParam(required = false) LocalDate toDate,
+		@RequestParam(defaultValue = "0") int page,
+		@RequestParam(defaultValue = "20") int size,
+		@AuthenticationPrincipal PlatformPrincipal actor
+	) {
+		return reports.myTaskCompletions(
+			taskId, date, fromDate, toDate, page, size, actor
+		);
 	}
 
 	public PageResponse<CollectorTaskReportItem> myTaskSubmissions(
