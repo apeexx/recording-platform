@@ -11,6 +11,7 @@ vi.mock('../lib/httpClient.js', () => ({
 import { httpRequest } from '../lib/httpClient.js'
 import { reviewApi } from '../lib/reviewApi.js'
 import ReviewQueuePage from '../pages/admin/review/ReviewQueuePage.vue'
+import ReviewTaskSelectPage from '../pages/admin/review/ReviewTaskSelectPage.vue'
 
 describe('审核页面 API', () => {
   beforeEach(() => vi.clearAllMocks())
@@ -96,6 +97,44 @@ describe('审核页面 API', () => {
     await reviewApi.taskSummary('task-1')
     expect(httpRequest).toHaveBeenNthCalledWith(1, '/api/reviews/tasks')
     expect(httpRequest).toHaveBeenNthCalledWith(2, '/api/reviews/tasks/task-1/summary')
+  })
+
+  it('审核入口请求已清空任务并在零积压时保留真实概览', async () => {
+    window.matchMedia = vi.fn(() => ({
+      matches: true,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }))
+    httpRequest.mockResolvedValue([{
+      taskId: 'task-1',
+      taskCode: 'T000001',
+      taskName: '已完成任务',
+      pendingCount: 0,
+      effectiveItemCount: 10,
+      completedCount: 10,
+      reviewEnteredCount: 10,
+      reviewProcessedCount: 10,
+      submittedCount: 0,
+      reviewPendingCount: 0,
+      todayCompletedCount: 4,
+    }])
+
+    const wrapper = mount(ReviewTaskSelectPage, {
+      global: {
+        stubs: {
+          PageActions: { template: '<header><slot /></header>' },
+          RouterLink: { template: '<a><slot /></a>' },
+        },
+      },
+    })
+    await flushPromises()
+
+    expect(httpRequest).toHaveBeenCalledWith('/api/reviews/tasks?includeCleared=true')
+    expect(wrapper.text()).toContain('今日完成')
+    expect(wrapper.text()).toContain('4')
+    expect(wrapper.text()).toContain('所有审核积压已处理完成')
+    expect(wrapper.findAll('.review-task-card')).toHaveLength(0)
+    wrapper.unmount()
   })
 
   it('审核人员候选使用审核域接口而不是管理员用户搜索', async () => {

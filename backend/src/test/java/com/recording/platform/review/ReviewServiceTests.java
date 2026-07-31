@@ -79,6 +79,29 @@ class ReviewServiceTests {
 	}
 
 	@Test
+	void reviewTaskSummariesCanIncludeClearedHumanReviewTasksWithoutIncludingAutomaticTasks() {
+		TaskItemStore items = mock(TaskItemStore.class);
+		TaskStore tasks = mock(TaskStore.class);
+		TaskRecord backlog = task("task-1", "T000002", "有积压");
+		TaskRecord cleared = task("task-2", "T000001", "已清空");
+		TaskRecord automatic = task("task-3", "T000003", "免审核");
+		automatic.getConfiguration().setHumanReviewEnabled(false);
+		when(tasks.findAll(any())).thenReturn(new PageImpl<>(List.of(cleared, automatic, backlog)));
+		when(items.reviewTaskMetrics(any(), any(), any())).thenReturn(List.of(
+			new ReviewTaskMetrics("task-1", 12, 5, 8, 6, 2, 1, 3),
+			new ReviewTaskMetrics("task-2", 9, 9, 9, 9, 0, 0, 4),
+			new ReviewTaskMetrics("task-3", 7, 7, 7, 7, 0, 0, 5)
+		));
+		ReviewService service = new ReviewService(items, tasks, CLOCK);
+
+		var summaries = service.tasks(admin(), true);
+
+		assertThat(summaries).extracting("taskId").containsExactly("task-1", "task-2");
+		assertThat(summaries.get(1).pendingCount()).isZero();
+		assertThat(summaries.get(1).todayCompletedCount()).isEqualTo(4);
+	}
+
+	@Test
 	void singleTaskSummaryReturnsMetricsAndMissingTaskUsesExistingNotFoundError() {
 		TaskItemStore items = mock(TaskItemStore.class);
 		TaskStore tasks = mock(TaskStore.class);
@@ -599,6 +622,7 @@ class ReviewServiceTests {
 		task.setId(id);
 		task.setTaskCode(code);
 		task.setName(name);
+		task.setConfiguration(reviewVersion());
 		return task;
 	}
 

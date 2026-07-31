@@ -466,11 +466,11 @@ Web 数据大屏使用仅 ADMIN 可访问的 `GET /api/reports/dashboard`，返�
 ```text
 请求方法：GET / POST
 请求路径：/api/reviews/tasks、/api/reviews/tasks/{taskId}/summary|pool|filter-users|claim|claim-batch、/api/reviews/{itemId}/claim|release|approve|reject、/api/reviews/assign、/api/reviews/batch/claim|assign|approve
-请求参数：审核池支持可重复 itemCode、status=SUBMITTED|REVIEW_PENDING、collectorId、reviewerId、result，以及 itemCodeQuery、includeUnassignedReviewer；filter-users 仅接受 role=COLLECTOR|REVIEWER 和可选 query，并只从当前角色可见条目生成候选；领取头或请求体 operationId/Idempotency-Key；指定领取、释放和决定携带 expectedRevision；单条/批量分配携带 reviewerId；所选条目批量领取与分配携带 operationId 和最多 100 个 itemId/expectedRevision；通过的 text 表示审核最终答案；驳回携带 reasons/note
+请求参数：审核任务列表支持可选 includeCleared=false；审核池支持可重复 itemCode、status=SUBMITTED|REVIEW_PENDING、collectorId、reviewerId、result，以及 itemCodeQuery、includeUnassignedReviewer；filter-users 仅接受 role=COLLECTOR|REVIEWER 和可选 query，并只从当前角色可见条目生成候选；领取头或请求体 operationId/Idempotency-Key；指定领取、释放和决定携带 expectedRevision；单条/批量分配携带 reviewerId；所选条目批量领取与分配携带 operationId 和最多 100 个 itemId/expectedRevision；通过的 text 表示审核最终答案；驳回携带 reasons/note
 响应结构：任务审核摘要固定包含 pendingCount、effectiveItemCount、completedCount、reviewEnteredCount、reviewProcessedCount、submittedCount、reviewPendingCount、todayCompletedCount；TaskItem、审核池分页或逐条批量结果
 错误码：404 NO_REVIEW_ITEM；409 STALE_STATE；422 INVALID_REVIEWER/INVALID_BATCH_SIZE/审核内容错误
 权限要求：ADMIN/REVIEWER 可查看审核池并领取指定条目；按数量随机批量领取仅 REVIEWER；所选条目批量领取允许 ADMIN/REVIEWER；分配和批量通过仅 ADMIN；ADMIN/REVIEWER 只有作为当前 reviewerId 时才能释放，决定必须已有审核领取或分配
-数据一致性要求：审核任务列表仅返回 pendingCount 大于零的任务，按积压降序、taskCode 稳定排序；pendingCount 固定等于 submittedCount + reviewPendingCount。审核汇总使用一次 Mongo 聚合：effectiveItemCount 排除 DISCARDED，reviewEnteredCount 要求存在 firstSubmittedAt 且当前非 AVAILABLE/DISCARDED，reviewProcessedCount 为前述范围内当前 COMPLETED/REWORK_PENDING，todayCompletedCount 按 Asia/Shanghai 当天 firstCompletedAt 且当前仍 COMPLETED。审核筛选始终与角色可见范围 AND 组合，并同步用于跨页预览、快照和执行；领取和分配只处理 SUBMITTED 并原子转 REVIEW_PENDING；释放原子回到 SUBMITTED；审核通过保留 currentResult 并单独写 reviewFinalAnswer；所选条目批量操作按输入顺序返回逐条成功/失败结果
+数据一致性要求：审核任务列表默认仅返回 pendingCount 大于零的任务；includeCleared=true 时返回全部启用人工审核的任务，包括零积压任务。两种模式均按积压降序、taskCode 稳定排序；pendingCount 固定等于 submittedCount + reviewPendingCount。审核入口使用包含已清空任务的汇总保持整体进度和今日完成真实，但只把 pendingCount 大于零的任务渲染为待办卡。审核汇总使用一次 Mongo 聚合：effectiveItemCount 排除 DISCARDED，reviewEnteredCount 要求存在 firstSubmittedAt 且当前非 AVAILABLE/DISCARDED，reviewProcessedCount 为前述范围内当前 COMPLETED/REWORK_PENDING，todayCompletedCount 按 Asia/Shanghai 当天 firstCompletedAt 且当前仍 COMPLETED。审核筛选始终与角色可见范围 AND 组合，并同步用于跨页预览、快照和执行；领取和分配只处理 SUBMITTED 并原子转 REVIEW_PENDING；释放原子回到 SUBMITTED；审核通过保留 currentResult 并单独写 reviewFinalAnswer；所选条目批量操作按输入顺序返回逐条成功/失败结果
 前端调用位置：apps/web/src/lib/reviewApi.js、apps/web/src/pages/admin/review/*
 ```
 

@@ -3,7 +3,9 @@ import { queryString } from './apiUtils.js'
 import { buildReviewPoolQuery } from './reviewFilters.js'
 const e = encodeURIComponent
 export const reviewApi = {
-  tasks() { return httpRequest('/api/reviews/tasks') },
+  tasks(includeCleared = false) {
+    return httpRequest(`/api/reviews/tasks${queryString(includeCleared ? { includeCleared: true } : {})}`)
+  },
   taskSummary(taskId) { return httpRequest(`/api/reviews/tasks/${e(taskId)}/summary`) },
   pool(taskId, page = 0, size = 20, filters = {}) { return httpRequest(`/api/reviews/tasks/${e(taskId)}/pool${buildReviewPoolQuery(page, size, filters)}`) },
   filterUsers(taskId, role, query = '') { return httpRequest(`/api/reviews/tasks/${e(taskId)}/filter-users${queryString({ role, query })}`) },

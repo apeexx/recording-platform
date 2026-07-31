@@ -86,6 +86,10 @@ public class ReviewService {
 	}
 
 	public List<ReviewTaskSummary> tasks(PlatformPrincipal actor) {
+		return tasks(actor, false);
+	}
+
+	public List<ReviewTaskSummary> tasks(PlatformPrincipal actor, boolean includeCleared) {
 		requireReviewAccess(actor);
 		if (tasks == null) return List.of();
 		List<TaskRecord> allTasks = tasks.findAll(Pageable.unpaged()).getContent();
@@ -93,8 +97,10 @@ public class ReviewService {
 			allTasks.stream().map(TaskRecord::getId).toList()
 		);
 		return allTasks.stream()
+			.filter(task -> !includeCleared || task.getConfiguration() != null
+				&& task.getConfiguration().isHumanReviewEnabled())
 			.map(task -> summary(task, metrics.get(task.getId())))
-			.filter(summary -> summary.pendingCount() > 0)
+			.filter(summary -> includeCleared || summary.pendingCount() > 0)
 			.sorted(Comparator.comparingLong(ReviewTaskSummary::pendingCount).reversed()
 				.thenComparing(ReviewTaskSummary::taskCode))
 			.toList();

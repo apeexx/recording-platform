@@ -61,8 +61,9 @@ public class ReviewController {
 
 	@GetMapping("/tasks")
 	public List<com.recording.platform.review.service.ReviewTaskSummary> tasks(
+		@RequestParam(defaultValue = "false") boolean includeCleared,
 		@AuthenticationPrincipal PlatformPrincipal actor
-	) { return reviews.tasks(actor); }
+	) { return reviews.tasks(actor, includeCleared); }
 
 	@GetMapping("/tasks/{taskId}/summary")
 	public com.recording.platform.review.service.ReviewTaskSummary taskSummary(
