@@ -8,6 +8,7 @@
       <picker mode="selector" range="{{taskNames}}" value="{{selectedTaskIndex}}" bindchange="taskChange">
         <view class="task-picker">{{taskNames[selectedTaskIndex]}}<text>⌄</text></view>
       </picker>
+      <view class="subtle">业务日按 Asia/Shanghai 04:00 至次日 04:00 统计</view>
       <view class="date-filter">
         <picker mode="date" value="{{selectedDate}}" bindchange="dateChange">
           <view class="date-picker">{{selectedDate||'全部日期'}}<text>选择日期 ›</text></view>

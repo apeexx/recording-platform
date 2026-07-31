@@ -118,7 +118,9 @@ class MongoReportQueryStoreTests {
 		assertEquals(3, result.submissions().count());
 		assertEquals(2, result.completions().count());
 		assertEquals(24, result.submissionHourDistribution().size());
-		assertEquals(2, result.submissionHourDistribution().get(9).count());
+		assertEquals(4, result.submissionHourDistribution().get(0).hour());
+		assertEquals(3, result.submissionHourDistribution().get(23).hour());
+		assertEquals(2, result.submissionHourDistribution().get(5).count());
 		@SuppressWarnings("rawtypes")
 		ArgumentCaptor<List> pipelines = ArgumentCaptor.forClass(List.class);
 		verify(items, org.mockito.Mockito.times(3)).aggregate(pipelines.capture());

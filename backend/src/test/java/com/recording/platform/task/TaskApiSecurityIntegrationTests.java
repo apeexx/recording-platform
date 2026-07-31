@@ -150,9 +150,9 @@ class TaskApiSecurityIntegrationTests {
 		verify(taskItemCsvExportService).write(eq("task-1"), filter.capture(), any(java.io.OutputStream.class));
 		org.assertj.core.api.Assertions.assertThat(filter.getValue().sourceItemIdQuery()).isEqualTo("script.+");
 		org.assertj.core.api.Assertions.assertThat(filter.getValue().firstSubmittedFrom())
-			.isEqualTo(Instant.parse("2026-07-28T16:00:00Z"));
+			.isEqualTo(Instant.parse("2026-07-28T20:00:00Z"));
 		org.assertj.core.api.Assertions.assertThat(filter.getValue().firstSubmittedTo())
-			.isEqualTo(Instant.parse("2026-07-30T16:00:00Z"));
+			.isEqualTo(Instant.parse("2026-07-30T20:00:00Z"));
 
 		mockMvc.perform(get("/api/tasks/task-1/items/export.csv")
 				.with(user("reviewer").roles("REVIEWER")))

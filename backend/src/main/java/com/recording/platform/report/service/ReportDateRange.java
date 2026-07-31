@@ -1,14 +1,12 @@
 package com.recording.platform.report.service;
 
 import com.recording.platform.api.ApiException;
+import com.recording.platform.time.BusinessDayPolicy;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneId;
 import org.springframework.http.HttpStatus;
 
 public record ReportDateRange(Instant fromInclusive, Instant toExclusive) {
-	private static final ZoneId REPORT_ZONE = ZoneId.of("Asia/Shanghai");
-
 	public static ReportDateRange of(LocalDate fromDate, LocalDate toDate) {
 		if (fromDate != null && toDate != null && fromDate.isAfter(toDate)) {
 			throw new ApiException(
@@ -18,8 +16,8 @@ public record ReportDateRange(Instant fromInclusive, Instant toExclusive) {
 			);
 		}
 		return new ReportDateRange(
-			fromDate == null ? null : fromDate.atStartOfDay(REPORT_ZONE).toInstant(),
-			toDate == null ? null : toDate.plusDays(1).atStartOfDay(REPORT_ZONE).toInstant()
+			fromDate == null ? null : BusinessDayPolicy.start(fromDate),
+			toDate == null ? null : BusinessDayPolicy.endExclusive(toDate)
 		);
 	}
 }

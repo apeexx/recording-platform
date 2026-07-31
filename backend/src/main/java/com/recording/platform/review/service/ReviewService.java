@@ -20,9 +20,9 @@ import com.recording.platform.task.store.ReviewReleaseMutation;
 import com.recording.platform.task.store.TaskItemStore;
 import com.recording.platform.task.store.TaskStore;
 import com.recording.platform.task.store.ReviewTaskMetrics;
+import com.recording.platform.time.BusinessDayPolicy;
 import java.time.Clock;
 import java.time.Instant;
-import java.time.ZoneId;
 import java.util.UUID;
 import java.util.List;
 import org.springframework.http.HttpStatus;
@@ -115,10 +115,9 @@ public class ReviewService {
 
 	private Map<String, ReviewTaskMetrics> metricsByTask(List<String> taskIds) {
 		if (taskIds.isEmpty()) return Map.of();
-		ZoneId shanghai = ZoneId.of("Asia/Shanghai");
-		var today = java.time.LocalDate.now(clock.withZone(shanghai));
-		Instant todayStart = today.atStartOfDay(shanghai).toInstant();
-		Instant tomorrowStart = today.plusDays(1).atStartOfDay(shanghai).toInstant();
+		var today = BusinessDayPolicy.currentDate(clock);
+		Instant todayStart = BusinessDayPolicy.start(today);
+		Instant tomorrowStart = BusinessDayPolicy.endExclusive(today);
 		return items.reviewTaskMetrics(taskIds, todayStart, tomorrowStart).stream()
 			.collect(Collectors.toMap(ReviewTaskMetrics::taskId, Function.identity()));
 	}

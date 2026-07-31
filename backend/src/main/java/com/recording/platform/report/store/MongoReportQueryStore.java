@@ -20,13 +20,13 @@ import com.recording.platform.report.dto.DashboardTaskCounts;
 import com.recording.platform.report.dto.DashboardTaskRanking;
 import com.recording.platform.report.dto.DashboardTrendPoint;
 import com.recording.platform.task.model.TaskItemStatus;
+import com.recording.platform.time.BusinessDayPolicy;
 import com.mongodb.client.MongoCollection;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.time.LocalDate;
-import java.time.ZoneId;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -65,7 +65,6 @@ public class MongoReportQueryStore implements ReportQueryStore {
 		Map<LocalDate, long[]> daily = new HashMap<>();
 		Map<String, long[]> ranking = new HashMap<>();
 		HashSet<String> collectors = new HashSet<>();
-		ZoneId zone = ZoneId.of("Asia/Shanghai");
 		long todayCount = 0;
 		for (Document item : items.find().projection(new Document(
 			"taskId", 1
@@ -80,7 +79,7 @@ public class MongoReportQueryStore implements ReportQueryStore {
 			long duration = audio == null ? 0 : number(audio.get("durationMillis"));
 			Object firstValue = item.get("firstSubmittedAt");
 			if (firstValue instanceof Date first) {
-				LocalDate date = first.toInstant().atZone(zone).toLocalDate();
+				LocalDate date = BusinessDayPolicy.dateOf(first.toInstant());
 				if (!date.isBefore(fromDate) && !date.isAfter(today)) {
 					long[] point = daily.computeIfAbsent(date, ignored -> new long[2]);
 					point[0]++;
@@ -292,10 +291,8 @@ public class MongoReportQueryStore implements ReportQueryStore {
 	public Optional<CollectorTaskReport> collectorTaskReport(
 		String collectorId, String taskId, LocalDate date
 	) {
-		Instant fromInclusive = date == null ? null
-			: date.atStartOfDay(java.time.ZoneId.of("Asia/Shanghai")).toInstant();
-		Instant toExclusive = date == null ? null
-			: date.plusDays(1).atStartOfDay(java.time.ZoneId.of("Asia/Shanghai")).toInstant();
+		Instant fromInclusive = date == null ? null : BusinessDayPolicy.start(date);
+		Instant toExclusive = date == null ? null : BusinessDayPolicy.endExclusive(date);
 		return collectorTaskReport(collectorId, taskId, fromInclusive, toExclusive);
 	}
 
@@ -333,10 +330,7 @@ public class MongoReportQueryStore implements ReportQueryStore {
 		List<Document> dayPipeline = List.of(
 			new Document("$match", collectorMatch(collectorId, taskId, fromInclusive, toExclusive)),
 			new Document("$project", new Document()
-				.append("date", new Document("$dateToString", new Document()
-					.append("format", "%Y-%m-%d")
-					.append("date", "$firstSubmittedAt")
-					.append("timezone", "Asia/Shanghai")))
+				.append("date", businessDateExpression("firstSubmittedAt"))
 				.append("recordingDurationMillis", new Document(
 					"$ifNull", List.of("$currentResult.audio.durationMillis", 0)
 				))
@@ -398,10 +392,8 @@ public class MongoReportQueryStore implements ReportQueryStore {
 	public Page<CollectorTaskReportItem> findCollectorTaskSubmissions(
 		String collectorId, String taskId, LocalDate date, Pageable pageable
 	) {
-		Instant fromInclusive = date == null ? null
-			: date.atStartOfDay(java.time.ZoneId.of("Asia/Shanghai")).toInstant();
-		Instant toExclusive = date == null ? null
-			: date.plusDays(1).atStartOfDay(java.time.ZoneId.of("Asia/Shanghai")).toInstant();
+		Instant fromInclusive = date == null ? null : BusinessDayPolicy.start(date);
+		Instant toExclusive = date == null ? null : BusinessDayPolicy.endExclusive(date);
 		return findCollectorTaskSubmissions(
 			collectorId, taskId, fromInclusive, toExclusive, pageable
 		);
@@ -611,7 +603,8 @@ public class MongoReportQueryStore implements ReportQueryStore {
 			if (hour >= 0 && hour < 24) hours[hour] = number(row, "count");
 		}
 		List<SubmissionHourBucket> distribution = new ArrayList<>(24);
-		for (int hour = 0; hour < 24; hour++) {
+		for (int index = 0; index < 24; index++) {
+			int hour = (index + 4) % 24;
 			distribution.add(new SubmissionHourBucket(hour, hours[hour]));
 		}
 		return new StageReportSummary(submissions, completions, List.copyOf(distribution));
@@ -742,10 +735,8 @@ public class MongoReportQueryStore implements ReportQueryStore {
 	private Map<LocalDate, StageMetrics> aggregateDailyStage(Document match, String dateField) {
 		List<Document> pipeline = List.of(
 			new Document("$match", match),
-			new Document("$project", new Document("date", new Document(
-				"$dateToString", new Document("format", "%Y-%m-%d")
-					.append("date", "$" + dateField).append("timezone", "Asia/Shanghai")
-			)).append("recordingDurationMillis", new Document(
+			new Document("$project", new Document("date", businessDateExpression(dateField))
+				.append("recordingDurationMillis", new Document(
 				"$ifNull", List.of("$currentResult.audio.durationMillis", 0)
 			)).append("referenceAudioDurationMillis", new Document(
 				"$ifNull", List.of("$referenceAudioDurationMillis", 0)
@@ -759,6 +750,13 @@ public class MongoReportQueryStore implements ReportQueryStore {
 			result.put(LocalDate.parse(row.getString("_id")), stageMetrics(row));
 		}
 		return result;
+	}
+
+	private Document businessDateExpression(String dateField) {
+		return new Document("$dateToString", new Document("format", "%Y-%m-%d")
+			.append("date", new Document("$dateSubtract", new Document("startDate", "$" + dateField)
+				.append("unit", "hour").append("amount", 4)))
+			.append("timezone", "Asia/Shanghai"));
 	}
 
 	private Document stageGroup(Object id) {

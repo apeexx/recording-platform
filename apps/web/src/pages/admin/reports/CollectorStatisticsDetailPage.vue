@@ -134,7 +134,7 @@ onMounted(() => load())
 <template>
   <section class="admin-page detail-page">
     <PageActions :title="detail?.collectorName || '采集员详情'"
-      :description="`${detail?.collectorId || collectorId} · ${detail?.taskCode || ''} ${detail?.taskName || ''}`">
+      :description="`${detail?.collectorId || collectorId} · ${detail?.taskCode || ''} ${detail?.taskName || ''} · 业务日按 Asia/Shanghai 04:00 至次日 04:00 统计`">
       <button class="button-secondary" @click="goBack">返回统计列表</button>
       <button class="button-primary" @click="exportCsv">导出此采集员 CSV</button>
     </PageActions>

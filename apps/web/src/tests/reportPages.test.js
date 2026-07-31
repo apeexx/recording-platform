@@ -81,5 +81,8 @@ describe('统计与操作记录 API', () => {
     expect(cards).toContain('提交统计')
     expect(cards).toContain('完成统计')
     expect(hours).toContain('24 小时首次提交分布')
+    expect(hours).toContain('(index + 4) % 24')
+    expect(hours).toContain('04:00 至次日 04:00')
+    expect(collector).toContain("from '../../../lib/businessDate.js'")
   })
 })

@@ -6,6 +6,7 @@ import PageActions from '../../../components/admin/PageActions.vue'
 import PaginationControls from '../../../components/admin/PaginationControls.vue'
 import TaskBatchActionMenu from '../../../components/admin/TaskBatchActionMenu.vue'
 import TaskItemFilters from '../../../components/admin/TaskItemFilters.vue'
+import HelpPopover from '../../../components/form/HelpPopover.vue'
 import { taskApi } from '../../../lib/taskApi.js'
 import { batchOperationApi } from '../../../lib/batchOperationApi.js'
 import { operationId } from '../../../lib/apiUtils.js'
@@ -392,9 +393,18 @@ onBeforeUnmount(() => { stopImportTracking(); clearBatchPoll() })
         <div class="task-tools-column">
           <form class="business-card business-form" novalidate @submit.prevent="add">
             <h3>添加数据</h3>
-            <label v-if="task?.configuration?.referenceTypes?.includes('TEXT')">参考文字<textarea v-model.trim="itemForm.referenceText" class="task-reference-textarea" rows="5" /></label>
-            <label v-if="task?.configuration?.referenceTypes?.includes('AUDIO')">参考音频 URL<input v-model.trim="itemForm.referenceAudioUrl" type="url" /></label>
-            <label v-if="task?.configuration?.referenceTypes?.includes('VIDEO')">参考视频 URL<input v-model.trim="itemForm.referenceVideoUrl" type="url" /></label>
+            <div v-if="task?.configuration?.referenceTypes?.includes('TEXT')" class="task-reference-field">
+              <div class="task-reference-field-heading"><label for="new-reference-text">参考文字</label><HelpPopover label="参考文字说明" content="提供给采集员查看或朗读的参考内容；是否必填由当前任务启用的参考类型决定。" /></div>
+              <textarea id="new-reference-text" v-model.trim="itemForm.referenceText" class="task-reference-textarea" rows="5" />
+            </div>
+            <div v-if="task?.configuration?.referenceTypes?.includes('AUDIO')" class="task-reference-field">
+              <div class="task-reference-field-heading"><label for="new-reference-audio">参考音频 URL</label><HelpPopover label="参考音频 URL 说明" content="填写采集员用于参考播放的绝对 HTTPS 地址。系统保存地址，不主动下载或探测远端文件。" /></div>
+              <input id="new-reference-audio" v-model.trim="itemForm.referenceAudioUrl" type="url" />
+            </div>
+            <div v-if="task?.configuration?.referenceTypes?.includes('VIDEO')" class="task-reference-field">
+              <div class="task-reference-field-heading"><label for="new-reference-video">参考视频 URL</label><HelpPopover label="参考视频 URL 说明" content="填写采集员用于参考播放的绝对 HTTPS 地址。系统保存地址，不主动下载或探测远端文件。" /></div>
+              <input id="new-reference-video" v-model.trim="itemForm.referenceVideoUrl" type="url" />
+            </div>
             <p class="business-note">条目编号由系统自动生成；仅显示任务启用的参考内容。</p>
             <button class="button-primary">添加</button>
           </form>
@@ -473,6 +483,7 @@ onBeforeUnmount(() => { stopImportTracking(); clearBatchPoll() })
 </template>
 
 <style scoped>
+.task-reference-field{display:grid;gap:8px}.task-reference-field-heading{display:flex;align-items:center;gap:7px}.task-reference-field-heading label{font-weight:700}.task-reference-field>input,.task-reference-field>textarea{width:100%;box-sizing:border-box}
 .table-row-actions{display:flex;align-items:center;gap:3px;white-space:nowrap}
 .source-binding{display:grid;max-width:220px}.source-binding small{color:var(--muted-foreground)}.source-binding button{overflow:hidden;text-overflow:ellipsis;text-align:left}
 </style>

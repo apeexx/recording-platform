@@ -242,6 +242,10 @@ describe('任务页面 API', () => {
     expect(detail).toContain('@click="deleteTask">删除任务')
     expect(detail).toContain('colored-checkbox')
     expect(detail).toContain('task-reference-textarea')
+    expect(detail).toContain('参考文字说明')
+    expect(detail).toContain('参考音频 URL 说明')
+    expect(detail).toContain('参考视频 URL 说明')
+    expect(detail).toContain('class="task-reference-field-heading"')
   })
 
   it('任务和条目删除及条目编辑使用幂等真实接口', async () => {

@@ -36,25 +36,25 @@ class ReportServiceTests {
 		TaskItemStore items = mock(TaskItemStore.class);
 		ReportQueryStore queries = mock(ReportQueryStore.class);
 		Clock clock = Clock.fixed(
-			Instant.parse("2026-07-28T02:00:00Z"), ZoneId.of("Asia/Shanghai")
+			Instant.parse("2026-07-27T19:00:00Z"), ZoneId.of("Asia/Shanghai")
 		);
 		var expected = new com.recording.platform.report.dto.DashboardReport(
 			new com.recording.platform.report.dto.DashboardTaskCounts(4, 1, 1, 1, 1),
 			new com.recording.platform.report.dto.DashboardItemCounts(12, 2, 2, 1, 1, 1, 4, 1),
 			3, 2,
 			List.of(new com.recording.platform.report.dto.DashboardTrendPoint(
-				LocalDate.of(2026, 7, 28), 2, 8_000
+				LocalDate.of(2026, 7, 27), 2, 8_000
 			)),
 			List.of(),
 			Instant.EPOCH
 		);
 		when(queries.dashboard(
-			LocalDate.of(2026, 7, 22), LocalDate.of(2026, 7, 28)
+			LocalDate.of(2026, 7, 21), LocalDate.of(2026, 7, 27)
 		)).thenReturn(expected);
 		ReportService service = new ReportService(items, queries, null, clock);
 
 		assertThat(service.dashboard(admin()).generatedAt())
-			.isEqualTo(Instant.parse("2026-07-28T02:00:00Z"));
+			.isEqualTo(Instant.parse("2026-07-27T19:00:00Z"));
 		assertThatThrownBy(() -> service.dashboard(collector()))
 			.isInstanceOfSatisfying(com.recording.platform.api.ApiException.class,
 				error -> assertThat(error.getCode()).isEqualTo("ACCESS_DENIED"));
@@ -66,8 +66,8 @@ class ReportServiceTests {
 		var expected = new com.recording.platform.report.dto.WorkSummary(
 			2, 3_000, 1, 2_000, 0, 0, 2, 1, 2_000, 9_000, 4_000
 		);
-		Instant from = Instant.parse("2026-07-26T16:00:00Z");
-		Instant to = Instant.parse("2026-07-27T16:00:00Z");
+		Instant from = Instant.parse("2026-07-26T20:00:00Z");
+		Instant to = Instant.parse("2026-07-27T20:00:00Z");
 		when(queries.aggregateWork("collector-1", "task-1", from, to)).thenReturn(expected);
 		ReportService service = new ReportService(items, queries);
 
@@ -92,8 +92,8 @@ class ReportServiceTests {
 	void taskCollectorRankingPassesAscendingDirectionToStore() {
 		TaskItemStore items = mock(TaskItemStore.class);
 		ReportQueryStore queries = mock(ReportQueryStore.class);
-		Instant from = Instant.parse("2026-07-26T16:00:00Z");
-		Instant to = Instant.parse("2026-07-27T16:00:00Z");
+		Instant from = Instant.parse("2026-07-26T20:00:00Z");
+		Instant to = Instant.parse("2026-07-27T20:00:00Z");
 		when(queries.findCollectorRankings(
 			"task-1", from, to, "submissionCount", Sort.Direction.ASC, PageRequest.of(0, 20)
 		)).thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
@@ -256,8 +256,8 @@ class ReportServiceTests {
 	void adminCollectorTaskDetailUsesInclusiveShanghaiDateRange() {
 		TaskItemStore items = mock(TaskItemStore.class);
 		ReportQueryStore queries = mock(ReportQueryStore.class);
-		Instant from = Instant.parse("2026-07-26T16:00:00Z");
-		Instant to = Instant.parse("2026-07-28T16:00:00Z");
+		Instant from = Instant.parse("2026-07-26T20:00:00Z");
+		Instant to = Instant.parse("2026-07-28T20:00:00Z");
 		var report = new com.recording.platform.report.dto.CollectorTaskReport(
 			"task-1", "T000001", "普通话录音",
 			new com.recording.platform.report.dto.CollectorTaskReportSummary(2, 1, 12_000, 0, 30_000),
@@ -289,13 +289,14 @@ class ReportServiceTests {
 	void adminReportsExposeIndependentSubmissionAndCompletionStages() {
 		TaskItemStore items = mock(TaskItemStore.class);
 		ReportQueryStore queries = mock(ReportQueryStore.class);
-		Instant from = Instant.parse("2026-07-26T16:00:00Z");
-		Instant to = Instant.parse("2026-07-28T16:00:00Z");
+		Instant from = Instant.parse("2026-07-26T20:00:00Z");
+		Instant to = Instant.parse("2026-07-28T20:00:00Z");
 		var submissions = new com.recording.platform.report.dto.StageMetrics(3, 12_000, 30_000, 8_000);
 		var completions = new com.recording.platform.report.dto.StageMetrics(2, 9_000, 20_000, 4_000);
 		var summary = new com.recording.platform.report.dto.StageReportSummary(
 			submissions, completions,
 			java.util.stream.IntStream.range(0, 24)
+				.map(index -> (index + 4) % 24)
 				.mapToObj(hour -> new com.recording.platform.report.dto.SubmissionHourBucket(
 					hour, hour == 9 ? 2 : 0
 				)).toList()

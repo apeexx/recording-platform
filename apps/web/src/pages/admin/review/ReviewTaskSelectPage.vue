@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import AsyncState from '../../../components/admin/AsyncState.vue'
 import PageActions from '../../../components/admin/PageActions.vue'
+import HelpPopover from '../../../components/form/HelpPopover.vue'
 import { reviewApi } from '../../../lib/reviewApi.js'
 
 const rows = ref([])
@@ -35,12 +36,14 @@ const slides = computed(() => [
     value: totals.value.completedCount,
     total: totals.value.effectiveItemCount,
     description: '已完成条目 / 当前有效条目',
+    help: '任务完成度 = 已完成 ÷ 非废弃条目。非废弃条目包含除已废弃外的当前任务数据。',
   },
   {
     title: '审核处理进度',
     value: totals.value.reviewProcessedCount,
     total: totals.value.reviewEnteredCount,
     description: '已处理审核 / 已进入审核流程',
+    help: '审核处理进度 =（返修中 + 已完成）÷（已提交 + 审核中 + 返修中 + 已完成）。',
   },
 ])
 
@@ -94,7 +97,7 @@ onBeforeUnmount(clearTimer)
           @pointerdown="beginDrag" @pointerup="endDrag">
           <button type="button" aria-label="上一项" @click="showSlide(slide - 1, true)">‹</button>
           <div class="review-progress-slide">
-            <span>{{ slides[slide].title }}</span>
+            <span class="review-help-heading">{{ slides[slide].title }} <HelpPopover :label="`${slides[slide].title}说明`" :content="slides[slide].help" /></span>
             <strong>{{ percent(slides[slide].value, slides[slide].total) }}%</strong>
             <p>{{ slides[slide].description }} · {{ slides[slide].value }} / {{ slides[slide].total }}</p>
             <div><i :style="{ width: `${percent(slides[slide].value, slides[slide].total)}%` }"></i></div>
@@ -108,15 +111,15 @@ onBeforeUnmount(clearTimer)
         </section>
 
         <section class="review-overview-grid" aria-label="审核概览">
-          <article><span>当前积压</span><strong>{{ totals.pendingCount }}</strong><small>等待处理的全部条目</small></article>
-          <article><span>待领取</span><strong>{{ totals.submittedCount }}</strong><small>尚未进入审核中的条目</small></article>
-          <article><span>审核中</span><strong>{{ totals.reviewPendingCount }}</strong><small>已被领取的审核条目</small></article>
-          <article><span>今日完成</span><strong>{{ totals.todayCompletedCount }}</strong><small>今日首次完成的条目</small></article>
+          <article><span class="review-help-heading">当前积压 <HelpPopover label="当前积压说明" content="当前积压 = 已提交 + 审核中，是目前仍等待审核处理的全部条目。" /></span><strong>{{ totals.pendingCount }}</strong><small>等待处理的全部条目</small></article>
+          <article><span class="review-help-heading">待领取 <HelpPopover label="待领取说明" content="待领取 = 当前状态为已提交（SUBMITTED）的条目，尚未被审核员领取。" /></span><strong>{{ totals.submittedCount }}</strong><small>尚未进入审核中的条目</small></article>
+          <article><span class="review-help-heading">审核中 <HelpPopover label="审核中说明" content="审核中 = 当前状态为审核中（REVIEW_PENDING）的条目，已被审核员领取。" /></span><strong>{{ totals.reviewPendingCount }}</strong><small>已被领取的审核条目</small></article>
+          <article><span class="review-help-heading">今日完成 <HelpPopover label="今日完成说明" content="今日完成 = 当前仍为已完成，且首次完成时间位于当前业务日（Asia/Shanghai 04:00 至次日 04:00）的条目。" /></span><strong>{{ totals.todayCompletedCount }}</strong><small>当前业务日首次完成的条目</small></article>
         </section>
       </section>
 
       <section class="review-task-grid">
-        <router-link v-for="row in backlogRows" :key="row.taskId" class="business-card review-task-card" :to="`/admin/review/tasks/${row.taskId}`">
+        <article v-for="row in backlogRows" :key="row.taskId" class="business-card review-task-card">
           <div class="review-task-header">
             <div class="review-task-identity">
               <span>{{ row.taskCode }}</span>
@@ -126,19 +129,19 @@ onBeforeUnmount(clearTimer)
           </div>
           <div class="review-task-progress-grid">
             <section class="review-task-progress">
-              <div><span>任务完成度</span><b>{{ percent(row.completedCount, row.effectiveItemCount) }}%</b></div>
+              <div><span class="review-help-heading">任务完成度 <HelpPopover label="任务完成度说明" content="任务完成度 = 已完成 ÷ 非废弃条目。" /></span><b>{{ percent(row.completedCount, row.effectiveItemCount) }}%</b></div>
               <small>{{ row.completedCount }} / {{ row.effectiveItemCount }}</small>
               <progress :value="row.completedCount" :max="row.effectiveItemCount || 1"></progress>
             </section>
             <section class="review-task-progress">
-              <div><span>审核处理进度</span><b>{{ percent(row.reviewProcessedCount, row.reviewEnteredCount) }}%</b></div>
+              <div><span class="review-help-heading">审核处理进度 <HelpPopover label="审核处理进度说明" content="审核处理进度 =（返修中 + 已完成）÷（已提交 + 审核中 + 返修中 + 已完成）。" /></span><b>{{ percent(row.reviewProcessedCount, row.reviewEnteredCount) }}%</b></div>
               <small>{{ row.reviewProcessedCount }} / {{ row.reviewEnteredCount }}</small>
               <progress :value="row.reviewProcessedCount" :max="row.reviewEnteredCount || 1"></progress>
             </section>
           </div>
           <small>待领取 {{ row.submittedCount }} · 审核中 {{ row.reviewPendingCount }} · 今日完成 {{ row.todayCompletedCount }}</small>
-          <strong>进入审核池 →</strong>
-        </router-link>
+          <router-link class="review-task-link" :to="`/admin/review/tasks/${row.taskId}`">进入审核池 →</router-link>
+        </article>
         <article v-if="!backlogRows.length" class="business-card review-complete-state">
           <strong>当前没有待审核任务</strong>
           <p>所有审核积压已处理完成</p>
@@ -149,5 +152,5 @@ onBeforeUnmount(clearTimer)
 </template>
 
 <style scoped>
-.review-entry-page{display:grid;gap:18px}.review-entry-overview{display:grid;grid-template-columns:minmax(0,3fr) minmax(360px,2fr);gap:16px;align-items:stretch}.review-progress-carousel{position:relative;display:grid;grid-template-columns:44px 1fr 44px;align-items:center;gap:16px;min-height:224px;overflow:hidden;background:linear-gradient(135deg,color-mix(in srgb,var(--primary) 13%,var(--card)),var(--card))}.review-progress-carousel>button{width:40px;height:40px;border:1px solid var(--border);border-radius:50%;background:var(--card);color:var(--foreground);font-size:24px;cursor:pointer}.review-progress-slide{display:grid;gap:8px;text-align:center}.review-progress-slide>span{color:var(--muted-foreground)}.review-progress-slide>strong{font-size:42px;color:var(--primary)}.review-progress-slide p{margin:0;color:var(--muted-foreground)}.review-progress-slide>div{height:10px;overflow:hidden;border-radius:999px;background:var(--accent)}.review-progress-slide i{display:block;height:100%;border-radius:inherit;background:var(--primary);transition:width .3s ease}.review-carousel-dots{position:absolute;right:18px;bottom:14px;display:flex;gap:7px}.review-carousel-dots button{width:8px;height:8px;padding:0;border:0;border-radius:50%;background:var(--border);cursor:pointer}.review-carousel-dots button.is-active{width:22px;border-radius:999px;background:var(--primary)}.review-overview-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.review-overview-grid article{display:grid;align-content:center;gap:6px;min-height:0;padding:18px;border:1px solid color-mix(in srgb,var(--primary) 16%,var(--border));border-radius:var(--radius);background:linear-gradient(145deg,var(--card),color-mix(in srgb,var(--primary) 5%,var(--card)))}.review-overview-grid span,.review-overview-grid small{color:var(--muted-foreground)}.review-overview-grid small{line-height:1.4}.review-overview-grid strong{font-size:30px;line-height:1.1}.review-task-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.review-task-card{display:grid;gap:14px;text-decoration:none;color:inherit}.review-task-header{display:flex;align-items:center;justify-content:space-between;gap:14px}.review-task-header>b{flex:0 0 auto}.review-task-identity{display:flex;align-items:center;gap:12px;min-width:0}.review-task-identity>span{flex:0 0 auto;color:var(--muted-foreground)}.review-task-identity h3{min-width:0;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.review-task-progress-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.review-task-progress{display:grid;gap:6px;min-width:0}.review-task-progress>div{display:flex;align-items:center;justify-content:space-between;gap:8px}.review-task-progress span,.review-task-progress small,.review-task-card>small{color:var(--muted-foreground)}.review-task-progress progress{width:100%;accent-color:var(--primary)}.review-task-card>strong{color:var(--primary)}.review-complete-state{grid-column:1/-1;display:grid;place-items:center;gap:8px;min-height:150px;text-align:center}.review-complete-state p{margin:0;color:var(--muted-foreground)}@media(prefers-reduced-motion:reduce){.review-progress-slide i{transition:none}}@media(max-width:1080px){.review-entry-overview{grid-template-columns:1fr}.review-progress-carousel{min-height:210px}.review-task-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:720px){.review-task-grid{grid-template-columns:1fr}.review-progress-carousel{grid-template-columns:36px 1fr 36px;min-height:200px;padding:18px 12px}.review-progress-slide>strong{font-size:34px}}@media(max-width:460px){.review-overview-grid,.review-task-progress-grid{grid-template-columns:1fr}.review-overview-grid article{min-height:116px}.review-task-header{align-items:flex-start}}
+.review-entry-page{display:grid;gap:18px}.review-entry-overview{display:grid;grid-template-columns:minmax(0,3fr) minmax(360px,2fr);gap:16px;align-items:stretch}.review-progress-carousel{position:relative;display:grid;grid-template-columns:44px 1fr 44px;align-items:center;gap:16px;min-height:224px;overflow:hidden;background:linear-gradient(135deg,color-mix(in srgb,var(--primary) 13%,var(--card)),var(--card));-webkit-user-select:none;user-select:none}.review-progress-carousel>button{width:40px;height:40px;border:1px solid var(--border);border-radius:50%;background:var(--card);color:var(--foreground);font-size:24px;cursor:pointer}.review-progress-slide{display:grid;gap:8px;text-align:center}.review-progress-slide>span{color:var(--muted-foreground)}.review-progress-slide>strong{font-size:42px;color:var(--primary)}.review-progress-slide p{margin:0;color:var(--muted-foreground)}.review-progress-slide>div{height:10px;overflow:hidden;border-radius:999px;background:var(--accent)}.review-progress-slide i{display:block;height:100%;border-radius:inherit;background:var(--primary);transition:width .3s ease}.review-carousel-dots{position:absolute;right:18px;bottom:14px;display:flex;gap:7px}.review-carousel-dots button{width:8px;height:8px;padding:0;border:0;border-radius:50%;background:var(--border);cursor:pointer}.review-carousel-dots button.is-active{width:22px;border-radius:999px;background:var(--primary)}.review-help-heading{display:inline-flex;align-items:center;gap:6px}.review-overview-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.review-overview-grid article{display:grid;align-content:center;gap:6px;min-height:0;padding:18px;border:1px solid color-mix(in srgb,var(--primary) 16%,var(--border));border-radius:var(--radius);background:linear-gradient(145deg,var(--card),color-mix(in srgb,var(--primary) 5%,var(--card)))}.review-overview-grid span,.review-overview-grid small{color:var(--muted-foreground)}.review-overview-grid small{line-height:1.4}.review-overview-grid strong{font-size:30px;line-height:1.1}.review-task-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.review-task-card{display:grid;gap:14px;color:inherit}.review-task-header{display:flex;align-items:center;justify-content:space-between;gap:14px}.review-task-header>b{flex:0 0 auto}.review-task-identity{display:flex;align-items:center;gap:12px;min-width:0}.review-task-identity>span{flex:0 0 auto;color:var(--muted-foreground)}.review-task-identity h3{min-width:0;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.review-task-progress-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.review-task-progress{display:grid;gap:6px;min-width:0}.review-task-progress>div{display:flex;align-items:center;justify-content:space-between;gap:8px}.review-task-progress span,.review-task-progress small,.review-task-card>small{color:var(--muted-foreground)}.review-task-progress progress{width:100%;accent-color:var(--primary)}.review-task-link{width:max-content;color:var(--primary);font-weight:700;text-decoration:none}.review-task-link:hover{text-decoration:underline}.review-complete-state{grid-column:1/-1;display:grid;place-items:center;gap:8px;min-height:150px;text-align:center}.review-complete-state p{margin:0;color:var(--muted-foreground)}@media(prefers-reduced-motion:reduce){.review-progress-slide i{transition:none}}@media(max-width:1080px){.review-entry-overview{grid-template-columns:1fr}.review-progress-carousel{min-height:210px}.review-task-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:720px){.review-task-grid{grid-template-columns:1fr}.review-progress-carousel{grid-template-columns:36px 1fr 36px;min-height:200px;padding:18px 12px}.review-progress-slide>strong{font-size:34px}}@media(max-width:460px){.review-overview-grid,.review-task-progress-grid{grid-template-columns:1fr}.review-overview-grid article{min-height:116px}.review-task-header{align-items:flex-start}}
 </style>

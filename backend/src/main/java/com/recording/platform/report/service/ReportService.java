@@ -35,6 +35,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.time.Clock;
 import java.time.ZoneId;
+import com.recording.platform.time.BusinessDayPolicy;
 
 @Service
 public class ReportService {
@@ -63,7 +64,7 @@ public class ReportService {
 
 	public com.recording.platform.report.dto.DashboardReport dashboard(PlatformPrincipal actor) {
 		requireAdmin(actor);
-		LocalDate today = LocalDate.now(clock.withZone(ZoneId.of("Asia/Shanghai")));
+		LocalDate today = BusinessDayPolicy.currentDate(clock);
 		return queries.dashboard(today.minusDays(6), today).withGeneratedAt(Instant.now(clock));
 	}
 

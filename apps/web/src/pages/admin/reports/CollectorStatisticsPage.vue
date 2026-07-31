@@ -11,19 +11,12 @@ import TaskSearchSelect from '../../../components/form/TaskSearchSelect.vue'
 import { reportApi } from '../../../lib/reportApi.js'
 import { taskApi } from '../../../lib/taskApi.js'
 import { useNotifications } from '../../../composables/useNotifications.js'
+import { businessDate, businessMonthStart, shiftBusinessDate } from '../../../lib/businessDate.js'
 
 const route = useRoute()
 const router = useRouter()
 const notifications = useNotifications()
-const shanghaiToday = () => new Intl.DateTimeFormat('en-CA', {
-  timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
-}).format(new Date())
-const shiftDate = (value, days) => {
-  const date = new Date(`${value}T00:00:00Z`)
-  date.setUTCDate(date.getUTCDate() + days)
-  return new Date(date).toISOString().slice(0, 10)
-}
-const today = shanghaiToday()
+const today = businessDate()
 const taskId = ref(String(route.query.taskId || ''))
 const fromDate = ref(String(route.query.fromDate ?? today))
 const toDate = ref(String(route.query.toDate ?? today))
@@ -58,9 +51,9 @@ async function applyPreset(key) {
     return
   }
   if (key === 'today') fromDate.value = toDate.value = today
-  if (key === 'yesterday') fromDate.value = toDate.value = shiftDate(today, -1)
-  if (key === 'seven-days') { fromDate.value = shiftDate(today, -6); toDate.value = today }
-  if (key === 'month') { fromDate.value = `${today.slice(0, 7)}-01`; toDate.value = today }
+  if (key === 'yesterday') fromDate.value = toDate.value = shiftBusinessDate(today, -1)
+  if (key === 'seven-days') { fromDate.value = shiftBusinessDate(today, -6); toDate.value = today }
+  if (key === 'month') { fromDate.value = businessMonthStart(today); toDate.value = today }
   if (key === 'all') fromDate.value = toDate.value = ''
   page.value = 0
   if (taskId.value) await search(true)
@@ -185,7 +178,7 @@ onMounted(() => { if (taskId.value) search() })
 
 <template>
   <section class="admin-page collector-report-page">
-    <PageActions title="采集员统计" description="分别按首次提交和首次完成日期核对产出，数据可直接用于对表。">
+    <PageActions title="采集员统计" description="分别按首次提交和首次完成日期核对产出；业务日按 Asia/Shanghai 04:00 至次日 04:00 统计。">
       <button class="button-secondary" :disabled="!taskId" @click="exportCsv">导出当前对表 CSV</button>
     </PageActions>
     <section class="business-card report-control-card">

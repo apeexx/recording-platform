@@ -33,6 +33,7 @@ test('统计页可选择单日并清除为全部日期', () => {
   assert.match(template, /mode="date"/)
   assert.match(template, /bindchange="dateChange"/)
   assert.match(template, /bindtap="clearDate"/)
+  assert.match(template, /Asia\/Shanghai 04:00 至次日 04:00/)
   assert.match(script, /selectedDate:\s*''/)
   assert.match(script, /taskReport\(taskId,\s*this\.data\.selectedDate\)/)
   assert.match(script, /dateChange\(event\)/)

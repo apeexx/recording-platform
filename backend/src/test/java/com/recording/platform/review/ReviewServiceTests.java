@@ -47,7 +47,7 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 
 class ReviewServiceTests {
-	private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-07-12T08:00:00Z"), ZoneOffset.UTC);
+	private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-07-11T19:00:00Z"), ZoneOffset.UTC);
 
 	@Test
 	void reviewTaskSummariesUseOneAggregateFilterBacklogAndSortStably() {
@@ -73,8 +73,8 @@ class ReviewServiceTests {
 		assertThat(summaries.get(0).todayCompletedCount()).isEqualTo(3);
 		verify(items).reviewTaskMetrics(
 			eq(List.of("task-1", "task-2", "task-3")),
-			eq(Instant.parse("2026-07-11T16:00:00Z")),
-			eq(Instant.parse("2026-07-12T16:00:00Z"))
+			eq(Instant.parse("2026-07-10T20:00:00Z")),
+			eq(Instant.parse("2026-07-11T20:00:00Z"))
 		);
 	}
 

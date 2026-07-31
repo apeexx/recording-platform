@@ -227,7 +227,7 @@ Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idem
 ## 7. 接口说明
 
 当前后端提供身份、会话、后台用户管理、语音生成、任务配置、授权、任务池、人工审核、任务级 AI 辅助转写、动态状态、软废弃恢复、录音媒体、导入及外部完成结果读取 API；不提供机器自动通过或自动驳回。
-当前同时提供操作记录与统计 API：条目操作记录按权限读取，全局操作记录仅 ADMIN/REVIEWER；管理员统计按首次提交与首次完成拆成两个阶段，提供任务汇总、24 小时提交分布、任务内采集员排行、独立人员详情及提交/完成两套分页明细；小程序继续按最近提交任务查看原有 current assignment 汇总、每日分段及倒序提交明细。审核统计接口已移除，REVIEWER 调用 `/api/reports/me` 固定返回 `403 ACCESS_DENIED`。
+当前同时提供操作记录与统计 API：条目操作记录按权限读取，全局操作记录仅 ADMIN/REVIEWER；管理员统计按首次提交与首次完成拆成两个阶段，提供任务汇总、24 小时提交分布、任务内采集员排行、独立人员详情及提交/完成两套分页明细；小程序继续按最近提交任务查看原有 current assignment 汇总、每日分段及倒序提交明细。全部报表日期按 Asia/Shanghai 凌晨 4 点换日，日期 `2026-07-31` 表示 `[2026-07-31 04:00, 2026-08-01 04:00)`；原始时间展示不平移。审核统计接口已移除，REVIEWER 调用 `/api/reports/me` 固定返回 `403 ACCESS_DENIED`。
 Web 数据大屏使用仅 ADMIN 可访问的 `GET /api/reports/dashboard`，返回 `generatedAt`、真实任务生命周期数量、条目状态数量、当前采集人数、Asia/Shanghai 当日及最近 7 日首次提交统计和最多 8 个任务排行；最近操作仍复用 `/api/operations`。
 
 所有 API 响应必须带 `X-Request-Id`；错误响应统一为 `{ code, message, requestId, details? }`。未预期异常只能返回脱敏摘要，不得返回堆栈、数据库内部消息、密钥或完整第三方 payload。统一状态至少覆盖 400、401、403、404、409、413、415、422、429、500 和 503。
@@ -459,7 +459,7 @@ Web 数据大屏使用仅 ADMIN 可访问的 `GET /api/reports/dashboard`，返�
 响应结构：任务列表 {items:[{taskId,taskCode,taskName,latestSubmittedAt}]}；任务汇总 {taskId,taskCode,taskName,summary,days,recentSubmissions}，summary 含 submissionCount、completedCount、recordingDurationMillis、referenceAudioDurationMillis、referenceVideoDurationMillis，days 按日期倒序并包含 completedCount，recentSubmissions 固定最近 3 条；完整记录返回分页结构
 错误码：404 REPORT_TASK_NOT_FOUND
 权限要求：仅当前 COLLECTOR 小程序 Bearer
-数据一致性要求：直接聚合 task_items 当前数据库快照，仅统计仍属于当前采集员且具有 firstSubmittedAt 的当前 assignment；同一条目在一个 assignment 内只计 1 条，返修和覆盖提交不重复增加；当前结果录音时长始终取最新值，COMPLETED 时即最终值；参考音视频分别统计，无对应媒体时为 0；指定 date 后汇总、每日数据、最近 3 条和完整提交记录均限定 Asia/Shanghai 当天；管理员释放回 AVAILABLE 后该条目立即退出原采集员统计，历史 submissions/operations 不删除；任务列表和提交明细均按 latestSubmittedAt 倒序；Mongo 原始查询必须将 task_items 中的字符串 taskId 转换为 tasks 集合实际使用的 ObjectId 后读取任务资料
+数据一致性要求：直接聚合 task_items 当前数据库快照，仅统计仍属于当前采集员且具有 firstSubmittedAt 的当前 assignment；同一条目在一个 assignment 内只计 1 条，返修和覆盖提交不重复增加；当前结果录音时长始终取最新值，COMPLETED 时即最终值；参考音视频分别统计，无对应媒体时为 0；指定 date 后汇总、每日数据、最近 3 条和完整提交记录均限定对应的 Asia/Shanghai 04:00 至次日 04:00 业务日；管理员释放回 AVAILABLE 后该条目立即退出原采集员统计，历史 submissions/operations 不删除；任务列表和提交明细均按 latestSubmittedAt 倒序；Mongo 原始查询必须将 task_items 中的字符串 taskId 转换为 tasks 集合实际使用的 ObjectId 后读取任务资料
 前端调用位置：apps/miniprogram/pages/statistics/*、apps/miniprogram/pages/submission-records/*
 ```
 
@@ -470,7 +470,7 @@ Web 数据大屏使用仅 ADMIN 可访问的 `GET /api/reports/dashboard`，返�
 响应结构：任务审核摘要固定包含 pendingCount、effectiveItemCount、completedCount、reviewEnteredCount、reviewProcessedCount、submittedCount、reviewPendingCount、todayCompletedCount；TaskItem、审核池分页或逐条批量结果
 错误码：404 NO_REVIEW_ITEM；409 STALE_STATE；422 INVALID_REVIEWER/INVALID_BATCH_SIZE/审核内容错误
 权限要求：ADMIN/REVIEWER 可查看审核池并领取指定条目；按数量随机批量领取仅 REVIEWER；所选条目批量领取允许 ADMIN/REVIEWER；分配和批量通过仅 ADMIN；ADMIN/REVIEWER 只有作为当前 reviewerId 时才能释放，决定必须已有审核领取或分配
-数据一致性要求：审核任务列表默认仅返回 pendingCount 大于零的任务；includeCleared=true 时返回全部启用人工审核的任务，包括零积压任务。两种模式均按积压降序、taskCode 稳定排序；pendingCount 固定等于 submittedCount + reviewPendingCount。审核入口使用包含已清空任务的汇总保持整体进度和今日完成真实，但只把 pendingCount 大于零的任务渲染为待办卡。审核汇总使用一次 Mongo 聚合：effectiveItemCount 排除 DISCARDED；reviewEnteredCount 只统计当前为 SUBMITTED/REVIEW_PENDING/REWORK_PENDING/COMPLETED 的条目；reviewProcessedCount 统计当前为 COMPLETED/REWORK_PENDING 的条目，因此待录、可领取和废弃均不进入审核处理进度；todayCompletedCount 按 Asia/Shanghai 当天 firstCompletedAt 且当前仍 COMPLETED。审核筛选始终与角色可见范围 AND 组合，并同步用于跨页预览、快照和执行；领取和分配只处理 SUBMITTED 并原子转 REVIEW_PENDING；释放原子回到 SUBMITTED；审核通过保留 currentResult 并单独写 reviewFinalAnswer；所选条目批量操作按输入顺序返回逐条成功/失败结果
+数据一致性要求：审核任务列表默认仅返回 pendingCount 大于零的任务；includeCleared=true 时返回全部启用人工审核的任务，包括零积压任务。两种模式均按积压降序、taskCode 稳定排序；pendingCount 固定等于 submittedCount + reviewPendingCount。审核入口使用包含已清空任务的汇总保持整体进度和今日完成真实，但只把 pendingCount 大于零的任务渲染为待办卡。审核汇总使用一次 Mongo 聚合：effectiveItemCount 排除 DISCARDED；reviewEnteredCount 只统计当前为 SUBMITTED/REVIEW_PENDING/REWORK_PENDING/COMPLETED 的条目；reviewProcessedCount 统计当前为 COMPLETED/REWORK_PENDING 的条目，因此待录、可领取和废弃均不进入审核处理进度；todayCompletedCount 按当前 Asia/Shanghai 04:00 至次日 04:00 业务日内的 firstCompletedAt 且当前仍 COMPLETED。审核筛选始终与角色可见范围 AND 组合，并同步用于跨页预览、快照和执行；领取和分配只处理 SUBMITTED 并原子转 REVIEW_PENDING；释放原子回到 SUBMITTED；审核通过保留 currentResult 并单独写 reviewFinalAnswer；所选条目批量操作按输入顺序返回逐条成功/失败结果
 前端调用位置：apps/web/src/lib/reviewApi.js、apps/web/src/pages/admin/review/*
 ```
 
@@ -489,10 +489,10 @@ Web 数据大屏使用仅 ADMIN 可访问的 `GET /api/reports/dashboard`，返�
 请求方法：GET
 请求路径：/api/reports/tasks、/api/reports/tasks/{taskId}/collectors、/api/reports/collectors、/api/reports/collectors/{collectorId}/tasks/{taskId}、/api/reports/collectors/{collectorId}/tasks/{taskId}/submissions、/api/reports/collectors/{collectorId}/tasks/{taskId}/completions
 请求参数：任务和指定采集员任务汇总支持可选 fromDate、toDate；旧采集员汇总支持 userId、可选 taskId、fromDate、toDate；任务采集员排名另支持 sortBy=submissionCount|submissionRecordingDurationMillis|submissionReferenceAudioDurationMillis|submissionReferenceVideoDurationMillis|completionCount|completionRecordingDurationMillis|completionReferenceAudioDurationMillis|completionReferenceVideoDurationMillis|firstSubmissionAt|latestSubmissionAt、sortDirection=asc|desc、page、size，其中排序方向省略时默认 desc；完整提交明细另支持 page、size
-响应结构：管理员任务与人员详情使用独立双阶段 DTO；StageMetrics 固定含 count、recordingDurationMillis、referenceAudioDurationMillis、referenceVideoDurationMillis，StageReportSummary 固定含 submissions、completions 和 0–23 点完整 submissionHourDistribution；排行返回两阶段八项指标、firstSubmissionAt、latestSubmissionAt、peakSubmissionHour；人员详情返回双阶段汇总及两阶段每日统计，提交和完成明细均为分页结构。`/api/reports/me/**` 保持原小程序契约
+响应结构：管理员任务与人员详情使用独立双阶段 DTO；StageMetrics 固定含 count、recordingDurationMillis、referenceAudioDurationMillis、referenceVideoDurationMillis，StageReportSummary 固定含 submissions、completions 和完整 submissionHourDistribution；小时仍为真实北京时间 0–23，但数组固定按 04、05…23、00…03 返回并包含零值；排行返回两阶段八项指标、firstSubmissionAt、latestSubmissionAt、peakSubmissionHour；人员详情返回双阶段汇总及两阶段每日统计，提交和完成明细均为分页结构。`/api/reports/me/**` 保持原小程序契约
 错误码：403 ACCESS_DENIED；422 INVALID_REPORT_DATE_RANGE/INVALID_REPORT_SORT_DIRECTION
 权限要求：任务、指定采集员汇总、排名与下钻仅 ADMIN；不再提供审核统计端点，`/api/reports/me` 仅 COLLECTOR 可读
-数据一致性要求：日期使用 Asia/Shanghai 自然日闭区间，允许单边日期；fromDate 晚于 toDate 返回 422；提交按 firstSubmittedAt、完成按 firstCompletedAt 独立筛选，返修/覆盖及再次完成不改变首次归属；完成阶段只统计当前 COMPLETED，提交阶段排除 AVAILABLE/DISCARDED；废弃保留时间字段但暂时退出统计，恢复后按原日期恢复；真正释放清除首次提交与首次完成归属；小时高峰并列时取较早小时；时长均取条目当前有效结果，缺失按 0；姓名通过身份目录批量补全，不冗余写入任务条目；排行先按指定字段对全量人员升序或降序排列再分页，空时间固定置后，相同指标按 collectorId 升序稳定排序
+数据一致性要求：日期使用 Asia/Shanghai 04:00 至次日 04:00 的业务日闭区间参数和左闭右开时间边界，允许单边日期；fromDate 晚于 toDate 返回 422；提交按 firstSubmittedAt、完成按 firstCompletedAt 独立筛选，返修/覆盖及再次完成不改变首次归属；完成阶段只统计当前 COMPLETED，提交阶段排除 AVAILABLE/DISCARDED；废弃保留时间字段但暂时退出统计，恢复后按原日期恢复；真正释放清除首次提交与首次完成归属；小时高峰并列时取较早小时；时长均取条目当前有效结果，缺失按 0；姓名通过身份目录批量补全，不冗余写入任务条目；排行先按指定字段对全量人员升序或降序排列再分页，空时间固定置后，相同指标按 collectorId 升序稳定排序
 前端调用位置：apps/web/src/lib/reportApi.js、apps/web/src/pages/admin/reports/*
 ```
 

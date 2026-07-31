@@ -177,6 +177,18 @@ describe('审核页面 API', () => {
     expect(progress[0].text()).toContain('205 / 503')
     expect(progress[1].text()).toContain('审核处理进度')
     expect(progress[1].text()).toContain('256 / 258')
+    expect(wrapper.get('.review-task-card').element.tagName).toBe('ARTICLE')
+    expect(wrapper.get('.review-task-link').text()).toContain('进入审核池')
+    const helpLabels = wrapper.findAll('.help-popover-trigger').map(button => button.attributes('aria-label'))
+    expect(helpLabels).toContain('任务完成度说明')
+    expect(helpLabels).toContain('审核处理进度说明')
+    expect(wrapper.text()).not.toContain('COMPLETED')
+    await wrapper.findAll('.help-popover-trigger')
+      .find(button => button.attributes('aria-label') === '审核处理进度说明')
+      .trigger('click')
+    await flushPromises()
+    expect(document.body.textContent).toContain('返修中 + 已完成')
+    expect(document.body.textContent).toContain('已提交 + 审核中 + 返修中 + 已完成')
     wrapper.unmount()
   })
 
@@ -263,6 +275,8 @@ describe('审核页面 API', () => {
     expect(entry).toContain('review-entry-overview')
     expect(entry).toMatch(/\.review-entry-overview\{[^}]*grid-template-columns:minmax\(0,3fr\) minmax\(360px,2fr\)/)
     expect(entry).toMatch(/\.review-overview-grid\{[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/)
+    expect(entry).toContain('user-select:none')
+    expect(entry).toContain('-webkit-user-select:none')
   })
 
   it('AI 设置使用统一开关和自定义下拉框并保留左右双卡', () => {
@@ -271,6 +285,11 @@ describe('审核页面 API', () => {
     expect(settings).toContain("import ToggleSwitch from '../../../components/form/ToggleSwitch.vue'")
     expect(settings).toContain('<ToggleSwitch')
     expect(settings).toContain('<BaseSelect')
+    expect(settings).toContain("import HelpPopover from '../../../components/form/HelpPopover.vue'")
+    for (const label of ['音频转文字', '文本结果转写', '`${entry.title}说明`', '启用状态说明', '模型说明', 'temperature 说明', 'topP 说明', 'maxTokens 说明', 'timeoutMs 说明', 'Prompt 说明']) {
+      expect(settings).toContain(label)
+    }
+    expect(settings).toContain('ai-field-heading')
     expect(settings).toContain('ai-field-card')
     expect(settings).toContain('ai-prompt-count')
     expect(settings).toMatch(/\.ai-settings-grid\{[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/)
