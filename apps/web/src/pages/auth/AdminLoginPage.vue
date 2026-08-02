@@ -89,7 +89,7 @@ async function confirmTakeover() {
 <template>
   <main class="auth-page">
     <section class="auth-card" aria-labelledby="login-title">
-      <div class="auth-brand"><span>录</span><div><strong>录音任务平台</strong><small>后台管理与审核端</small></div></div>
+      <div class="auth-brand"><img class="auth-brand__mark" src="/assets/branding/yanshu-avatar.svg" alt=""><div><strong>录音任务平台</strong><small>后台管理与审核端</small></div></div>
       <h1 id="login-title">账号登录</h1>
       <p>管理员和审核员使用后台账号密码登录。</p>
       <form class="auth-form" novalidate @submit.prevent="submit">

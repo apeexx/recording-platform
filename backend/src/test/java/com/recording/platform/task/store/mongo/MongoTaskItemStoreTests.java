@@ -233,7 +233,8 @@ class MongoTaskItemStoreTests {
 		MongoTaskItemStore store = new MongoTaskItemStore(repository, template);
 
 		store.claimAvailable(new ClaimMutation(
-			"task-1", "collector-1", "张三", "assignment-1", Instant.parse("2026-07-11T12:00:00Z")
+			"task-1", "collector-1", "张三", "assignment-1",
+			Instant.parse("2026-07-11T11:30:00Z"), Instant.parse("2026-07-11T12:00:00Z")
 		));
 
 		ArgumentCaptor<Query> query = ArgumentCaptor.forClass(Query.class);
@@ -244,6 +245,8 @@ class MongoTaskItemStoreTests {
 		assertThat(query.getValue().getQueryObject())
 			.containsEntry("taskId", "task-1")
 			.containsEntry("status", TaskItemStatus.AVAILABLE);
+		assertThat(query.getValue().getQueryObject().toString())
+			.contains("$not", "$elemMatch", "RELEASE", "collector-1", "$gt", "2026-07-11T11:30:00Z");
 		assertThat(query.getValue().getSortObject()).containsEntry("sequence", 1);
 		assertThat(update.getValue()).isInstanceOf(AggregationUpdate.class);
 		List<Document> stages = ((AggregationUpdate) update.getValue()).getPipeline().getOperations().stream()

@@ -150,6 +150,75 @@ class TaskPoolServiceTests {
 	}
 
 	@Test
+	void collectorDoesNotReclaimAnItemReleasedWithinThirtyMinutes() {
+		stubRunningTaskAndGrant("task-1");
+		TaskItem released = item("task-1", "item-released", TaskItemStatus.AVAILABLE);
+		released.getOperations().add(releaseOperation("collector-1", CLOCK.instant().minusSeconds(60)));
+		items.save(released);
+		items.save(item("task-1", "item-next", TaskItemStatus.AVAILABLE));
+
+		TaskItem result = service.start("task-1", collector);
+
+		assertThat(result.getId()).isEqualTo("item-next");
+	}
+
+	@Test
+	void anotherCollectorCanClaimAnItemImmediatelyAfterRelease() {
+		stubRunningTaskAndGrant("task-1");
+		TaskItem released = item("task-1", "item-released", TaskItemStatus.AVAILABLE);
+		released.getOperations().add(releaseOperation("collector-1", CLOCK.instant().minusSeconds(60)));
+		items.save(released);
+		PlatformPrincipal otherCollector = principal(
+			"collector-2", "李四", UserRole.COLLECTOR, SessionType.MINIPROGRAM
+		);
+		TaskGrant grant = new TaskGrant();
+		grant.setStatus(GrantStatus.ACTIVE);
+		when(grants.findActive("task-1", "collector-2")).thenReturn(Optional.of(grant));
+
+		TaskItem result = service.start("task-1", otherCollector);
+
+		assertThat(result.getId()).isEqualTo("item-released");
+	}
+
+	@Test
+	void collectorCanReclaimAnItemExactlyThirtyMinutesAfterRelease() {
+		stubRunningTaskAndGrant("task-1");
+		TaskItem released = item("task-1", "item-released", TaskItemStatus.AVAILABLE);
+		released.getOperations().add(releaseOperation("collector-1", CLOCK.instant().minusSeconds(30 * 60)));
+		items.save(released);
+
+		TaskItem result = service.start("task-1", collector);
+
+		assertThat(result.getId()).isEqualTo("item-released");
+	}
+
+	@Test
+	void onlyRecentlyReleasedItemKeepsTheExistingNoAvailableItemContract() {
+		stubRunningTaskAndGrant("task-1");
+		TaskItem released = item("task-1", "item-released", TaskItemStatus.AVAILABLE);
+		released.getOperations().add(releaseOperation("collector-1", CLOCK.instant().minusSeconds(60)));
+		items.save(released);
+
+		assertThatThrownBy(() -> service.start("task-1", collector))
+			.isInstanceOfSatisfying(ApiException.class, (exception) -> {
+				assertThat(exception.getStatus().value()).isEqualTo(404);
+				assertThat(exception.getCode()).isEqualTo("NO_AVAILABLE_ITEM");
+			});
+	}
+
+	@Test
+	void administratorReleaseDoesNotStartACollectorCooldown() {
+		stubRunningTaskAndGrant("task-1");
+		TaskItem released = item("task-1", "item-released", TaskItemStatus.AVAILABLE);
+		released.getOperations().add(releaseOperation("admin-1", CLOCK.instant().minusSeconds(60)));
+		items.save(released);
+
+		TaskItem result = service.start("task-1", collector);
+
+		assertThat(result.getId()).isEqualTo("item-released");
+	}
+
+	@Test
 	void submissionIsIdempotentAndStaleRevisionUsesThe409ContractWithoutCheckingGrant() {
 		TaskItem pending = item("task-1", "item-1", TaskItemStatus.RECORDING_PENDING);
 		pending.setCollectorId("collector-1");
@@ -380,6 +449,14 @@ class TaskPoolServiceTests {
 		return item;
 	}
 
+	private OperationHistory releaseOperation(String actorUserId, Instant occurredAt) {
+		OperationHistory operation = new OperationHistory();
+		operation.setType("RELEASE");
+		operation.setActorUserId(actorUserId);
+		operation.setOccurredAt(occurredAt);
+		return operation;
+	}
+
 	private PlatformPrincipal principal(String id, String username, UserRole role, SessionType type) {
 		return new PlatformPrincipal("session-" + id, id, username, username, role, type, false);
 	}
@@ -390,7 +467,11 @@ class TaskPoolServiceTests {
 		@Override public synchronized Optional<TaskItem> findById(String id) { return Optional.ofNullable(data.get(id)); }
 		@Override public synchronized Optional<TaskItem> claimAvailable(ClaimMutation mutation) {
 			Optional<TaskItem> candidate = data.values().stream().filter((item) -> mutation.taskId().equals(item.getTaskId())
-				&& item.getStatus() == TaskItemStatus.AVAILABLE).findFirst();
+				&& item.getStatus() == TaskItemStatus.AVAILABLE
+				&& item.getOperations().stream().noneMatch((operation) -> "RELEASE".equals(operation.getType())
+					&& mutation.collectorId().equals(operation.getActorUserId())
+					&& operation.getOccurredAt().isAfter(mutation.releaseCooldownSince())))
+				.findFirst();
 			candidate.ifPresent((item) -> {
 				item.setStatus(TaskItemStatus.RECORDING_PENDING);
 				item.setCollectorId(mutation.collectorId());

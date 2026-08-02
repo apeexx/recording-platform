@@ -102,7 +102,12 @@ public class MongoTaskItemStore implements TaskItemStore {
 	@Override
 	public Optional<TaskItem> claimAvailable(ClaimMutation mutation) {
 		Query query = Query.query(Criteria.where("taskId").is(mutation.taskId())
-			.and("status").is(TaskItemStatus.AVAILABLE));
+			.and("status").is(TaskItemStatus.AVAILABLE)
+			.and("operations").not().elemMatch(
+				Criteria.where("type").is("RELEASE")
+					.and("actorUserId").is(mutation.collectorId())
+					.and("occurredAt").gt(mutation.releaseCooldownSince())
+			));
 		query.with(Sort.by(Sort.Direction.ASC, "sequence"));
 		Document operation = new Document()
 			.append("operationId", "claim:" + mutation.assignmentId())

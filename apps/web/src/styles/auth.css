@@ -1,7 +1,7 @@
 .auth-page { min-height: 100vh; display: grid; place-items: center; padding: 24px; background: var(--background); }
 .auth-card { width: min(440px, 100%); padding: 34px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); box-shadow: 0 18px 60px rgba(15, 20, 25, .08); }
 .auth-brand { display: flex; align-items: center; gap: 12px; margin-bottom: 28px; }
-.auth-brand > span { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 50%; background: var(--primary); color: var(--primary-foreground); font-weight: 800; }
+.auth-brand__mark { display: block; width: 42px; height: 42px; flex: 0 0 42px; border-radius: 10px; }
 .auth-brand strong, .auth-brand small { display: block; }
 .auth-brand small, .auth-card > p { margin-top: 4px; color: var(--muted-foreground); }
 .auth-card h1 { margin: 0 0 8px; }

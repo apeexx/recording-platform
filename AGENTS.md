@@ -212,7 +212,7 @@ DASHSCOPE_BASE_URL（默认 https://dashscope.aliyuncs.com/compatible-mode/v1，
 
 任务结构固定使用 `tasks`，配置嵌入 `configuration`；不再维护 `task_versions`。任务仅在 DRAFT 状态允许修改名称、说明和配置，发布后永久冻结；运行中任务必须先暂停，只有 PAUSED 状态允许结束。任务至少启用 TEXT/AUDIO/VIDEO 一种参考组件。最终成果为 `TEXT` 时文本或录音至少提交一项，也允许同时提交；`AUDIO` 必须提交录音且不得夹带文本。只有实际提交录音时才校验格式、采样率、单声道、大小和时长。录音时长配置固定为 1–600 秒；Web 双端滑块使用统一像素坐标绘制 22px 胶囊轨道、16px 选区和 20px 白色圆点，原生 range 仅保留键盘与无障碍输入。关闭人工审核时不得保存驳回预设原因；首期 `aiEnabled` 必须为 false。任务编码由数据库序列自动生成 `T000001`，条目编码为 `{taskCode}-{7位序号}`，不接受前端输入且序号不复用。
 
-采集员领取必须同时满足任务 RUNNING 和 ACTIVE grant；普通 `RECORDING_PENDING` 不限制采集员持有数量，每个新的 `Idempotency-Key` 使用 Mongo `findAndModify` 从 `AVAILABLE` 按 sequence 原子领取一条新数据，相同幂等键重放仍返回首次结果。驳回进入独立 `REWORK_PENDING`，保留原采集员、assignment 和驳回原因；授权撤销只阻止新领取，不影响已领取条目的提交和释放。
+采集员领取必须同时满足任务 RUNNING 和 ACTIVE grant；普通 `RECORDING_PENDING` 不限制采集员持有数量，每个新的 `Idempotency-Key` 使用 Mongo `findAndModify` 从 `AVAILABLE` 按 sequence 原子领取一条新数据，相同幂等键重放仍返回首次结果。采集员本人释放后的 30 分钟内，领取查询按 `operations` 中同一采集员的 `RELEASE` 时间原子跳过该条，恰好满 30 分钟恢复资格；其他采集员和管理员释放不触发此个人冷却。驳回进入独立 `REWORK_PENDING`，保留原采集员、assignment 和驳回原因；授权撤销只阻止新领取，不影响已领取条目的提交和释放。
 
 启用人工审核时，采集员提交进入 `SUBMITTED`，审核领取或管理员分配后才原子进入 `REVIEW_PENDING`；`SUBMITTED` 期间本人可使用相同 assignment 与最新 revision 覆盖提交，继续复用录音原子替换、历史和旧媒体清理。审核释放回到 `SUBMITTED`，审核通过进入 `COMPLETED`，驳回进入 `REWORK_PENDING`；关闭人工审核时提交仍直接进入 `COMPLETED`。提交修改与审核领取必须以状态和 revision/CAS 竞争，失败统一返回 `STALE_STATE`。应用启动时仅将 reviewerId、reviewAssignmentId 均为空的旧 `REVIEW_PENDING` 幂等迁移为 `SUBMITTED`，不修改已领取记录，日志只输出迁移数量。
 
@@ -426,7 +426,7 @@ Web 数据大屏使用仅 ADMIN 可访问的 `GET /api/reports/dashboard`，返�
 响应结构：{itemId,status,revision,assignmentId,result}
 错误码：409 STALE_STATE/REFERENCE_DURATION_MISMATCH；413 UPLOAD_TOO_LARGE；422 录音格式/采样率/声道/时长/驳回原因错误，以及 REFERENCE_DURATION_REQUIRED/REFERENCE_DURATION_NOT_APPLICABLE
 权限要求：submit/release 仅当前 COLLECTOR（ADMIN 也可 release）；reject 仅 ADMIN/REVIEWER
-数据一致性要求：operationId 绑定操作者并返回首次结果；每次提交均核对参考音视频时长，不存在的参考源必须为 0，存在的参考源必须为正数；首次提交保存基准值，后续误差不超过 1000 毫秒时沿用基准，超过时拒绝；人工审核任务提交到 SUBMITTED 且领取前可覆盖提交，免审任务直接 COMPLETED；稳定 current 文件原子替换；驳回保留原采集员；释放备注写入操作记录，释放清当前结果、当前 assignment 的统计锚点与采集员归属，但保留提交/操作历史；提交/释放成功后的旧文件和 metadata 清理持久化并可由 operation 重放/启动恢复重试
+数据一致性要求：operationId 绑定操作者并返回首次结果；每次提交均核对参考音视频时长，不存在的参考源必须为 0，存在的参考源必须为正数；首次提交保存基准值，后续误差不超过 1000 毫秒时沿用基准，超过时拒绝；人工审核任务提交到 SUBMITTED 且领取前可覆盖提交，免审任务直接 COMPLETED；稳定 current 文件原子替换；驳回保留原采集员；释放备注写入操作记录，释放清当前结果、当前 assignment 的统计锚点与采集员归属，但保留提交/操作历史；采集员本人释放记录使其在 30 分钟内不能重新领取同一条，管理员释放和其他采集员不受该记录限制；提交/释放成功后的旧文件和 metadata 清理持久化并可由 operation 重放/启动恢复重试
 前端调用位置：apps/miniprogram/pages/work/*、apps/web/src/pages/admin/review/*
 ```
 
@@ -744,7 +744,7 @@ Web 数据大屏使用仅 ADMIN 可访问的 `GET /api/reports/dashboard`，返�
 默认值：新条目 AVAILABLE、revision=0、历史数组为空
 唯一约束：(taskId,itemCode)；creationOperationId 存在时任务内唯一；普通 RECORDING_PENDING 与 REWORK_PENDING 均不设采集员持有数量唯一约束
 索引：上述业务唯一索引；(taskId,status,sequence) 领取索引；(collectorId,status)；普通查询索引 (collectorId,taskId,status)
-数据兼容策略：条目通过 taskId 读取已冻结任务配置；currentDiscard 只表示当前废弃标记，恢复后清除，历史缺失时安全占位；当前结果可替换/清除，提交与操作历史只追加；firstCompletedAt 第一次进入 COMPLETED 时写入，管理员退回、废弃与恢复不覆盖，再次完成仍保留首次值，真正释放才清除；小程序个人统计只读原 current assignment 字段，不改变接口；采集员废弃次数与管理员废弃次数均计入流程统计
+数据兼容策略：条目通过 taskId 读取已冻结任务配置；currentDiscard 只表示当前废弃标记，恢复后清除，历史缺失时安全占位；当前结果可替换/清除，提交与操作历史只追加；领取复用既有 RELEASE 操作历史计算 30 分钟个人释放冷却，不新增字段或迁移；firstCompletedAt 第一次进入 COMPLETED 时写入，管理员退回、废弃与恢复不覆盖，再次完成仍保留首次值，真正释放才清除；小程序个人统计只读原 current assignment 字段，不改变接口；采集员废弃次数与管理员废弃次数均计入流程统计
 迁移步骤：应用启动时幂等回填缺失 firstCompletedAt，只使用最早的 REVIEW_APPROVE、ADMIN_BATCH_APPROVE、结果为 COMPLETED 的 SUBMIT 或 ADMIN_STATUS_CHANGE 操作时间，忽略废弃恢复；无法可靠判断的条目保持为空并只记录脱敏数量。继续确保普通索引 `collector_task_status` 及双阶段统计索引创建成功，再幂等删除旧 `unique_collector_recording_pending` 与 `unique_collector_task_recording_pending`，失败则终止启动
 回滚方式：备份集合与本地媒体；恢复任一旧唯一索引前必须先处理与其口径冲突的多条普通 RECORDING_PENDING，否则索引无法重建；不得只回滚 Mongo 或只回滚文件
 ```

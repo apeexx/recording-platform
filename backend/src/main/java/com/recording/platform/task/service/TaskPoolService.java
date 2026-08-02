@@ -23,6 +23,7 @@ import com.recording.platform.task.store.TaskGrantStore;
 import com.recording.platform.task.store.TaskItemStore;
 import com.recording.platform.task.store.TaskStore;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
@@ -31,6 +32,7 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class TaskPoolService {
+	private static final Duration RELEASE_RECLAIM_COOLDOWN = Duration.ofMinutes(30);
 	private final TaskStore tasks;
 	private final TaskGrantStore grants;
 	private final TaskItemStore items;
@@ -66,12 +68,14 @@ public class TaskPoolService {
 		if (grants.findActive(taskId, actor.userId()).isEmpty()) {
 			throw new ApiException(HttpStatus.FORBIDDEN, "TASK_GRANT_REQUIRED", "没有该任务的有效授权");
 		}
+		Instant occurredAt = Instant.now(clock);
 		ClaimMutation mutation = new ClaimMutation(
 			taskId,
 			actor.userId(),
 			actor.username() == null ? actor.name() : actor.username(),
 			UUID.randomUUID().toString(),
-			Instant.now(clock)
+			occurredAt.minus(RELEASE_RECLAIM_COOLDOWN),
+			occurredAt
 		);
 		return items.claimAvailable(mutation).orElseThrow(() ->
 			new ApiException(HttpStatus.NOT_FOUND, "NO_AVAILABLE_ITEM", "当前没有可领取的数据")

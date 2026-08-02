@@ -109,4 +109,17 @@ describe('adminSidebar', () => {
     assert.equal(webBrand.equals(miniProgramBrand), true)
     assert.doesNotMatch(sidebar, /admin-sidebar__brand-mark">录/)
   })
+
+  it('uses the shared brand asset for the browser icon and login page', () => {
+    const index = fs.readFileSync(path.resolve('index.html'), 'utf8')
+    const login = fs.readFileSync(path.resolve('src/pages/auth/AdminLoginPage.vue'), 'utf8')
+    const authStyles = fs.readFileSync(path.resolve('src/styles/auth.css'), 'utf8')
+
+    assert.match(index, /href="\/assets\/branding\/yanshu-avatar\.svg"/)
+    assert.match(index, /<title>录音任务平台<\/title>/)
+    assert.match(login, /<img class="auth-brand__mark" src="\/assets\/branding\/yanshu-avatar\.svg" alt="">/)
+    assert.doesNotMatch(login, /<div class="auth-brand"><span>录<\/span>/)
+    assert.match(authStyles, /\.auth-brand__mark/)
+    assert.equal(fs.existsSync(path.resolve('public/favicon.svg')), false)
+  })
 })

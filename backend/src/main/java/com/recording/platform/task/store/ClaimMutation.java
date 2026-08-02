@@ -7,6 +7,7 @@ public record ClaimMutation(
 	String collectorId,
 	String actorUsername,
 	String assignmentId,
+	Instant releaseCooldownSince,
 	Instant occurredAt
 ) {
 }
