@@ -180,6 +180,8 @@ Ubuntu 生产服务器完成环境、私密配置和持久化目录准备后，�
 
 ## 文档入口
 
+- [Web 端用户操作手册](Web端用户操作手册.md)
+- [小程序端用户操作手册](小程序端用户操作手册.md)
 - [项目长期规则、接口与数据库说明](AGENTS.md)
 - [Web 管理端](apps/web/README.md)
 - [微信小程序录音端](apps/miniprogram/README.md)
