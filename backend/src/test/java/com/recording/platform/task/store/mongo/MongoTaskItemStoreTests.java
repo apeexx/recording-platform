@@ -22,6 +22,7 @@ import com.recording.platform.task.store.RejectMutation;
 import com.recording.platform.task.store.ReviewClaimMutation;
 import com.recording.platform.task.store.ReviewItemClaimMutation;
 import com.recording.platform.task.store.ReviewDecisionMutation;
+import com.recording.platform.task.store.ReviewDiscardMutation;
 import com.recording.platform.task.store.SubmitMutation;
 import com.recording.platform.task.service.AdminTaskItemGroup;
 import com.recording.platform.task.service.TaskItemFilter;
@@ -45,6 +46,72 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 
 class MongoTaskItemStoreTests {
+	@Test
+	void reviewDiscardAtomicallyKeepsOwnershipAndWritesReviewAudit() {
+		SpringDataTaskItemRepository repository = org.mockito.Mockito.mock(SpringDataTaskItemRepository.class);
+		MongoTemplate template = org.mockito.Mockito.mock(MongoTemplate.class);
+		when(template.findAndModify(any(Query.class), any(Update.class), any(FindAndModifyOptions.class), eq(TaskItem.class)))
+			.thenReturn(new TaskItem());
+		MongoTaskItemStore store = new MongoTaskItemStore(repository, template);
+		Instant occurredAt = Instant.parse("2026-07-28T08:00:00Z");
+
+		store.discardReviewIfCurrent(new ReviewDiscardMutation(
+			"item-1", "reviewer-1", "审核员一",
+			com.recording.platform.identity.model.UserRole.REVIEWER,
+			7, "review-discard-1", "reviewer-1", "review-assignment-1",
+			"collector-1", "collector-assignment-1", "审核员认为该数据无效", occurredAt
+		));
+
+		ArgumentCaptor<Query> query = ArgumentCaptor.forClass(Query.class);
+		ArgumentCaptor<Update> update = ArgumentCaptor.forClass(Update.class);
+		verify(template).findAndModify(
+			query.capture(), update.capture(), any(FindAndModifyOptions.class), eq(TaskItem.class)
+		);
+		assertThat(query.getValue().getQueryObject().toString()).contains(
+			"item-1", "REVIEW_PENDING", "reviewer-1", "review-assignment-1", "review-discard-1"
+		);
+		Document updateDocument = update.getValue().getUpdateObject();
+		Document set = (Document) updateDocument.get("$set");
+		assertThat(set).containsEntry("status", TaskItemStatus.DISCARDED);
+		assertThat(set).containsEntry("discardedPreviousStatus", TaskItemStatus.REVIEW_PENDING);
+		assertThat(set).doesNotContainKeys(
+			"collectorId", "assignmentId", "reviewerId", "reviewAssignmentId", "currentResult"
+		);
+		com.recording.platform.task.model.CurrentDiscard currentDiscard =
+			(com.recording.platform.task.model.CurrentDiscard) set.get("currentDiscard");
+		assertThat(currentDiscard.reason()).isEqualTo("审核员认为该数据无效");
+		assertThat(currentDiscard.actorRole())
+			.isEqualTo(com.recording.platform.identity.model.UserRole.REVIEWER);
+		Document push = (Document) updateDocument.get("$push");
+		OperationHistory operation = (OperationHistory) push.get("operations");
+		assertThat(operation.getType()).isEqualTo("REVIEW_DISCARD");
+		assertThat(operation.getContent()).contains("审核员认为该数据无效");
+	}
+
+	@Test
+	void restoringReviewDiscardKeepsReviewerOwnership() {
+		SpringDataTaskItemRepository repository = org.mockito.Mockito.mock(SpringDataTaskItemRepository.class);
+		MongoTemplate template = org.mockito.Mockito.mock(MongoTemplate.class);
+		when(template.findAndModify(any(Query.class), any(Update.class), any(FindAndModifyOptions.class), eq(TaskItem.class)))
+			.thenReturn(new TaskItem());
+		MongoTaskItemStore store = new MongoTaskItemStore(repository, template);
+
+		store.adminRestoreIfCurrent(new AdminItemTransitionMutation(
+			"item-1", "admin-1", "管理员一", 8, "review-restore-1",
+			TaskItemStatus.DISCARDED, TaskItemStatus.REVIEW_PENDING,
+			"collector-1", "collector-assignment-1", Instant.parse("2026-07-28T08:10:00Z"),
+			null, com.recording.platform.identity.model.UserRole.ADMIN
+		));
+
+		ArgumentCaptor<Update> update = ArgumentCaptor.forClass(Update.class);
+		verify(template).findAndModify(
+			any(Query.class), update.capture(), any(FindAndModifyOptions.class), eq(TaskItem.class)
+		);
+		Document updateDocument = update.getValue().getUpdateObject();
+		Document unset = (Document) updateDocument.get("$unset");
+		assertThat(unset).doesNotContainKeys("reviewerId", "reviewAssignmentId");
+	}
+
 	@Test
 	@SuppressWarnings({"unchecked", "rawtypes"})
 	void reviewMetricsPipelineCountsOnlyItemsCurrentlyInsideTheReviewFlow() {

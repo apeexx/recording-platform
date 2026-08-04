@@ -11,6 +11,7 @@ import com.recording.platform.task.store.ReviewClaimMutation;
 import com.recording.platform.task.store.ReviewItemClaimMutation;
 import com.recording.platform.task.store.ReviewReleaseMutation;
 import com.recording.platform.task.store.ReviewDecisionMutation;
+import com.recording.platform.task.store.ReviewDiscardMutation;
 import com.recording.platform.task.store.ReviewAssignMutation;
 import com.recording.platform.task.store.AdminReviewApproveMutation;
 import com.recording.platform.task.store.AdminReviewDecisionMutation;
@@ -252,6 +253,35 @@ public class MongoTaskItemStore implements TaskItemStore {
 	}
 
 	@Override
+	public Optional<TaskItem> discardReviewIfCurrent(ReviewDiscardMutation mutation) {
+		Criteria criteria = Criteria.where("_id").is(mutation.itemId())
+			.and("status").is(TaskItemStatus.REVIEW_PENDING)
+			.and("reviewerId").is(mutation.reviewerId())
+			.and("reviewAssignmentId").is(mutation.reviewAssignmentId())
+			.and("revision").is(mutation.expectedRevision())
+			.and("operations.operationId").ne(mutation.operationId());
+		TaskItem snapshot = resultSnapshot(
+			mutation.itemId(), mutation.assignmentId(), mutation.expectedRevision() + 1,
+			TaskItemStatus.DISCARDED, null
+		);
+		Update update = new Update()
+			.set("status", TaskItemStatus.DISCARDED)
+			.set("discardedPreviousStatus", TaskItemStatus.REVIEW_PENDING)
+			.set("currentDiscard", new com.recording.platform.task.model.CurrentDiscard(
+				mutation.reason(), mutation.actorUserId(), mutation.actorUsername(),
+				mutation.actorRole(), mutation.occurredAt()
+			))
+			.set("updatedAt", mutation.occurredAt())
+			.inc("revision", 1L)
+			.push("operations", reviewOperation(
+				mutation.operationId(), "REVIEW_DISCARD", mutation.actorUserId(),
+				mutation.actorUsername(), "审核员将该任务标记为无效数据：" + mutation.reason(),
+				mutation.occurredAt(), snapshot
+			));
+		return modify(criteria, update);
+	}
+
+	@Override
 	public Optional<TaskItem> decideReviewIfCurrent(ReviewDecisionMutation mutation) {
 		Criteria criteria = Criteria.where("_id").is(mutation.itemId())
 			.and("status").is(TaskItemStatus.REVIEW_PENDING)
@@ -464,7 +494,9 @@ public class MongoTaskItemStore implements TaskItemStore {
 			.set("status", mutation.targetStatus())
 			.unset("discardedPreviousStatus")
 			.unset("currentDiscard");
-		applyOwnership(update, mutation);
+		if (mutation.targetStatus() != TaskItemStatus.REVIEW_PENDING) {
+			applyOwnership(update, mutation);
+		}
 		return modify(criteria, update);
 	}
 

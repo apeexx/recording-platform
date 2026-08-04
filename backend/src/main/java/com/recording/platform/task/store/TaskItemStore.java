@@ -40,6 +40,7 @@ public interface TaskItemStore {
 	}
 	default Optional<TaskItem> releaseReviewIfCurrent(ReviewReleaseMutation mutation) { return Optional.empty(); }
 	default Optional<TaskItem> decideReviewIfCurrent(ReviewDecisionMutation mutation) { return Optional.empty(); }
+	default Optional<TaskItem> discardReviewIfCurrent(ReviewDiscardMutation mutation) { return Optional.empty(); }
 	default Page<TaskItem> findReviewPool(Pageable pageable) { return Page.empty(pageable); }
 	default Page<TaskItem> findAllReviewPending(Pageable pageable) { return Page.empty(pageable); }
 	default Optional<TaskItem> assignReviewIfCurrent(ReviewAssignMutation mutation) { return Optional.empty(); }

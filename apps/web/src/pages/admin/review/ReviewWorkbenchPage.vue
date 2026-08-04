@@ -174,6 +174,17 @@ async function release() {
   }
 }
 
+async function discard() {
+  if (!window.confirm('确认将该条数据标记为无效？系统会保留采集结果和操作记录，管理员可在废弃数据中恢复。')) return
+  try {
+    await reviewApi.discard(item.value.id, item.value.revision, operationId('review-discard'))
+    notifications.success('已标记为无效数据')
+    backToQueue()
+  } catch (error) {
+    notifications.error(error.message)
+  }
+}
+
 onMounted(load)
 onBeforeUnmount(() => pollTimers.forEach((timer) => window.clearTimeout(timer)))
 </script>
@@ -183,6 +194,7 @@ onBeforeUnmount(() => pollTimers.forEach((timer) => window.clearTimeout(timer)))
     <PageActions title="审核工作台" description="原始采集结果保持只读，审核最终答案独立保存。">
       <button class="button-secondary" @click="backToQueue">返回审核池</button>
       <button v-if="isOwnReviewAssignment" class="button-secondary" @click="release">释放审核</button>
+      <button v-if="canDecide" class="button-secondary is-danger" @click="discard">标记为无效</button>
     </PageActions>
     <AsyncState :loading="loading" :error="loadError" :empty="!item" @retry="backToQueue">
       <div class="review-layout">

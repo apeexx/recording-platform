@@ -100,7 +100,11 @@ public class TaskItemAdministrationService {
 				throw invalid("INVALID_RESTORE_STATE", "采集员只能恢复本人待录制或待返工数据");
 			}
 		}
-		validateEnabled(item, item.getDiscardedPreviousStatus());
+		if (item.getDiscardedPreviousStatus() == TaskItemStatus.REVIEW_PENDING) {
+			requireConfiguration(item);
+		} else {
+			validateEnabled(item, item.getDiscardedPreviousStatus());
+		}
 		return items.adminRestoreIfCurrent(mutation(
 			item, item.getDiscardedPreviousStatus(), item.getCollectorId(), item.getAssignmentId(),
 			operationId, null, actor

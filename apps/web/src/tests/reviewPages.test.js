@@ -15,14 +15,18 @@ import ReviewTaskSelectPage from '../pages/admin/review/ReviewTaskSelectPage.vue
 
 describe('审核页面 API', () => {
   beforeEach(() => vi.clearAllMocks())
-  it('领取使用 Idempotency-Key，驳回提交原因多选与说明', async () => {
+	it('领取使用 Idempotency-Key，驳回和标记无效提交审核契约', async () => {
     httpRequest.mockResolvedValue({})
 	await reviewApi.claim('task-1', 'claim-1')
     await reviewApi.reject('item-1', 4, ['空音频'], '请重新录制', 'reject-1')
+		await reviewApi.discard('item-1', 5, 'discard-1')
 	expect(httpRequest).toHaveBeenNthCalledWith(1, '/api/reviews/tasks/task-1/claim', { method: 'POST', idempotencyKey: 'claim-1' })
-    expect(httpRequest).toHaveBeenNthCalledWith(2, '/api/reviews/item-1/reject', {
+		expect(httpRequest).toHaveBeenNthCalledWith(2, '/api/reviews/item-1/reject', {
       method: 'POST', json: { operationId: 'reject-1', expectedRevision: 4, reasons: ['空音频'], note: '请重新录制' }
     })
+		expect(httpRequest).toHaveBeenNthCalledWith(3, '/api/reviews/item-1/discard', {
+			method: 'POST', json: { operationId: 'discard-1', expectedRevision: 5 }
+		})
   })
 
 	it('指定已提交条目必须先领取再审核', async () => {

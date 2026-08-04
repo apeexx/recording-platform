@@ -29,6 +29,8 @@ class ReviewControllerTests {
 		TaskItem rejected = item("item-1", TaskItemStatus.REWORK_PENDING);
 		when(service.reject("item-1", "reject-1", 4, List.of("空音频"), "重录", reviewer))
 			.thenReturn(rejected);
+		TaskItem discarded = item("item-1", TaskItemStatus.DISCARDED);
+		when(service.discard("item-1", "discard-1", 5, reviewer)).thenReturn(discarded);
 
 		assertThat(controller.claim("task-1", "claim-1", reviewer)).isSameAs(claimed);
 		assertThat(controller.release("item-1", new ReviewController.ItemOperationRequest("release-1", 2L), reviewer))
@@ -38,11 +40,15 @@ class ReviewControllerTests {
 		assertThat(controller.reject("item-1", new ReviewController.RejectRequest(
 			"reject-1", 4L, List.of("空音频"), "重录"
 		), reviewer)).isSameAs(rejected);
+		assertThat(controller.discard("item-1", new ReviewController.ItemOperationRequest(
+			"discard-1", 5L
+		), reviewer)).isSameAs(discarded);
 
 		verify(service).claim("task-1", "claim-1", reviewer);
 		verify(service).release("item-1", "release-1", 2, reviewer);
 		verify(service).approve("item-1", "approve-1", 3, "修订文本", reviewer);
 		verify(service).reject("item-1", "reject-1", 4, List.of("空音频"), "重录", reviewer);
+		verify(service).discard("item-1", "discard-1", 5, reviewer);
 	}
 
 	private TaskItem item(String id, TaskItemStatus status) {

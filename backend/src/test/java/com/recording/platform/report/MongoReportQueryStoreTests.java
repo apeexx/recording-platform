@@ -23,6 +23,28 @@ import java.util.List;
 
 class MongoReportQueryStoreTests {
 	@Test
+	void workSummaryCountsReviewDiscardOperations() {
+		MongoTemplate template = mock(MongoTemplate.class);
+		@SuppressWarnings("unchecked")
+		MongoCollection<Document> items = mock(MongoCollection.class);
+		@SuppressWarnings("unchecked")
+		AggregateIterable<Document> rows = mock(AggregateIterable.class);
+		when(template.getCollection("task_items")).thenReturn(items);
+		when(items.aggregate(anyList())).thenReturn(rows);
+		when(rows.first()).thenReturn(null);
+
+		new MongoReportQueryStore(template).aggregateWork("collector-1", null);
+
+		@SuppressWarnings("rawtypes")
+		ArgumentCaptor<List> pipeline = ArgumentCaptor.forClass(List.class);
+		verify(items).aggregate(pipeline.capture());
+		String stages = pipeline.getValue().toString();
+		assertTrue(stages.contains("ADMIN_DISCARD"));
+		assertTrue(stages.contains("COLLECTOR_DISCARD"));
+		assertTrue(stages.contains("REVIEW_DISCARD"));
+	}
+
+	@Test
 	void collectorSubmissionProjectionSupportsMissingTextAndAudio() {
 		MongoTemplate template = mock(MongoTemplate.class);
 		@SuppressWarnings("unchecked")

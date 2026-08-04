@@ -17,6 +17,7 @@ import com.recording.platform.task.store.ReviewAssignMutation;
 import com.recording.platform.task.store.AdminReviewApproveMutation;
 import com.recording.platform.task.store.AdminReviewDecisionMutation;
 import com.recording.platform.task.store.ReviewReleaseMutation;
+import com.recording.platform.task.store.ReviewDiscardMutation;
 import com.recording.platform.task.store.TaskItemStore;
 import com.recording.platform.task.store.TaskStore;
 import com.recording.platform.task.store.ReviewTaskMetrics;
@@ -366,6 +367,21 @@ public class ReviewService {
 			requiredOperationId(operationId), Instant.now(clock)
 		);
 		return items.releaseReviewIfCurrent(mutation).orElseThrow(this::stale);
+	}
+
+	public TaskItem discard(
+		String itemId,
+		String operationId,
+		long expectedRevision,
+		PlatformPrincipal actor
+	) {
+		TaskItem item = requireDecisionItem(itemId, expectedRevision, actor);
+		ReviewDiscardMutation mutation = new ReviewDiscardMutation(
+			itemId, actor.userId(), actorName(actor), actor.role(), expectedRevision,
+			requiredOperationId(operationId), item.getReviewerId(), item.getReviewAssignmentId(),
+			item.getCollectorId(), item.getAssignmentId(), "审核员认为该数据无效", Instant.now(clock)
+		);
+		return items.discardReviewIfCurrent(mutation).orElseThrow(this::stale);
 	}
 
 	public TaskItem approve(

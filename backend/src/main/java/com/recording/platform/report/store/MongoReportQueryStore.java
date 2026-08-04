@@ -205,7 +205,9 @@ public class MongoReportQueryStore implements ReportQueryStore {
 				new Document("$ifNull", List.of("$referenceVideoDurationMillis", 0)), 0
 			)))
 			.append("releaseCount", countType(operations, "RELEASE"))
-			.append("discardCount", countTypes(operations, List.of("ADMIN_DISCARD", "COLLECTOR_DISCARD")))));
+			.append("discardCount", countTypes(
+				operations, List.of("ADMIN_DISCARD", "COLLECTOR_DISCARD", "REVIEW_DISCARD")
+			))));
 		pipeline.add(new Document("$group", new Document("_id", null)
 			.append("submissionCount", new Document("$sum", "$submissionCount"))
 			.append("submissionDuration", new Document("$sum", "$submissionDuration"))

@@ -103,6 +103,40 @@ class TaskItemAdministrationServiceTests {
 	}
 
 	@Test
+	void adminCanRestoreReviewDiscardWithoutDroppingReviewOwnership() {
+		TaskItemStore items = mock(TaskItemStore.class);
+		TaskStore tasks = mock(TaskStore.class);
+		TaskItem discarded = item(TaskItemStatus.DISCARDED, 8);
+		discarded.setDiscardedPreviousStatus(TaskItemStatus.REVIEW_PENDING);
+		discarded.setCollectorId("collector-1");
+		discarded.setAssignmentId("collector-assignment-1");
+		discarded.setReviewerId("reviewer-1");
+		discarded.setReviewAssignmentId("review-assignment-1");
+		discarded.setCurrentResult(new TaskItemResult(null, "有效文本"));
+		when(items.findById("item-1")).thenReturn(Optional.of(discarded));
+		stubTask(tasks, version(true));
+		TaskItem restored = item(TaskItemStatus.REVIEW_PENDING, 9);
+		restored.setCollectorId(discarded.getCollectorId());
+		restored.setAssignmentId(discarded.getAssignmentId());
+		restored.setReviewerId(discarded.getReviewerId());
+		restored.setReviewAssignmentId(discarded.getReviewAssignmentId());
+		restored.setCurrentResult(discarded.getCurrentResult());
+		when(items.adminRestoreIfCurrent(any())).thenReturn(Optional.of(restored));
+		TaskItemAdministrationService service = new TaskItemAdministrationService(items, tasks, CLOCK);
+
+		TaskItem result = service.restore("item-1", "review-restore-1", 8, admin());
+
+		assertThat(result.getStatus()).isEqualTo(TaskItemStatus.REVIEW_PENDING);
+		assertThat(result.getReviewerId()).isEqualTo("reviewer-1");
+		assertThat(result.getReviewAssignmentId()).isEqualTo("review-assignment-1");
+		assertThat(result.getCurrentResult().text()).isEqualTo("有效文本");
+		assertCode(() -> service.restore("item-1", "review-restore-2", 8, collector("collector-1")),
+			"INVALID_RESTORE_STATE");
+		assertCode(() -> service.restore("item-1", "review-restore-3", 8, reviewer("reviewer-1")),
+			"ACCESS_DENIED");
+	}
+
+	@Test
 	void collectorCanDiscardOwnPendingItemWithRequiredReason() {
 		TaskItemStore items = mock(TaskItemStore.class);
 		TaskStore tasks = mock(TaskStore.class);
@@ -254,6 +288,12 @@ class TaskItemAdministrationServiceTests {
 	private PlatformPrincipal collector(String userId) {
 		return new PlatformPrincipal(
 			"session-" + userId, userId, userId, "采集员", UserRole.COLLECTOR, SessionType.MINIPROGRAM, false
+		);
+	}
+
+	private PlatformPrincipal reviewer(String userId) {
+		return new PlatformPrincipal(
+			"session-" + userId, userId, userId, "审核员", UserRole.REVIEWER, SessionType.WEB, false
 		);
 	}
 

@@ -34,6 +34,7 @@ import com.recording.platform.identity.store.IdentityDirectory;
 import com.recording.platform.task.store.ReviewAssignMutation;
 import com.recording.platform.task.store.AdminReviewApproveMutation;
 import com.recording.platform.task.store.AdminReviewDecisionMutation;
+import com.recording.platform.task.store.ReviewDiscardMutation;
 import com.recording.platform.review.service.BatchReviewCommand;
 import com.recording.platform.review.service.BatchReviewResult;
 import java.time.Clock;
@@ -180,6 +181,57 @@ class ReviewServiceTests {
 		assertThat(result.getReviewAssignmentId()).isNull();
 		assertThat(result.getCurrentResult()).isNotNull();
 		verify(items).releaseReviewIfCurrent(any(ReviewReleaseMutation.class));
+	}
+
+	@Test
+	void reviewerOrAdminDiscardsAnAssignedReviewWithFixedAuditReason() {
+		TaskItemStore items = mock(TaskItemStore.class);
+		TaskItem existing = assigned("item-1", 7);
+		when(items.findById("item-1")).thenReturn(Optional.of(existing));
+		TaskItem discarded = assigned("item-1", 8);
+		discarded.setStatus(TaskItemStatus.DISCARDED);
+		when(items.discardReviewIfCurrent(any())).thenReturn(Optional.of(discarded));
+		ReviewService service = new ReviewService(items, mock(TaskStore.class), CLOCK);
+
+		assertThat(service.discard("item-1", "review-discard-1", 7, reviewer()).getStatus())
+			.isEqualTo(TaskItemStatus.DISCARDED);
+
+		org.mockito.ArgumentCaptor<ReviewDiscardMutation> mutation =
+			org.mockito.ArgumentCaptor.forClass(ReviewDiscardMutation.class);
+		verify(items).discardReviewIfCurrent(mutation.capture());
+		assertThat(mutation.getValue().reason()).isEqualTo("审核员认为该数据无效");
+		assertThat(mutation.getValue().actorRole()).isEqualTo(UserRole.REVIEWER);
+		assertThat(mutation.getValue().reviewerId()).isEqualTo("reviewer-1");
+		assertThat(mutation.getValue().reviewAssignmentId()).isEqualTo("review-assignment-1");
+
+		when(items.discardReviewIfCurrent(any())).thenReturn(Optional.of(discarded));
+		assertThat(service.discard("item-1", "admin-review-discard-1", 7, admin()).getStatus())
+			.isEqualTo(TaskItemStatus.DISCARDED);
+	}
+
+	@Test
+	void reviewDiscardRejectsOtherReviewerWrongStatusAndStaleRevision() {
+		TaskItemStore items = mock(TaskItemStore.class);
+		TaskItem existing = assigned("item-1", 7);
+		when(items.findById("item-1")).thenReturn(Optional.of(existing));
+		ReviewService service = new ReviewService(items, mock(TaskStore.class), CLOCK);
+
+		PlatformPrincipal otherReviewer = new PlatformPrincipal(
+			"session-2", "reviewer-2", "reviewer2", "审核员二",
+			UserRole.REVIEWER, SessionType.WEB, false
+		);
+		assertThatThrownBy(() -> service.discard("item-1", "discard-other", 7, otherReviewer))
+			.isInstanceOfSatisfying(ApiException.class,
+				error -> assertThat(error.getCode()).isEqualTo("STALE_STATE"));
+		assertThatThrownBy(() -> service.discard("item-1", "discard-stale", 6, reviewer()))
+			.isInstanceOfSatisfying(ApiException.class,
+				error -> assertThat(error.getCode()).isEqualTo("STALE_STATE"));
+
+		existing.setStatus(TaskItemStatus.SUBMITTED);
+		assertThatThrownBy(() -> service.discard("item-1", "discard-submitted", 7, reviewer()))
+			.isInstanceOfSatisfying(ApiException.class,
+				error -> assertThat(error.getCode()).isEqualTo("STALE_STATE"));
+		verify(items, org.mockito.Mockito.never()).discardReviewIfCurrent(any());
 	}
 
 	@Test

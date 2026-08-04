@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import AsyncState from '../../../components/admin/AsyncState.vue'
 import PageActions from '../../../components/admin/PageActions.vue'
 import PaginationControls from '../../../components/admin/PaginationControls.vue'
@@ -14,13 +15,23 @@ import { statusLabel } from '../../../lib/statusLabels.js'
 import { useBatchSelection } from '../../../composables/useBatchSelection.js'
 import { useNotifications } from '../../../composables/useNotifications.js'
 import { defaultTaskItemFilters, selectionFilters } from '../../../lib/taskItemFilters.js'
+import {
+  buildTaskPoolRouteQuery,
+  clearLastTaskId,
+  parseTaskPoolRouteState,
+  readLastTaskId,
+  writeLastTaskId,
+} from '../../../lib/taskPoolState.js'
 
+const route = useRoute()
+const router = useRouter()
 const notifications = useNotifications()
+const restoredState = parseTaskPoolRouteState(route.query)
 const tasks = ref([])
 const taskId = ref('')
 const rows = ref([])
-const page = ref(0)
-const size = ref(20)
+const page = ref(restoredState.page)
+const size = ref(restoredState.size)
 const total = ref(0)
 const loading = ref(false)
 const error = ref('')
@@ -29,7 +40,7 @@ const preview = ref(null)
 const batchJob = ref(null)
 const pollTimer = ref(null)
 const selection = useBatchSelection(rows, total)
-const filters = ref(defaultTaskItemFilters())
+const filters = ref({ ...defaultTaskItemFilters(), ...restoredState.filters })
 const taskOptions = computed(() => tasks.value.map(task => ({ value: task.id, label: task.name })))
 const selectedTask = computed(() => tasks.value.find(task => task.id === taskId.value))
 const statusOptions = computed(() => [
@@ -44,14 +55,49 @@ const progress = computed(() => batchJob.value?.selectedCount
   : 0)
 
 async function init() {
-  try { tasks.value = (await taskApi.list(0, 100)).items || [] } catch (exception) { error.value = exception.message }
+  try {
+    await syncRouteState()
+    tasks.value = (await taskApi.list(0, 100)).items || []
+    const cachedTaskId = readLastTaskId()
+    if (!cachedTaskId) return
+    if (!tasks.value.some(task => task.id === cachedTaskId)) {
+      try {
+        const cachedTask = await taskApi.get(cachedTaskId)
+        tasks.value = [...tasks.value, cachedTask]
+      } catch (exception) {
+        if (exception.status === 404) {
+          clearLastTaskId()
+          return
+        }
+        throw exception
+      }
+    }
+    taskId.value = cachedTaskId
+    await load()
+    await resumeRecent()
+  } catch (exception) {
+    error.value = exception.message
+  }
+}
+async function syncRouteState() {
+  await router.replace({ path: route.path, query: buildTaskPoolRouteQuery({
+    page: page.value,
+    size: size.value,
+    filters: filters.value,
+  }) })
 }
 async function load() {
   if (!taskId.value) return
   loading.value = true
   error.value = ''
   try {
-    const result = await taskApi.items(taskId.value, page.value, size.value, filters.value)
+    let result = await taskApi.items(taskId.value, page.value, size.value, filters.value)
+    const lastPage = Math.max(0, Math.ceil((result.total || 0) / size.value) - 1)
+    if (page.value > lastPage) {
+      page.value = lastPage
+      await syncRouteState()
+      result = await taskApi.items(taskId.value, page.value, size.value, filters.value)
+    }
     rows.value = result.items || []
     total.value = result.total || 0
   } catch (exception) {
@@ -62,22 +108,27 @@ async function load() {
   }
 }
 async function choose() {
+  if (taskId.value) writeLastTaskId(taskId.value)
+  else clearLastTaskId()
   page.value = 0
   selection.clear()
   preview.value = null
   batchJob.value = null
+  await syncRouteState()
   await load()
   await resumeRecent()
 }
 async function changePage(value) {
   page.value = value
   selection.clearPageMode()
+  await syncRouteState()
   await load()
 }
 async function changeSize(value) {
   size.value = value
   page.value = 0
   selection.clear()
+  await syncRouteState()
   await load()
 }
 async function changeFilters(value) {
@@ -85,6 +136,7 @@ async function changeFilters(value) {
   page.value = 0
   selection.clear()
   preview.value = null
+  await syncRouteState()
   await load()
 }
 function startDownload(url) {

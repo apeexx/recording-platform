@@ -165,6 +165,8 @@ Web 端主题变量位于 `apps/web/src/styles/theme.css`，全局样式入口�
 
 Web 端表单校验、按钮操作、搜索、刷新和接口失败统一使用右上角 Toast，不得同时写入页面级加载错误或重复渲染行内红字。错误 Toast 默认显示约 4.5 秒并按相同文案去重，成功和信息提示默认约 2.6 秒；页面已有内容时刷新失败必须保留原内容。只有核心数据首次加载完全失败才使用 `AsyncState` 阻塞重试；删除、结束、接管等需要用户明确选择的操作继续使用确认弹窗。业务表单使用 `novalidate` 和手动校验，失败时聚焦第一个无效字段。
 
+独立任务数据池使用浏览器全局 `localStorage` 长期保存最后选择的任务；筛选、页码和每页条数只写入 `/admin/pool` 当前 URL。查看条目后通过浏览器历史返回必须恢复临时状态；从其他菜单以无查询参数的 `/admin/pool` 重新进入时只恢复任务，筛选和分页回默认值。勾选、批处理预览和提示不得持久化。
+
 `apps/web/src/pages/admin/voice-generation/` 是语音生成 Web 生产台模块。非语音生成任务不要修改该目录下的页面，除非用户明确要求。
 
 语音生成模块已接入后端真实接口，支持 0 元试听、付费克隆、日常合成、音色资产管理、默认声音配置和生成记录。前端不得保存、展示或提交 MiniMax API Key；后端从环境变量或本地 `.env` 读取 `MINIMAX_API_KEY`。
@@ -465,12 +467,12 @@ Web 数据大屏使用仅 ADMIN 可访问的 `GET /api/reports/dashboard`，返�
 
 ```text
 请求方法：GET / POST
-请求路径：/api/reviews/tasks、/api/reviews/tasks/{taskId}/summary|pool|filter-users|claim|claim-batch、/api/reviews/{itemId}/claim|release|approve|reject、/api/reviews/assign、/api/reviews/batch/claim|assign|approve
-请求参数：审核任务列表支持可选 includeCleared=false；审核池支持可重复 itemCode、status=SUBMITTED|REVIEW_PENDING、collectorId、reviewerId、result，以及 itemCodeQuery、includeUnassignedReviewer；filter-users 仅接受 role=COLLECTOR|REVIEWER 和可选 query，并只从当前角色可见条目生成候选；领取头或请求体 operationId/Idempotency-Key；指定领取、释放和决定携带 expectedRevision；单条/批量分配携带 reviewerId；所选条目批量领取与分配携带 operationId 和最多 100 个 itemId/expectedRevision；通过的 text 表示审核最终答案；驳回携带 reasons/note
+请求路径：/api/reviews/tasks、/api/reviews/tasks/{taskId}/summary|pool|filter-users|claim|claim-batch、/api/reviews/{itemId}/claim|release|approve|reject|discard、/api/reviews/assign、/api/reviews/batch/claim|assign|approve
+请求参数：审核任务列表支持可选 includeCleared=false；审核池支持可重复 itemCode、status=SUBMITTED|REVIEW_PENDING、collectorId、reviewerId、result，以及 itemCodeQuery、includeUnassignedReviewer；filter-users 仅接受 role=COLLECTOR|REVIEWER 和可选 query，并只从当前角色可见条目生成候选；领取头或请求体 operationId/Idempotency-Key；指定领取、释放、决定和标记无效携带 expectedRevision；单条/批量分配携带 reviewerId；所选条目批量领取与分配携带 operationId 和最多 100 个 itemId/expectedRevision；通过的 text 表示审核最终答案；驳回携带 reasons/note；审核标记无效不接收原因并固定记录“审核员认为该数据无效”
 响应结构：任务审核摘要固定包含 pendingCount、effectiveItemCount、completedCount、reviewEnteredCount、reviewProcessedCount、submittedCount、reviewPendingCount、todayCompletedCount；TaskItem、审核池分页或逐条批量结果
 错误码：404 NO_REVIEW_ITEM；409 STALE_STATE；422 INVALID_REVIEWER/INVALID_BATCH_SIZE/审核内容错误
-权限要求：ADMIN/REVIEWER 可查看审核池并领取指定条目；按数量随机批量领取仅 REVIEWER；所选条目批量领取允许 ADMIN/REVIEWER；分配和批量通过仅 ADMIN；ADMIN/REVIEWER 只有作为当前 reviewerId 时才能释放，决定必须已有审核领取或分配
-数据一致性要求：审核任务列表默认仅返回 pendingCount 大于零的任务；includeCleared=true 时返回全部启用人工审核的任务，包括零积压任务。两种模式均按积压降序、taskCode 稳定排序；pendingCount 固定等于 submittedCount + reviewPendingCount。审核入口使用包含已清空任务的汇总保持整体进度和今日完成真实，但只把 pendingCount 大于零的任务渲染为待办卡。审核汇总使用一次 Mongo 聚合：effectiveItemCount 排除 DISCARDED；reviewEnteredCount 只统计当前为 SUBMITTED/REVIEW_PENDING/REWORK_PENDING/COMPLETED 的条目；reviewProcessedCount 统计当前为 COMPLETED/REWORK_PENDING 的条目，因此待录、可领取和废弃均不进入审核处理进度；todayCompletedCount 按当前 Asia/Shanghai 04:00 至次日 04:00 业务日内的 firstCompletedAt 且当前仍 COMPLETED。审核筛选始终与角色可见范围 AND 组合，并同步用于跨页预览、快照和执行；领取和分配只处理 SUBMITTED 并原子转 REVIEW_PENDING；释放原子回到 SUBMITTED；审核通过保留 currentResult 并单独写 reviewFinalAnswer；所选条目批量操作按输入顺序返回逐条成功/失败结果
+权限要求：ADMIN/REVIEWER 可查看审核池并领取指定条目；按数量随机批量领取仅 REVIEWER；所选条目批量领取允许 ADMIN/REVIEWER；分配和批量通过仅 ADMIN；REVIEWER 只有作为当前 reviewerId 时才能释放、决定或标记无效，ADMIN 可对已领取或分配的条目决定或标记无效
+数据一致性要求：审核任务列表默认仅返回 pendingCount 大于零的任务；includeCleared=true 时返回全部启用人工审核的任务，包括零积压任务。两种模式均按积压降序、taskCode 稳定排序；pendingCount 固定等于 submittedCount + reviewPendingCount。审核入口使用包含已清空任务的汇总保持整体进度和今日完成真实，但只把 pendingCount 大于零的任务渲染为待办卡。审核汇总使用一次 Mongo 聚合：effectiveItemCount 排除 DISCARDED；reviewEnteredCount 只统计当前为 SUBMITTED/REVIEW_PENDING/REWORK_PENDING/COMPLETED 的条目；reviewProcessedCount 统计当前为 COMPLETED/REWORK_PENDING 的条目，因此待录、可领取和废弃均不进入审核处理进度；todayCompletedCount 按当前 Asia/Shanghai 04:00 至次日 04:00 业务日内的 firstCompletedAt 且当前仍 COMPLETED。审核筛选始终与角色可见范围 AND 组合，并同步用于跨页预览、快照和执行；领取和分配只处理 SUBMITTED 并原子转 REVIEW_PENDING；释放原子回到 SUBMITTED；审核通过保留 currentResult 并单独写 reviewFinalAnswer；审核标记无效使用 revision/CAS 和持久化幂等进入 DISCARDED，保留采集结果、采集与审核归属，写入 REVIEW_DISCARD，管理员恢复后回到 REVIEW_PENDING；所选条目批量操作按输入顺序返回逐条成功/失败结果
 前端调用位置：apps/web/src/lib/reviewApi.js、apps/web/src/pages/admin/review/*
 ```
 
@@ -744,7 +746,7 @@ Web 数据大屏使用仅 ADMIN 可访问的 `GET /api/reports/dashboard`，返�
 默认值：新条目 AVAILABLE、revision=0、历史数组为空
 唯一约束：(taskId,itemCode)；creationOperationId 存在时任务内唯一；普通 RECORDING_PENDING 与 REWORK_PENDING 均不设采集员持有数量唯一约束
 索引：上述业务唯一索引；(taskId,status,sequence) 领取索引；(collectorId,status)；普通查询索引 (collectorId,taskId,status)
-数据兼容策略：条目通过 taskId 读取已冻结任务配置；currentDiscard 只表示当前废弃标记，恢复后清除，历史缺失时安全占位；当前结果可替换/清除，提交与操作历史只追加；领取复用既有 RELEASE 操作历史计算 30 分钟个人释放冷却，不新增字段或迁移；firstCompletedAt 第一次进入 COMPLETED 时写入，管理员退回、废弃与恢复不覆盖，再次完成仍保留首次值，真正释放才清除；小程序个人统计只读原 current assignment 字段，不改变接口；采集员废弃次数与管理员废弃次数均计入流程统计
+数据兼容策略：条目通过 taskId 读取已冻结任务配置；currentDiscard 只表示当前废弃标记，恢复后清除，历史缺失时安全占位；当前结果可替换/清除，提交与操作历史只追加；领取复用既有 RELEASE 操作历史计算 30 分钟个人释放冷却，不新增字段或迁移；firstCompletedAt 第一次进入 COMPLETED 时写入，管理员退回、废弃与恢复不覆盖，再次完成仍保留首次值，真正释放才清除；小程序个人统计只读原 current assignment 字段，不改变接口；采集员、管理员与审核环节的废弃操作均计入流程统计
 迁移步骤：应用启动时幂等回填缺失 firstCompletedAt，只使用最早的 REVIEW_APPROVE、ADMIN_BATCH_APPROVE、结果为 COMPLETED 的 SUBMIT 或 ADMIN_STATUS_CHANGE 操作时间，忽略废弃恢复；无法可靠判断的条目保持为空并只记录脱敏数量。继续确保普通索引 `collector_task_status` 及双阶段统计索引创建成功，再幂等删除旧 `unique_collector_recording_pending` 与 `unique_collector_task_recording_pending`，失败则终止启动
 回滚方式：备份集合与本地媒体；恢复任一旧唯一索引前必须先处理与其口径冲突的多条普通 RECORDING_PENDING，否则索引无法重建；不得只回滚 Mongo 或只回滚文件
 ```

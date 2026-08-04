@@ -177,6 +177,16 @@ public class ReviewController {
 			() -> reviews.release(itemId, request.operationId(), request.expectedRevision(), actor));
 	}
 
+	@PostMapping("/{itemId}/discard")
+	public TaskItem discard(
+		@PathVariable String itemId,
+		@Valid @RequestBody ItemOperationRequest request,
+		@AuthenticationPrincipal PlatformPrincipal actor
+	) {
+		return execute("review:discard:" + itemId, request.operationId(), TaskItem.class,
+			() -> reviews.discard(itemId, request.operationId(), request.expectedRevision(), actor));
+	}
+
 	@PostMapping("/{itemId}/approve")
 	public TaskItem approve(
 		@PathVariable String itemId,

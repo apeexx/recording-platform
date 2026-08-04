@@ -166,7 +166,8 @@ class ReportServiceTests {
 		discarded.setCurrentResult(new TaskItemResult(recording(4000), null));
 		discarded.setOperations(List.of(
 			operation("ADMIN_DISCARD", "admin-1", "2026-07-12T09:00:00Z"),
-			operation("COLLECTOR_DISCARD", "collector-1", "2026-07-12T10:00:00Z")
+			operation("COLLECTOR_DISCARD", "collector-1", "2026-07-12T10:00:00Z"),
+			operation("REVIEW_DISCARD", "reviewer-1", "2026-07-12T11:00:00Z")
 		));
 		when(items.findForReport("collector-1", null)).thenReturn(List.of(completed, released, discarded));
 		ReportService service = new ReportService(items);
@@ -178,7 +179,7 @@ class ReportServiceTests {
 		assertThat(summary.currentCompletedCount()).isEqualTo(1);
 		assertThat(summary.currentDurationMillis()).isEqualTo(2_000);
 		assertThat(summary.releaseCount()).isEqualTo(1);
-		assertThat(summary.discardCount()).isEqualTo(2);
+		assertThat(summary.discardCount()).isEqualTo(3);
 	}
 
 	@Test
