@@ -216,6 +216,8 @@ DASHSCOPE_BASE_URL（默认 https://dashscope.aliyuncs.com/compatible-mode/v1，
 
 采集员领取必须同时满足任务 RUNNING 和 ACTIVE grant；普通 `RECORDING_PENDING` 不限制采集员持有数量，每个新的 `Idempotency-Key` 使用 Mongo `findAndModify` 从 `AVAILABLE` 按 sequence 原子领取一条新数据，相同幂等键重放仍返回首次结果。采集员本人释放后的 30 分钟内，领取查询按 `operations` 中同一采集员的 `RELEASE` 时间原子跳过该条，恰好满 30 分钟恢复资格；其他采集员和管理员释放不触发此个人冷却。驳回进入独立 `REWORK_PENDING`，保留原采集员、assignment 和驳回原因；授权撤销只阻止新领取，不影响已领取条目的提交和释放。
 
+管理员可在 RUNNING 任务的数据池中，将所选或全部筛选结果内仍为 `AVAILABLE` 的条目批量分配给该任务具有 ACTIVE grant 且账号 ACTIVE 的采集员；分配原子进入 `RECORDING_PENDING`，生成新的 assignmentId，并继续使用 revision/CAS、持久化幂等和跨页批处理恢复。非待领取条目不得直接改派，必须先释放回 `AVAILABLE`；分配不自动创建或恢复任务授权。
+
 启用人工审核时，采集员提交进入 `SUBMITTED`，审核领取或管理员分配后才原子进入 `REVIEW_PENDING`；`SUBMITTED` 期间本人可使用相同 assignment 与最新 revision 覆盖提交，继续复用录音原子替换、历史和旧媒体清理。审核释放回到 `SUBMITTED`，审核通过进入 `COMPLETED`，驳回进入 `REWORK_PENDING`；关闭人工审核时提交仍直接进入 `COMPLETED`。提交修改与审核领取必须以状态和 revision/CAS 竞争，失败统一返回 `STALE_STATE`。应用启动时仅将 reviewerId、reviewAssignmentId 均为空的旧 `REVIEW_PENDING` 幂等迁移为 `SUBMITTED`，不修改已领取记录，日志只输出迁移数量。
 
 Task 2 所有不在请求体内携带 operationId 的写接口必须要求 `Idempotency-Key`。通用幂等记录按 `(actorUserId, action, operationKey)` 唯一，先持久化 IN_PROGRESS 声明，成功后保存 COMPLETED 响应快照；重复请求返回首次结果，跨实例仍在处理的重复请求返回 `409 OPERATION_IN_PROGRESS`，不得重复执行底层 mutation。
@@ -392,11 +394,22 @@ Web 数据大屏使用仅 ADMIN 可访问的 `GET /api/reports/dashboard`，返�
 请求方法：POST / GET / DELETE
 请求路径：/api/tasks/{taskId}/grants、/grants/{userId}、/access-requests、/access-requests/{requestId}/approve|reject
 请求参数：直接授权 JSON userId；驳回可选 reason；申请、决策、直接授权和撤销均携带 Idempotency-Key；授权列表支持 page、size、可选 status 与 query，申请列表支持 page、size、可选 query；query 按姓名或登录账号模糊匹配、按完整用户 ID 精确匹配
-响应结构：TaskGrant、TaskAccessRequest 或 {items,page,size,total}；授权与申请视图均包含 userName、userId、userLoginName
+响应结构：TaskGrant、TaskAccessRequest 或 {items,page,size,total}；授权与申请视图均包含 userName、userId、userLoginName，授权视图额外包含可空 userStatus
 错误码：404 TASK/USER/ACCESS_REQUEST/GRANT_NOT_FOUND；409 TASK_ALREADY_GRANTED/ACCESS_REQUEST_DECIDED；422 INVALID_COLLECTOR
 权限要求：申请仅 COLLECTOR；查询、直接授权、批准、驳回、撤销仅 ADMIN
 数据一致性要求：同一任务/用户仅一个 PENDING；决策使用 PENDING 条件 CAS；批准幂等创建授权；所有写操作持久化幂等；撤销不影响已领取条目，批准重放不复活 REVOKED；搜索通过任务授权/申请与 miniprogram_users 关联后统计和分页，搜索后的 total 必须准确，不新增冗余用户字段
 前端调用位置：apps/web/src/pages/admin/tasks/TaskPermissionsPage.vue、apps/miniprogram/pages/tasks/*
+```
+
+```text
+请求方法：POST
+请求路径：/api/task-items/batch/assign-collector
+请求参数：JSON operationId、collectorId、items[{itemId,expectedRevision}]，每批 1–100 条
+响应结构：逐条 BatchItemResult[{itemId,success,revision?,code?,message?}]
+错误码：400 OPERATION_ID_REQUIRED/COLLECTOR_REQUIRED 或请求结构错误；403 ACCESS_DENIED/TASK_GRANT_REQUIRED/CSRF_TOKEN_INVALID；404 TASK_ITEM_NOT_FOUND/TASK_NOT_FOUND/USER_NOT_FOUND；409 TASK_NOT_RUNNING/STALE_STATE/OPERATION_IN_PROGRESS；422 INVALID_BATCH_SIZE/INVALID_COLLECTOR
+权限要求：仅 ADMIN，携带有效 Web CSRF；请求体 operationId 使用持久化幂等
+数据一致性要求：仅 RUNNING 任务内仍为 AVAILABLE 的条目可分配；目标必须为 ACTIVE COLLECTOR 且拥有当前任务 ACTIVE grant；每条原子写入 RECORDING_PENDING、collectorId、新 assignmentId、revision 和操作记录，竞争失败不覆盖已有领取
+前端调用位置：apps/web/src/lib/taskApi.js、apps/web/src/pages/admin/tasks/TaskPoolPage.vue
 ```
 
 ```text
@@ -446,11 +459,11 @@ Web 数据大屏使用仅 ADMIN 可访问的 `GET /api/reports/dashboard`，返�
 ```text
 请求方法：POST / GET
 请求路径：/api/batch-operation-jobs/preview、/api/batch-operation-jobs、/api/batch-operation-jobs/{jobId}、/api/batch-operation-jobs?taskId=&source=
-请求参数：预览携带 taskId、source=TASK_DETAIL|TASK_POOL|REVIEW_QUEUE、excludedItemIds，以及可选 itemCodes、groups、collectorIds、includeUnassigned、results、sourceItemIdQuery；旧 group、result 单值字段继续兼容；创建另含 operationId、action、可选 targetStatus/reviewerId
+请求参数：预览携带 taskId、source=TASK_DETAIL|TASK_POOL|REVIEW_QUEUE、excludedItemIds，以及可选 itemCodes、groups、collectorIds、includeUnassigned、results、sourceItemIdQuery；旧 group、result 单值字段继续兼容；创建另含 operationId、action、可选 targetStatus/reviewerId/collectorId，COLLECTOR_ASSIGN 必须携带 collectorId
 响应结构：预览返回 selectedCount、各动作 applicableCounts；创建返回 HTTP 202 BatchOperationJob；查询返回单个任务或当前用户最近 10 个任务
-错误码：403 ACCESS_DENIED；404 BATCH_JOB_NOT_FOUND；409 BATCH_JOB_CONFLICT；422 INVALID_BATCH_SELECTION/EMPTY_BATCH_SELECTION/TARGET_STATUS_REQUIRED/REVIEWER_REQUIRED
+错误码：403 ACCESS_DENIED/TASK_GRANT_REQUIRED；404 BATCH_JOB_NOT_FOUND/TASK_NOT_FOUND/USER_NOT_FOUND；409 BATCH_JOB_CONFLICT/TASK_NOT_RUNNING；422 INVALID_BATCH_SELECTION/EMPTY_BATCH_SELECTION/TARGET_STATUS_REQUIRED/REVIEWER_REQUIRED/COLLECTOR_REQUIRED/INVALID_COLLECTOR
 权限要求：ADMIN 可使用三个来源页面及全部动作；REVIEWER 仅可在 REVIEW_QUEUE 创建 REVIEW_CLAIM
-数据一致性要求：预览、快照、执行和重试统一使用编号、脚本来源、状态、采集员、未分配及结果筛选；创建时固化 itemId、revision、状态和动作所需结果快照；(actorUserId,operationId) 唯一并幂等重放；后台按条 CAS 执行、每条独立幂等键，状态变化计跳过，其他失败保存有限脱敏摘要；PROCESSING 使用租约、心跳和 nextSequence 检查点，租约过期或服务重启后续跑
+数据一致性要求：预览、快照、执行和重试统一使用编号、脚本来源、状态、采集员、未分配及结果筛选；创建时固化 itemId、revision、状态和动作所需结果快照，COLLECTOR_ASSIGN 额外持久化目标 collectorId 并在创建前校验任务、账号和授权；(actorUserId,operationId) 唯一并幂等重放；后台按条 CAS 执行、每条独立幂等键，状态变化计跳过，其他失败保存有限脱敏摘要；PROCESSING 使用租约、心跳和 nextSequence 检查点，租约过期或服务重启后续跑
 前端调用位置：apps/web/src/lib/batchOperationApi.js、任务详情、独立任务数据池与审核池
 ```
 
@@ -753,12 +766,12 @@ Web 数据大屏使用仅 ADMIN 可访问的 `GET /api/reports/dashboard`，返�
 
 ```text
 集合名称：batch_operation_jobs、batch_operation_items
-字段名称：job 含 operationId、taskId、source、action、动作参数、操作者、状态、选中/适用/处理/成功/失败/跳过计数、nextSequence、失败摘要、租约和时间；item 含 jobId、sequence、itemId、expectedRevision、状态及动作所需快照
+字段名称：job 含 operationId、taskId、source、action、可空 targetStatus/reviewerId/collectorId、操作者、状态、选中/适用/处理/成功/失败/跳过计数、nextSequence、失败摘要、租约和时间；item 含 jobId、sequence、itemId、expectedRevision、状态及动作所需快照
 字段类型：字符串、枚举、数值、数组、UTC Instant
 默认值：任务 PENDING、计数和 nextSequence 为 0、失败摘要为空
 唯一约束：job(actorUserId,operationId)；item(jobId,sequence)
 索引：上述复合唯一索引；job(actorUserId,createdAt)
-数据兼容策略：跨页选择只依赖创建时固化快照，不回写 task_items 冗余批次字段；失败摘要不保存敏感 URL 或异常堆栈
+数据兼容策略：跨页选择只依赖创建时固化快照，不回写 task_items 冗余批次字段；collectorId 仅由 COLLECTOR_ASSIGN 使用，历史任务缺失时保持为空；失败摘要不保存敏感 URL 或异常堆栈
 迁移步骤：无需迁移，首次运行由 Spring Data 建立新集合与索引
 回滚方式：停止新建批处理并等待运行中任务结束；回滚代码后可保留两个集合供审计，不影响 task_items
 ```

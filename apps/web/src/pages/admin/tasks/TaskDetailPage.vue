@@ -14,6 +14,7 @@ import { statusLabel } from '../../../lib/statusLabels.js'
 import { useNotifications } from '../../../composables/useNotifications.js'
 import { useBatchSelection } from '../../../composables/useBatchSelection.js'
 import { defaultTaskItemFilters, selectionFilters } from '../../../lib/taskItemFilters.js'
+import { formatPercentage, percentageValue } from '../../../lib/percentage.js'
 
 const notifications = useNotifications()
 const route = useRoute()
@@ -43,8 +44,11 @@ const itemForm = reactive({ referenceText: '', referenceAudioUrl: '', referenceV
 const processedRows = computed(() => (Number(job.value?.successRows) || 0) + (Number(job.value?.failureRows) || 0))
 const importProgress = computed(() => {
   const totalRows = Number(job.value?.totalRows) || 0
-  return totalRows ? Math.min(100, Math.round(processedRows.value / totalRows * 100)) : 0
+  return percentageValue(processedRows.value, totalRows)
 })
+const importProgressLabel = computed(() => formatPercentage(
+  processedRows.value, Number(job.value?.totalRows) || 0,
+))
 const jobErrorMessage = computed(() => job.value?.rowErrors?.[0]?.message || '')
 
 async function loadItems() {
@@ -424,8 +428,8 @@ onBeforeUnmount(() => { stopImportTracking(); clearBatchPoll() })
             </div>
             <button type="button" class="button-primary" :disabled="!importFile || importBusy" @click="upload">{{ importBusy ? '提交中…' : '开始导入' }}</button>
             <div v-if="job" class="import-progress-card" aria-live="polite">
-              <div><strong>{{ statusLabel('import', job.status) }}</strong><span>{{ importProgress }}%</span></div>
-              <progress :value="importProgress" max="100">{{ importProgress }}%</progress>
+              <div><strong>{{ statusLabel('import', job.status) }}</strong><span>{{ importProgressLabel }}</span></div>
+              <progress :value="importProgress" max="100">{{ importProgressLabel }}</progress>
               <p>总数 {{ job.totalRows || 0 }} · 已处理 {{ processedRows }} · 成功 {{ job.successRows || 0 }} · 失败 {{ job.failureRows || 0 }}</p>
               <button v-if="['PARTIAL_SUCCESS', 'FAILED'].includes(job.status) && job.failureRows" type="button" class="button-secondary" @click="retryImport">重试失败行</button>
             </div>

@@ -1,11 +1,13 @@
 package com.recording.platform.batch;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.doThrow;
 
 import com.recording.platform.batch.model.BatchOperationAction;
 import com.recording.platform.batch.model.BatchOperationJob;
@@ -27,7 +29,9 @@ import com.recording.platform.task.model.TaskItemStatus;
 import com.recording.platform.task.service.AdminTaskItemGroup;
 import com.recording.platform.task.service.TaskItemResultKind;
 import com.recording.platform.task.service.TaskItemAdministrationService;
+import com.recording.platform.task.service.TaskItemCollectorAssignmentService;
 import com.recording.platform.task.store.TaskItemStore;
+import com.recording.platform.api.ApiException;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -64,6 +68,95 @@ class BatchOperationServiceTests {
 		assertThat(preview.applicableCounts()).containsEntry(BatchOperationAction.DISCARD, 1L)
 			.containsEntry(BatchOperationAction.RESTORE, 1L)
 			.containsEntry(BatchOperationAction.RELEASE, 1L);
+	}
+
+	@Test
+	void collectorAssignmentPreviewCountsOnlyAvailableRows() {
+		TaskItemStore items = mock(TaskItemStore.class);
+		when(items.findAllByTaskId(any(), any(com.recording.platform.task.service.TaskItemFilter.class), any(Pageable.class)))
+			.thenReturn(new PageImpl<>(List.of(
+				item("available", TaskItemStatus.AVAILABLE, 1),
+				item("pending", TaskItemStatus.RECORDING_PENDING, 2)
+			)));
+		BatchOperationService service = service(items, mock(BatchOperationJobStore.class),
+			mock(BatchOperationSnapshotStore.class));
+
+		var preview = service.preview(
+			new BatchOperationSelection("task-1", BatchOperationSource.TASK_POOL, Set.of()), admin()
+		);
+
+		assertThat(preview.applicableCounts())
+			.containsEntry(BatchOperationAction.COLLECTOR_ASSIGN, 1L);
+	}
+
+	@Test
+	void collectorAssignmentJobPersistsTargetAndUsesItDuringProcessing() throws Exception {
+		TaskItemStore items = mock(TaskItemStore.class);
+		when(items.findAllByTaskId(any(), any(com.recording.platform.task.service.TaskItemFilter.class), any(Pageable.class)))
+			.thenReturn(new PageImpl<>(List.of(item("available", TaskItemStatus.AVAILABLE, 4))));
+		BatchOperationJobStore jobs = mock(BatchOperationJobStore.class);
+		when(jobs.findByActorUserIdAndOperationId("admin-1", "assign-all")).thenReturn(Optional.empty());
+		when(jobs.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+		BatchOperationSnapshotStore snapshots = mock(BatchOperationSnapshotStore.class);
+		TaskItemCollectorAssignmentService assignments = mock(TaskItemCollectorAssignmentService.class);
+		BatchOperationService service = new BatchOperationService(
+			items, jobs, snapshots, mock(TaskItemAdministrationService.class),
+			mock(TaskItemActionService.class), mock(ReviewService.class), assignments, task -> { }, CLOCK
+		);
+
+		BatchOperationJob created = service.create(new BatchOperationCommand(
+			"assign-all", BatchOperationAction.COLLECTOR_ASSIGN,
+			new BatchOperationSelection("task-1", BatchOperationSource.TASK_POOL, Set.of()),
+			null, null, "collector-1"
+		), admin());
+
+		assertThat(created.getCollectorId()).isEqualTo("collector-1");
+
+		BatchOperationJob processing = job(BatchOperationAction.COLLECTOR_ASSIGN);
+		processing.setCollectorId("collector-1");
+		when(jobs.acquireLease(any(), any(), any(), any())).thenReturn(Optional.of(processing));
+		when(snapshots.findAllByJobId("job-1")).thenReturn(List.of(
+			snapshot(0, "item-1", TaskItemStatus.AVAILABLE, 4)
+		));
+		when(jobs.checkpoint(any(), any(), any(), any())).thenAnswer(invocation ->
+			Optional.of(invocation.getArgument(0)));
+		var process = BatchOperationService.class.getDeclaredMethod("process", String.class);
+		process.setAccessible(true);
+		process.invoke(service, "job-1");
+
+		verify(assignments).assign(
+			org.mockito.ArgumentMatchers.eq("item-1"),
+			org.mockito.ArgumentMatchers.eq("collector-1"),
+			org.mockito.ArgumentMatchers.eq("batch-1:item:0"),
+			org.mockito.ArgumentMatchers.eq(4L),
+			any(PlatformPrincipal.class)
+		);
+	}
+
+	@Test
+	void collectorAssignmentValidatesTargetBeforeCreatingJob() {
+		TaskItemStore items = mock(TaskItemStore.class);
+		when(items.findAllByTaskId(any(), any(com.recording.platform.task.service.TaskItemFilter.class), any(Pageable.class)))
+			.thenReturn(new PageImpl<>(List.of(item("available", TaskItemStatus.AVAILABLE, 4))));
+		BatchOperationJobStore jobs = mock(BatchOperationJobStore.class);
+		when(jobs.findByActorUserIdAndOperationId("admin-1", "assign-invalid")).thenReturn(Optional.empty());
+		TaskItemCollectorAssignmentService assignments = mock(TaskItemCollectorAssignmentService.class);
+		doThrow(new ApiException(org.springframework.http.HttpStatus.FORBIDDEN,
+			"TASK_GRANT_REQUIRED", "没有该任务的有效授权"))
+			.when(assignments).validateTarget("task-1", "collector-1", admin());
+		BatchOperationService service = new BatchOperationService(
+			items, jobs, mock(BatchOperationSnapshotStore.class), mock(TaskItemAdministrationService.class),
+			mock(TaskItemActionService.class), mock(ReviewService.class), assignments, task -> { }, CLOCK
+		);
+
+		assertThatThrownBy(() -> service.create(new BatchOperationCommand(
+			"assign-invalid", BatchOperationAction.COLLECTOR_ASSIGN,
+			new BatchOperationSelection("task-1", BatchOperationSource.TASK_POOL, Set.of()),
+			null, null, "collector-1"
+		), admin())).isInstanceOfSatisfying(ApiException.class,
+			error -> assertThat(error.getCode()).isEqualTo("TASK_GRANT_REQUIRED"));
+
+		verify(jobs, never()).save(any());
 	}
 
 	@Test
@@ -162,7 +255,8 @@ class BatchOperationServiceTests {
 			Optional.of(invocation.getArgument(0)));
 		BatchOperationService service = new BatchOperationService(
 			mock(TaskItemStore.class), jobs, snapshots, administration,
-			mock(TaskItemActionService.class), mock(ReviewService.class), task -> { }, CLOCK
+			mock(TaskItemActionService.class), mock(ReviewService.class),
+			mock(TaskItemCollectorAssignmentService.class), task -> { }, CLOCK
 		);
 
 		var process = BatchOperationService.class.getDeclaredMethod("process", String.class);
@@ -195,7 +289,7 @@ class BatchOperationServiceTests {
 		BatchOperationService service = new BatchOperationService(
 			mock(TaskItemStore.class), jobs, mock(BatchOperationSnapshotStore.class),
 			mock(TaskItemAdministrationService.class), mock(TaskItemActionService.class),
-			mock(ReviewService.class), queued::add, CLOCK
+			mock(ReviewService.class), mock(TaskItemCollectorAssignmentService.class), queued::add, CLOCK
 		);
 
 		assertThat(service.get("job-1", admin())).isSameAs(job);
@@ -211,6 +305,7 @@ class BatchOperationServiceTests {
 			mock(TaskItemAdministrationService.class),
 			mock(TaskItemActionService.class),
 			mock(ReviewService.class),
+			mock(TaskItemCollectorAssignmentService.class),
 			idleExecutor, CLOCK
 		);
 	}

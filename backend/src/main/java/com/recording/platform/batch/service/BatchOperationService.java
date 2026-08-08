@@ -17,6 +17,7 @@ import com.recording.platform.security.PlatformPrincipal;
 import com.recording.platform.task.model.TaskItem;
 import com.recording.platform.task.model.TaskItemStatus;
 import com.recording.platform.task.service.TaskItemAdministrationService;
+import com.recording.platform.task.service.TaskItemCollectorAssignmentService;
 import com.recording.platform.task.store.TaskItemStore;
 import java.time.Clock;
 import java.time.Duration;
@@ -50,6 +51,7 @@ public class BatchOperationService {
 	private final TaskItemAdministrationService administration;
 	private final TaskItemActionService actions;
 	private final ReviewService reviews;
+	private final TaskItemCollectorAssignmentService assignments;
 	private final TaskExecutor executor;
 	private final Clock clock;
 
@@ -60,6 +62,7 @@ public class BatchOperationService {
 		TaskItemAdministrationService administration,
 		TaskItemActionService actions,
 		ReviewService reviews,
+		TaskItemCollectorAssignmentService assignments,
 		@Qualifier("batchOperationTaskExecutor") TaskExecutor executor,
 		Clock clock
 	) {
@@ -69,6 +72,7 @@ public class BatchOperationService {
 		this.administration = administration;
 		this.actions = actions;
 		this.reviews = reviews;
+		this.assignments = assignments;
 		this.executor = executor;
 		this.clock = clock;
 	}
@@ -88,6 +92,9 @@ public class BatchOperationService {
 		String operationId = required(command.operationId());
 		BatchOperationJob existing = jobs.findByActorUserIdAndOperationId(actor.userId(), operationId).orElse(null);
 		if (existing != null) return existing;
+		if (command.action() == BatchOperationAction.COLLECTOR_ASSIGN) {
+			assignments.validateTarget(command.selection().taskId(), command.collectorId(), actor);
+		}
 		List<TaskItem> selected = selectedItems(command.selection(), actor);
 		if (selected.isEmpty()) throw invalid("EMPTY_BATCH_SELECTION", "当前筛选结果没有可处理数据");
 		Instant now = Instant.now(clock);
@@ -98,6 +105,7 @@ public class BatchOperationService {
 		job.setSource(command.selection().source());
 		job.setAction(command.action());
 		job.setTargetStatus(command.targetStatus());
+		job.setCollectorId(trimToNull(command.collectorId()));
 		job.setReviewerId(trimToNull(command.reviewerId()));
 		job.setActorUserId(actor.userId());
 		job.setActorName(actorName(actor));
@@ -227,6 +235,9 @@ public class BatchOperationService {
 			case RESTORE -> administration.restore(
 				snapshot.getItemId(), operationId, snapshot.getExpectedRevision(), actor
 			);
+			case COLLECTOR_ASSIGN -> assignments.assign(
+				snapshot.getItemId(), job.getCollectorId(), operationId, snapshot.getExpectedRevision(), actor
+			);
 			case REVIEW_CLAIM -> reviews.claimItem(
 				snapshot.getItemId(), operationId, snapshot.getExpectedRevision(), actor
 			);
@@ -286,6 +297,7 @@ public class BatchOperationService {
 			case RELEASE -> status != TaskItemStatus.AVAILABLE && status != TaskItemStatus.DISCARDED;
 			case DISCARD -> status != TaskItemStatus.DISCARDED;
 			case RESTORE -> status == TaskItemStatus.DISCARDED;
+			case COLLECTOR_ASSIGN -> status == TaskItemStatus.AVAILABLE;
 			case REVIEW_CLAIM, REVIEW_ASSIGN -> status == TaskItemStatus.SUBMITTED;
 			case REVIEW_APPROVE -> status == TaskItemStatus.REVIEW_PENDING;
 		};
@@ -299,6 +311,10 @@ public class BatchOperationService {
 		}
 		if (command.action() == BatchOperationAction.REVIEW_ASSIGN && trimToNull(command.reviewerId()) == null) {
 			throw invalid("REVIEWER_REQUIRED", "批量分配必须指定审核员");
+		}
+		if (command.action() == BatchOperationAction.COLLECTOR_ASSIGN
+			&& trimToNull(command.collectorId()) == null) {
+			throw invalid("COLLECTOR_REQUIRED", "批量分配必须指定采集员");
 		}
 		if (actor.role() == UserRole.REVIEWER && command.action() != BatchOperationAction.REVIEW_CLAIM) {
 			throw forbidden();

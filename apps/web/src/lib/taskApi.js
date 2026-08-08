@@ -34,5 +34,6 @@ export const taskApi = {
   restore(itemId, operationId, expectedRevision) { return httpRequest(`/api/task-items/${encoded(itemId)}/restore`, { method: 'POST', json: { operationId, expectedRevision } }) },
   release(itemId, operationId, expectedRevision) { return httpRequest(`/api/task-items/${encoded(itemId)}/release`, { method: 'POST', json: { operationId, expectedRevision } }) },
   batchAction(action, items, operationId) { return httpRequest(`/api/task-items/batch/${action}`, { method: 'POST', json: { operationId, items } }) },
+  batchAssignCollector(collectorId, items, operationId) { return httpRequest('/api/task-items/batch/assign-collector', { method: 'POST', json: { operationId, collectorId, items } }) },
   batchStatus(status, items, operationId) { return httpRequest('/api/task-items/batch/status', { method: 'POST', json: { operationId, status, items } }) }
 }

@@ -6,6 +6,7 @@ import PageActions from '../../../components/admin/PageActions.vue'
 import PaginationControls from '../../../components/admin/PaginationControls.vue'
 import BaseSelect from '../../../components/form/BaseSelect.vue'
 import HelpPopover from '../../../components/form/HelpPopover.vue'
+import TaskGrantSearchSelect from '../../../components/form/TaskGrantSearchSelect.vue'
 import TaskBatchActionMenu from '../../../components/admin/TaskBatchActionMenu.vue'
 import TaskItemFilters from '../../../components/admin/TaskItemFilters.vue'
 import { taskApi } from '../../../lib/taskApi.js'
@@ -15,6 +16,7 @@ import { statusLabel } from '../../../lib/statusLabels.js'
 import { useBatchSelection } from '../../../composables/useBatchSelection.js'
 import { useNotifications } from '../../../composables/useNotifications.js'
 import { defaultTaskItemFilters, selectionFilters } from '../../../lib/taskItemFilters.js'
+import { formatPercentage, percentageValue } from '../../../lib/percentage.js'
 import {
   buildTaskPoolRouteQuery,
   clearLastTaskId,
@@ -39,6 +41,7 @@ const notice = ref('')
 const preview = ref(null)
 const batchJob = ref(null)
 const pollTimer = ref(null)
+const collectorId = ref('')
 const selection = useBatchSelection(rows, total)
 const filters = ref({ ...defaultTaskItemFilters(), ...restoredState.filters })
 const taskOptions = computed(() => tasks.value.map(task => ({ value: task.id, label: task.name })))
@@ -50,9 +53,21 @@ const statusOptions = computed(() => [
     : { value: 'COMPLETED', label: '已完成' },
 ])
 const processing = computed(() => ['PENDING', 'PROCESSING'].includes(batchJob.value?.status))
-const progress = computed(() => batchJob.value?.selectedCount
-  ? Math.round((batchJob.value.processedCount || 0) / batchJob.value.selectedCount * 100)
-  : 0)
+const progress = computed(() => percentageValue(
+  batchJob.value?.processedCount || 0, batchJob.value?.selectedCount || 0,
+))
+const progressLabel = computed(() => formatPercentage(
+  batchJob.value?.processedCount || 0, batchJob.value?.selectedCount || 0,
+))
+const assignableCount = computed(() => {
+  if (selection.mode.value === 'ALL') {
+    return Number(preview.value?.applicableCounts?.COLLECTOR_ASSIGN) || 0
+  }
+  return selection.pageCommands().filter(command => {
+    const row = rows.value.find(item => item.id === command.itemId)
+    return row?.status === 'AVAILABLE'
+  }).length
+})
 
 async function init() {
   try {
@@ -114,6 +129,7 @@ async function choose() {
   selection.clear()
   preview.value = null
   batchJob.value = null
+  collectorId.value = ''
   await syncRouteState()
   await load()
   await resumeRecent()
@@ -204,6 +220,44 @@ async function batch(action) {
     notice.value = `成功 ${result.filter(row => row.success).length}，冲突 ${result.filter(row => !row.success).length}`
     notifications.success(notice.value)
     selection.clear()
+    await load()
+  } catch (exception) {
+    notifications.error(exception.message)
+  }
+}
+async function assignCollector() {
+  if (!collectorId.value) {
+    notifications.error('请先选择已授权采集员')
+    return
+  }
+  const count = assignableCount.value
+  if (!count || !confirm(`确认将 ${count} 条待领取数据分配给所选采集员？`)) return
+  try {
+    if (selection.mode.value === 'ALL') {
+      batchJob.value = await batchOperationApi.create({
+        operationId: operationId('pool-all-collector-assign'),
+        action: 'COLLECTOR_ASSIGN',
+        selection: selection.selectionPayload(taskId.value, 'TASK_POOL', selectionFilters(filters.value)),
+        collectorId: collectorId.value,
+      })
+      notifications.success('跨页分配已进入队列')
+      schedulePoll()
+      return
+    }
+    const commands = selection.pageCommands().filter(command => {
+      const row = rows.value.find(item => item.id === command.itemId)
+      return row?.status === 'AVAILABLE'
+    })
+    const result = await taskApi.batchAssignCollector(
+      collectorId.value, commands, operationId('pool-collector-assign'),
+    )
+    const success = result.filter(row => row.success).length
+    const failed = result.length - success
+    const skipped = selection.selectedCount.value - commands.length
+    notice.value = `批量分配完成：成功 ${success}，失败 ${failed}，不适用 ${skipped}`
+    notifications.success(notice.value)
+    selection.clear()
+    preview.value = null
     await load()
   } catch (exception) {
     notifications.error(exception.message)
@@ -300,10 +354,12 @@ onBeforeUnmount(clearPoll)
         <button v-if="selection.mode.value === 'PAGE' && total > selection.selectedCount.value" class="button-link" @click="selectAllMatching">选择全部 {{ total }} 条筛选结果</button>
         <strong v-else-if="selection.mode.value === 'ALL'">已跨页全选</strong>
         <button class="button-link" @click="selection.clear(); preview = null">清除选择</button>
+        <TaskGrantSearchSelect v-model="collectorId" :task-id="taskId" />
+        <button class="button-secondary" :disabled="!collectorId || !assignableCount || processing || selectedTask?.lifecycle !== 'RUNNING'" @click="assignCollector">批量分配（{{ assignableCount }}）</button>
       </div>
       <div v-if="batchJob" class="batch-job-card" aria-live="polite">
-        <strong>{{ processing ? '批处理中' : '最近批处理' }} · {{ progress }}%</strong>
-        <progress :value="progress" max="100">{{ progress }}%</progress>
+        <strong>{{ processing ? '批处理中' : '最近批处理' }} · {{ progressLabel }}</strong>
+        <progress :value="progress" max="100">{{ progressLabel }}</progress>
         <span>总数 {{ batchJob.selectedCount || 0 }} · 成功 {{ batchJob.succeededCount || 0 }} · 失败 {{ batchJob.failedCount || 0 }} · 跳过 {{ batchJob.skippedCount || 0 }}</span>
       </div>
       <p v-if="notice" class="business-success">{{ notice }}</p>

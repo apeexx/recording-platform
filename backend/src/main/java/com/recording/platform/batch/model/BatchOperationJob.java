@@ -27,6 +27,7 @@ public class BatchOperationJob {
 	private BatchOperationSource source;
 	private BatchOperationAction action;
 	private TaskItemStatus targetStatus;
+	private String collectorId;
 	private String reviewerId;
 	private String actorUserId;
 	private String actorName;

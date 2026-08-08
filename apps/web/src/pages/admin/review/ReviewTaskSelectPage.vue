@@ -4,6 +4,7 @@ import AsyncState from '../../../components/admin/AsyncState.vue'
 import PageActions from '../../../components/admin/PageActions.vue'
 import HelpPopover from '../../../components/form/HelpPopover.vue'
 import { reviewApi } from '../../../lib/reviewApi.js'
+import { formatPercentage, percentageValue } from '../../../lib/percentage.js'
 
 const rows = ref([])
 const loading = ref(false)
@@ -29,7 +30,6 @@ const totals = computed(() => rows.value.reduce((sum, row) => ({
   effectiveItemCount: 0, completedCount: 0, reviewEnteredCount: 0, reviewProcessedCount: 0,
 }))
 const backlogRows = computed(() => rows.value.filter(row => Number(row.pendingCount || 0) > 0))
-const percent = (value, total) => total > 0 ? Math.round(value / total * 100) : 0
 const slides = computed(() => [
   {
     title: '任务整体进度',
@@ -102,9 +102,9 @@ onBeforeUnmount(clearTimer)
               <span>{{ slides[slide].title }}</span>
               <HelpPopover :label="`${slides[slide].title}说明`" :content="slides[slide].help" />
             </div>
-            <strong>{{ percent(slides[slide].value, slides[slide].total) }}%</strong>
+            <strong>{{ formatPercentage(slides[slide].value, slides[slide].total) }}</strong>
             <p>{{ slides[slide].description }} · {{ slides[slide].value }} / {{ slides[slide].total }}</p>
-            <div><i :style="{ width: `${percent(slides[slide].value, slides[slide].total)}%` }"></i></div>
+            <div><i :style="{ width: `${percentageValue(slides[slide].value, slides[slide].total)}%` }"></i></div>
           </div>
           <button type="button" aria-label="下一项" @click="showSlide(slide + 1, true)">›</button>
           <div class="review-carousel-dots">
@@ -133,12 +133,12 @@ onBeforeUnmount(clearTimer)
           </div>
           <div class="review-task-progress-grid">
             <section class="review-task-progress">
-              <div><span>任务完成度</span><b>{{ percent(row.completedCount, row.effectiveItemCount) }}%</b></div>
+              <div><span>任务完成度</span><b>{{ formatPercentage(row.completedCount, row.effectiveItemCount) }}</b></div>
               <small>{{ row.completedCount }} / {{ row.effectiveItemCount }}</small>
               <progress :value="row.completedCount" :max="row.effectiveItemCount || 1"></progress>
             </section>
             <section class="review-task-progress">
-              <div><span>审核处理进度</span><b>{{ percent(row.reviewProcessedCount, row.reviewEnteredCount) }}%</b></div>
+              <div><span>审核处理进度</span><b>{{ formatPercentage(row.reviewProcessedCount, row.reviewEnteredCount) }}</b></div>
               <small>{{ row.reviewProcessedCount }} / {{ row.reviewEnteredCount }}</small>
               <progress :value="row.reviewProcessedCount" :max="row.reviewEnteredCount || 1"></progress>
             </section>

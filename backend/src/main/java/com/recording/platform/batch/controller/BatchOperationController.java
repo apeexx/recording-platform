@@ -47,7 +47,7 @@ public class BatchOperationController {
 	) {
 		return service.create(new BatchOperationCommand(
 			request.operationId(), request.action(), request.selection().toSelection(),
-			request.targetStatus(), request.reviewerId()
+			request.targetStatus(), request.reviewerId(), request.collectorId()
 		), actor);
 	}
 
@@ -99,6 +99,7 @@ public class BatchOperationController {
 		@NotNull BatchOperationAction action,
 		@NotNull @Valid SelectionRequest selection,
 		TaskItemStatus targetStatus,
-		String reviewerId
+		String reviewerId,
+		String collectorId
 	) { }
 }

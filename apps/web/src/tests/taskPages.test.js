@@ -221,7 +221,7 @@ describe('任务页面 API', () => {
     expect(detail).toContain('@drop.prevent="onDrop"')
     expect(detail).toContain('window.setTimeout(refreshJob, 1000)')
     expect(detail).toContain('onBeforeUnmount(() => { stopImportTracking(); clearBatchPoll() })')
-    expect(detail).toContain('processedRows.value / totalRows')
+    expect(detail).toContain('percentageValue(processedRows.value, totalRows)')
     expect(detail).toContain("'\\uFEFFreferenceText,referenceAudioUrl,referenceVideoUrl")
     expect(detail).toContain('<progress :value="importProgress"')
     expect(detail).toContain("job.value.status === 'COMPLETED'")
@@ -269,6 +269,24 @@ describe('任务页面 API', () => {
     expect(httpRequest).toHaveBeenCalledWith('/api/task-items/batch/discard', {
       method: 'POST', json: { operationId: 'batch-1', items: [{ itemId: 'i1', expectedRevision: 3 }] }
     })
+  })
+
+  it('批量分配采集员使用专用接口并携带目标用户', async () => {
+    httpRequest.mockResolvedValue([{ itemId: 'i1', success: true }])
+    const items = [{ itemId: 'i1', expectedRevision: 3 }]
+    await taskApi.batchAssignCollector('MINI-1', items, 'assign-1')
+    expect(httpRequest).toHaveBeenCalledWith('/api/task-items/batch/assign-collector', {
+      method: 'POST', json: { operationId: 'assign-1', collectorId: 'MINI-1', items }
+    })
+  })
+
+  it('任务数据池复用跨页选择并只分配待领取数据', () => {
+    const pool = fs.readFileSync(path.resolve('src/pages/admin/tasks/TaskPoolPage.vue'), 'utf8')
+    expect(pool).toContain('TaskGrantSearchSelect')
+    expect(pool).toContain("action: 'COLLECTOR_ASSIGN'")
+    expect(pool).toContain('taskApi.batchAssignCollector')
+    expect(pool).toContain("row?.status === 'AVAILABLE'")
+    expect(pool).toContain('批量分配（{{ assignableCount }}）')
   })
 
 })

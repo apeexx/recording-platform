@@ -8,5 +8,16 @@ public record BatchOperationCommand(
 	BatchOperationAction action,
 	BatchOperationSelection selection,
 	TaskItemStatus targetStatus,
-	String reviewerId
-) { }
+	String reviewerId,
+	String collectorId
+) {
+	public BatchOperationCommand(
+		String operationId,
+		BatchOperationAction action,
+		BatchOperationSelection selection,
+		TaskItemStatus targetStatus,
+		String reviewerId
+	) {
+		this(operationId, action, selection, targetStatus, reviewerId, null);
+	}
+}

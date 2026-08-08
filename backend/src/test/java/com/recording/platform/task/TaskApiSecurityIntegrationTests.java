@@ -47,6 +47,7 @@ import com.recording.platform.task.service.TaskItemCsvExportService;
 import com.recording.platform.task.service.TaskItemFilter;
 import com.recording.platform.review.service.ReviewService;
 import com.recording.platform.task.service.TaskItemAdministrationService;
+import com.recording.platform.task.service.TaskItemCollectorAssignmentService;
 import com.recording.platform.operation.service.OperationService;
 import com.recording.platform.report.service.ReportService;
 import com.recording.platform.report.dto.WorkSummary;
@@ -63,6 +64,7 @@ import java.util.List;
 import jakarta.servlet.http.Cookie;
 import java.util.UUID;
 import java.util.function.Supplier;
+import com.fasterxml.jackson.core.type.TypeReference;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -113,6 +115,8 @@ class TaskApiSecurityIntegrationTests {
 	@MockitoBean
 	private TaskItemAdministrationService administrationService;
 	@MockitoBean
+	private TaskItemCollectorAssignmentService collectorAssignmentService;
+	@MockitoBean
 	private OperationService operationService;
 	@MockitoBean
 	private ReportService reportService;
@@ -126,6 +130,8 @@ class TaskApiSecurityIntegrationTests {
 	@BeforeEach
 	void executeControllerIdempotencyMutations() {
 		lenient().when(idempotencyService.execute(any(), anyString(), anyString(), any(Class.class), any()))
+			.thenAnswer((invocation) -> ((Supplier<?>) invocation.getArgument(4)).get());
+		lenient().when(idempotencyService.execute(any(), anyString(), anyString(), any(TypeReference.class), any()))
 			.thenAnswer((invocation) -> ((Supplier<?>) invocation.getArgument(4)).get());
 	}
 
@@ -652,6 +658,44 @@ class TaskApiSecurityIntegrationTests {
 				.contentType("application/json")
 				.content(batch))
 			.andExpect(status().isForbidden());
+	}
+
+	@Test
+	void collectorAssignmentRouteRequiresAdminCsrfAndCompletePayload() throws Exception {
+		when(collectorAssignmentService.batchAssign(
+			eq("assign-1"), eq("MINI-1"), any(), isNull()
+		)).thenReturn(List.of());
+		String request = """
+			{"operationId":"assign-1","collectorId":"MINI-1","items":[{"itemId":"item-1","expectedRevision":2}]}
+			""";
+
+		mockMvc.perform(post("/api/task-items/batch/assign-collector")
+				.with(user("admin").roles("ADMIN"))
+				.with(csrf())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(request))
+			.andExpect(status().isOk())
+			.andExpect(content().json("[]"));
+
+		mockMvc.perform(post("/api/task-items/batch/assign-collector")
+				.with(user("reviewer").roles("REVIEWER"))
+				.with(csrf())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(request))
+			.andExpect(status().isForbidden());
+
+		mockMvc.perform(post("/api/task-items/batch/assign-collector")
+				.with(user("admin").roles("ADMIN"))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(request))
+			.andExpect(status().isForbidden());
+
+		mockMvc.perform(post("/api/task-items/batch/assign-collector")
+				.with(user("admin").roles("ADMIN"))
+				.with(csrf())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"operationId\":\"assign-2\",\"items\":[]}"))
+			.andExpect(status().isBadRequest());
 	}
 
 	@Test

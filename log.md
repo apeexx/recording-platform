@@ -1,5 +1,12 @@
 # AI 修改日志
 
+## 2026-08-08 增加数据池采集员批量分配并统一百分比
+
+- 独立任务数据池增加已授权采集员搜索和批量分配；仅 RUNNING 任务中仍为 AVAILABLE 的所选数据可分配，目标必须为 ACTIVE 采集员且具有当前任务 ACTIVE grant，不自动授权，已分配数据需先释放再改派。
+- 新增 `POST /api/task-items/batch/assign-collector`，逐条使用 operationId、revision/CAS 写入 RECORDING_PENDING、collectorId 和新 assignmentId；跨页批处理新增 COLLECTOR_ASSIGN 并持久化目标采集员，支持幂等重放、租约恢复和逐条成功/失败/跳过统计。
+- 任务授权摘要增加可空 userStatus，Web 选择器排除已停用账号；审核入口、任务数据池批处理和 CSV 导入进度统一固定显示两位小数。
+- 未新增依赖、MongoDB 索引或迁移；同步补充后端服务/控制器/安全/跨页测试和 Web API、选择器、交互及百分比测试。
+
 ## 2026-08-04 优化任务数据池返回状态并增加审核标记无效
 
 - 独立任务数据池使用浏览器全局 `localStorage` 长期保存最后选择的任务，并将筛选、页码和每页条数写入当前 URL；查看条目后返回可恢复原状态，从其他菜单重新进入时只保留任务选择并重置临时筛选和分页。

@@ -141,6 +141,9 @@ class TaskAccessServiceTests {
 		assertThat(grantPage.items()).singleElement()
 			.extracting(com.recording.platform.task.service.TaskGrantView::userLoginName)
 			.isEqualTo("3052638964");
+		assertThat(grantPage.items()).singleElement()
+			.extracting(com.recording.platform.task.service.TaskGrantView::userStatus)
+			.isEqualTo(UserStatus.ACTIVE);
 		assertThat(requestPage.items()).singleElement()
 			.extracting(com.recording.platform.task.service.TaskAccessRequestView::userLoginName)
 			.isEqualTo("3052638964");
